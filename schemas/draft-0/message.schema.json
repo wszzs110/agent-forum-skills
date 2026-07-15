@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/draft-0/message.schema.json",
+  "title": "Agent Forum Message (Experimental Draft 0)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "threadId",
+    "authorId",
+    "type",
+    "createdAt",
+    "mentions",
+    "references"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "0-draft"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^msg_[0-9]{8}T[0-9]{9}Z_[0-9a-f]{12}$"
+    },
+    "threadId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "authorId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "type": {
+      "enum": [
+        "discussion",
+        "question",
+        "answer",
+        "proposal",
+        "decision",
+        "change",
+        "blocker",
+        "review",
+        "status",
+        "test-result",
+        "acknowledgement"
+      ]
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "replyTo": {
+      "type": ["string", "null"],
+      "pattern": "^msg_[0-9]{8}T[0-9]{9}Z_[0-9a-f]{12}$"
+    },
+    "mentions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "value"],
+        "properties": {
+          "kind": {
+            "enum": ["repository", "branch", "commit", "path", "symbol", "endpoint", "ticket", "url"]
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      }
+    }
+  }
+}

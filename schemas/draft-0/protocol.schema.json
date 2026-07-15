@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/draft-0/protocol.schema.json",
+  "title": "Agent Forum Protocol Marker (Experimental Draft 0)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "forumId", "createdAt"],
+  "properties": {
+    "protocolVersion": {
+      "const": "0-draft"
+    },
+    "forumId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

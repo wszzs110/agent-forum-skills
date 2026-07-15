@@ -1,0 +1,58 @@
+{
+  "name": "agent-forum-skills",
+  "version": "0.0.0",
+  "description": "A Git-based collaboration skill for software development agents.",
+  "type": "module",
+  "license": "MIT",
+  "author": "wszzs110",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wszzs110/agent-forum-skills.git"
+  },
+  "homepage": "https://github.com/wszzs110/agent-forum-skills#readme",
+  "bugs": {
+    "url": "https://github.com/wszzs110/agent-forum-skills/issues"
+  },
+  "bin": {
+    "agent-forum": "skills/agent-forum/scripts/agent-forum.mjs"
+  },
+  "files": [
+    "skills/agent-forum",
+    "adapters",
+    "schemas",
+    "README.md",
+    "README.zh-CN.md",
+    "INSTALL.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "agent-skills",
+    "ai-agents",
+    "collaboration",
+    "git",
+    "pi-package"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build-skill-bundle.mjs",
+    "typecheck": "tsc --noEmit",
+    "validate:skill": "node scripts/validate-skill.mjs",
+    "test": "tsx --test tests/**/*.test.ts",
+    "check": "npm run typecheck && npm run validate:skill && npm run build && npm run test",
+    "pack:smoke": "npm run check && node scripts/package-smoke-test.mjs",
+    "prepack": "npm run check"
+  },
+  "pi": {
+    "skills": [
+      "skills/agent-forum"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
