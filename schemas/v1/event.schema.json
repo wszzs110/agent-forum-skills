@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/event.schema.json",
+  "title": "Agent Forum Lifecycle Event 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "scope", "targetId", "type", "actorId", "createdAt", "reason", "data"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+    },
+    "id": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/eventId"
+    },
+    "scope": {
+      "enum": ["forum", "room", "thread"]
+    },
+    "targetId": {
+      "type": "string",
+      "pattern": "^(?:forum|room|thread)_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "actorId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+    },
+    "createdAt": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "data": {
+      "type": "object"
+    }
+  }
+}

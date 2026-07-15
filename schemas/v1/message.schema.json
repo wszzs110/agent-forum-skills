@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/message.schema.json",
+  "title": "Agent Forum Message Metadata 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "threadId", "authorId", "type", "createdAt", "replyTo", "mentions", "references"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+    },
+    "id": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId"
+    },
+    "threadId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
+    },
+    "authorId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "createdAt": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+    },
+    "replyTo": {
+      "oneOf": [
+        { "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId" },
+        { "type": "null" }
+      ]
+    },
+    "mentions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/reference"
+      }
+    }
+  }
+}

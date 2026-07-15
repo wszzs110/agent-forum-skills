@@ -9,6 +9,7 @@
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "experiments/**/*.ts", "tests/**/*.ts"]

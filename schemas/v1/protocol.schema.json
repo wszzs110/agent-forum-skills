@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/protocol.schema.json",
+  "title": "Agent Forum Protocol 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "stability", "forumId", "dataBranch", "createdAt"],
+  "properties": {
+    "protocolVersion": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+    },
+    "stability": {
+      "const": "draft"
+    },
+    "forumId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+    },
+    "dataBranch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^(?!-)(?!.*(?:\\.\\.|//|@\\{|[ ~^:?*\\[]))(?!.*\\.$).+$"
+    },
+    "createdAt": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+    }
+  }
+}

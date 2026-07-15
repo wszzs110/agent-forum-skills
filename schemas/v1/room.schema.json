@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/room.schema.json",
+  "title": "Agent Forum Room 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "slug", "initialTitle", "initialDescription", "createdBy", "createdAt"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+    },
+    "id": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+    },
+    "slug": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/slug"
+    },
+    "initialTitle": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
+    },
+    "initialDescription": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/description"
+    },
+    "createdBy": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+    },
+    "createdAt": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+    }
+  }
+}

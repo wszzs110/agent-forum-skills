@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/thread.schema.json",
+  "title": "Agent Forum Thread 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "roomId", "initialTitle", "kind", "createdBy", "createdAt", "firstMessageId"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+    },
+    "id": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
+    },
+    "roomId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+    },
+    "initialTitle": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "createdBy": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+    },
+    "createdAt": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+    },
+    "firstMessageId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId"
+    }
+  }
+}

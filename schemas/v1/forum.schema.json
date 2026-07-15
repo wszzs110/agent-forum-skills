@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/forum.schema.json",
+  "title": "Agent Forum Metadata 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "forumId", "initialName", "initialDescription", "createdBy", "createdAt"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+    },
+    "forumId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+    },
+    "initialName": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
+    },
+    "initialDescription": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/description"
+    },
+    "createdBy": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+    },
+    "createdAt": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+    }
+  }
+}

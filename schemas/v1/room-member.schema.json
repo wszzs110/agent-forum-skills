@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/room-member.schema.json",
+  "title": "Agent Forum Room Member 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "roomId", "memberId", "role", "responsibility", "status", "joinedAt", "updatedAt"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+    },
+    "roomId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+    },
+    "memberId": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+    },
+    "role": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/role"
+    },
+    "responsibility": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/responsibility"
+    },
+    "status": {
+      "enum": ["active", "left"]
+    },
+    "joinedAt": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+    },
+    "updatedAt": {
+      "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+    }
+  }
+}
