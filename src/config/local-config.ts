@@ -213,6 +213,52 @@ export async function createLocalIdentity(
   }
 }
 
+export async function updateLocalIdentity(
+  input: {
+    memberId?: string;
+    displayName?: string;
+    role?: string;
+    responsibility?: string;
+    client?: string | null;
+    setDefault?: boolean;
+    now?: Date;
+  },
+  paths = createAgentForumPaths(),
+): Promise<{ identity: LocalIdentity; defaultIdentityId: string }> {
+  const lock = await acquireConfigLock(paths, "identity update");
+  try {
+    const config = await loadLocalConfig(paths);
+    const existing = findIdentity(config, input.memberId);
+    const { client: existingClient, ...identityBase } = existing;
+    const identity: LocalIdentity = {
+      ...identityBase,
+      ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+      ...(input.role !== undefined ? { role: input.role } : {}),
+      ...(input.responsibility !== undefined
+        ? { responsibility: input.responsibility }
+        : {}),
+      ...(input.client === null
+        ? {}
+        : input.client !== undefined
+          ? { client: input.client }
+          : existingClient
+            ? { client: existingClient }
+            : {}),
+      updatedAt: currentUtcTimestamp(input.now),
+    };
+    const identities = config.identities.map((candidate) =>
+      candidate.memberId === existing.memberId ? identity : candidate,
+    );
+    const defaultIdentityId = input.setDefault
+      ? existing.memberId
+      : config.defaultIdentityId ?? existing.memberId;
+    await saveLocalConfig(paths, { ...config, identities, defaultIdentityId });
+    return { identity, defaultIdentityId };
+  } finally {
+    await lock.release();
+  }
+}
+
 export async function registerLocalForum(
   registration: LocalForumRegistration,
   paths = createAgentForumPaths(),

@@ -2976,7 +2976,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve14.call(this, root, ref);
+      let _sch = resolve15.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3003,7 +3003,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve14(root, ref) {
+    function resolve15(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3634,7 +3634,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve14(baseURI, relativeURI, options) {
+    function resolve15(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3892,7 +3892,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve14,
+      resolve: resolve15,
       resolveComponent,
       equal,
       serialize,
@@ -8443,6 +8443,30 @@ async function createLocalIdentity(input, paths = createAgentForumPaths()) {
     await lock.release();
   }
 }
+async function updateLocalIdentity(input, paths = createAgentForumPaths()) {
+  const lock = await acquireConfigLock(paths, "identity update");
+  try {
+    const config = await loadLocalConfig(paths);
+    const existing = findIdentity(config, input.memberId);
+    const { client: existingClient, ...identityBase } = existing;
+    const identity = {
+      ...identityBase,
+      ...input.displayName !== void 0 ? { displayName: input.displayName } : {},
+      ...input.role !== void 0 ? { role: input.role } : {},
+      ...input.responsibility !== void 0 ? { responsibility: input.responsibility } : {},
+      ...input.client === null ? {} : input.client !== void 0 ? { client: input.client } : existingClient ? { client: existingClient } : {},
+      updatedAt: currentUtcTimestamp(input.now)
+    };
+    const identities = config.identities.map(
+      (candidate) => candidate.memberId === existing.memberId ? identity : candidate
+    );
+    const defaultIdentityId = input.setDefault ? existing.memberId : config.defaultIdentityId ?? existing.memberId;
+    await saveLocalConfig(paths, { ...config, identities, defaultIdentityId });
+    return { identity, defaultIdentityId };
+  } finally {
+    await lock.release();
+  }
+}
 async function registerLocalForum(registration, paths = createAgentForumPaths()) {
   const lock = await acquireConfigLock(paths, "forum register");
   try {
@@ -10800,9 +10824,149 @@ ${result.checks.map((check) => `${check.status}	${check.id}	${check.message}`).j
   }
 }
 
-// src/services/thread.ts
+// src/services/forum-lifecycle.ts
 import { readFile as readFile6, readdir as readdir5, rm as rm6 } from "node:fs/promises";
-import { basename as basename2, resolve as resolve11 } from "node:path";
+import { resolve as resolve11 } from "node:path";
+async function readForumView(forumAlias, paths) {
+  const { registration } = await openForum(forumAlias, paths);
+  const basePath = resolve11(registration.path, ".forum", "forum.json");
+  const base = await readJsonDocument(basePath, "forum");
+  if (base.forumId !== registration.forumId) {
+    throw new ServiceError("FORUM_PROTOCOL_MISMATCH", "forum metadata ID does not match registration");
+  }
+  let state = {
+    scope: "forum",
+    id: String(base.forumId),
+    name: String(base.initialName),
+    description: String(base.initialDescription),
+    status: "active"
+  };
+  let lastActivityAt = String(base.createdAt);
+  const warnings = [];
+  const eventsDirectory = resolve11(registration.path, ".forum", "events");
+  let entries = [];
+  try {
+    entries = await readdir5(eventsDirectory, { withFileTypes: true });
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
+  }
+  const events = [];
+  for (const entry of entries) {
+    const eventPath = resolve11(eventsDirectory, entry.name, "event.json");
+    if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
+      warnings.push({ code: "INVALID_EVENT_PATH", path: resolve11(eventsDirectory, entry.name), message: "forum event path is invalid" });
+      continue;
+    }
+    try {
+      const event = await readJsonDocument(eventPath, "event");
+      if (event.id !== entry.name) {
+        throw new StorageError("PATH_ID_MISMATCH", "event ID does not match path");
+      }
+      events.push(event);
+    } catch (error) {
+      warnings.push(protocolWarning(eventPath, error));
+    }
+  }
+  events.sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id)));
+  for (const event of events) {
+    const eventPath = resolve11(eventsDirectory, String(event.id), "event.json");
+    if (!isKnownLifecycleEventType(String(event.type))) {
+      warnings.push({ code: "UNKNOWN_EVENT_TYPE", path: eventPath, message: `unknown forum event type: ${String(event.type)}` });
+      continue;
+    }
+    try {
+      state = applyLifecycleEvent(state, {
+        scope: "forum",
+        targetId: String(event.targetId),
+        type: String(event.type),
+        data: event.data
+      });
+      lastActivityAt = String(event.createdAt);
+    } catch (error) {
+      warnings.push(protocolWarning(eventPath, error));
+    }
+  }
+  return {
+    forum: {
+      forumId: state.id,
+      name: state.name,
+      description: state.description,
+      status: state.status,
+      createdBy: String(base.createdBy),
+      createdAt: String(base.createdAt),
+      lastActivityAt
+    },
+    warnings
+  };
+}
+async function showForum(forumAlias, paths = createAgentForumPaths()) {
+  return readForumView(forumAlias, paths);
+}
+async function createForumEvent(input, paths = createAgentForumPaths()) {
+  return withForumWrite(input.forumAlias, input.identityId, paths, input.type, async (registration, identity) => {
+    const current = await readForumView(input.forumAlias, paths);
+    const eventId = input.eventId ?? createEntityId("event");
+    const timestamp = currentUtcTimestamp(input.now);
+    const event = {
+      schemaVersion: "1.0",
+      id: eventId,
+      scope: "forum",
+      targetId: registration.forumId,
+      type: input.type,
+      actorId: identity.memberId,
+      createdAt: timestamp,
+      reason: input.reason,
+      data: input.data
+    };
+    const next = applyLifecycleEvent(
+      {
+        scope: "forum",
+        id: current.forum.forumId,
+        name: current.forum.name,
+        description: current.forum.description,
+        status: current.forum.status
+      },
+      event
+    );
+    const directory = resolve11(registration.path, ".forum", "events", eventId);
+    let created = false;
+    try {
+      await createImmutableEvent(directory, event);
+      created = true;
+      const commit = commitPaths(registration.path, [directory], `${input.type} ${registration.forumId}`);
+      return {
+        eventId,
+        forum: { ...current.forum, name: next.name, description: next.description, status: next.status, lastActivityAt: timestamp },
+        commit
+      };
+    } catch (error) {
+      runGit(registration.path, ["reset", "--", directory]);
+      if (created) await rm6(directory, { recursive: true, force: true });
+      throw error;
+    }
+  });
+}
+async function leaveForum(forumAlias, identityId, paths = createAgentForumPaths(), now = /* @__PURE__ */ new Date()) {
+  return withForumWrite(forumAlias, identityId, paths, "identity leave", async (registration, identity) => {
+    const profilePath = resolve11(registration.path, "members", identity.memberId, "profile.json");
+    const previous = await readFile6(profilePath, "utf8");
+    const profile = await readJsonDocument(profilePath, "member-profile");
+    const next = { ...profile, status: "left", updatedAt: currentUtcTimestamp(now) };
+    try {
+      await writeValidatedJsonAtomic(profilePath, "member-profile", next, { overwrite: true });
+      const commit = commitPaths(registration.path, [profilePath], `Leave forum ${identity.memberId}`);
+      return { memberId: identity.memberId, commit };
+    } catch (error) {
+      runGit(registration.path, ["reset", "--", profilePath]);
+      await writeFileAtomic(profilePath, previous, { overwrite: true });
+      throw error;
+    }
+  });
+}
+
+// src/services/thread.ts
+import { readFile as readFile7, readdir as readdir6, rm as rm7 } from "node:fs/promises";
+import { basename as basename2, resolve as resolve12 } from "node:path";
 
 // src/domain/thread-kinds.ts
 var knownThreadKinds = [
@@ -10825,7 +10989,7 @@ function structuralWarning(code, path, message) {
   return { code, path, message };
 }
 async function readThreadEvents(registration, roomId, threadId) {
-  const directory = resolve11(
+  const directory = resolve12(
     registration.path,
     "rooms",
     roomId,
@@ -10835,7 +10999,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   );
   let entries;
   try {
-    entries = await readdir5(directory, { withFileTypes: true });
+    entries = await readdir6(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { events: [], warnings: [] };
@@ -10845,12 +11009,12 @@ async function readThreadEvents(registration, roomId, threadId) {
   const events = [];
   const warnings = [];
   for (const entry of entries) {
-    const eventPath = resolve11(directory, entry.name, "event.json");
+    const eventPath = resolve12(directory, entry.name, "event.json");
     if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
       warnings.push(
         structuralWarning(
           "INVALID_EVENT_PATH",
-          resolve11(directory, entry.name),
+          resolve12(directory, entry.name),
           "thread event path is not a valid event ID directory"
         )
       );
@@ -10876,7 +11040,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   return { events, warnings };
 }
 async function readMessageDirectory(directory, threadId) {
-  const metadataPath = resolve11(directory, "message.json");
+  const metadataPath = resolve12(directory, "message.json");
   if (!isEntityId(basename2(directory), "message")) {
     return {
       warnings: [
@@ -10903,11 +11067,11 @@ async function readMessageDirectory(directory, threadId) {
         `message threadId does not match its parent thread: ${metadataPath}`
       );
     }
-    const body = await readFile6(resolve11(directory, "body.md"), "utf8");
+    const body = await readFile7(resolve12(directory, "body.md"), "utf8");
     if (body.trim().length === 0 || body.includes("\0")) {
       throw new StorageError(
         "INVALID_MESSAGE_BODY",
-        `message body is empty or contains NUL: ${resolve11(directory, "body.md")}`
+        `message body is empty or contains NUL: ${resolve12(directory, "body.md")}`
       );
     }
     const message = {
@@ -10941,7 +11105,7 @@ async function readMessageDirectory(directory, threadId) {
   }
 }
 async function readThreadMessages(registration, roomId, threadId) {
-  const directory = resolve11(
+  const directory = resolve12(
     registration.path,
     "rooms",
     roomId,
@@ -10951,7 +11115,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   );
   let entries;
   try {
-    entries = await readdir5(directory, { withFileTypes: true });
+    entries = await readdir6(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { messages: [], warnings: [] };
@@ -10961,7 +11125,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   const messages = [];
   const warnings = [];
   for (const entry of entries) {
-    const path = resolve11(directory, entry.name);
+    const path = resolve12(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -10983,14 +11147,14 @@ async function readThreadMessages(registration, roomId, threadId) {
   return { messages, warnings };
 }
 async function readThreadDirectory(registration, roomId, threadDirectoryName) {
-  const directory = resolve11(
+  const directory = resolve12(
     registration.path,
     "rooms",
     roomId,
     "threads",
     threadDirectoryName
   );
-  const threadPath = resolve11(directory, "thread.json");
+  const threadPath = resolve12(directory, "thread.json");
   if (!isEntityId(threadDirectoryName, "thread")) {
     return {
       messages: [],
@@ -11038,7 +11202,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "MESSAGE_SELF_REPLY",
-          resolve11(directory, "messages", message.id, "message.json"),
+          resolve12(directory, "messages", message.id, "message.json"),
           "message replyTo cannot reference itself"
         )
       );
@@ -11046,7 +11210,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "REPLY_TARGET_MISSING",
-          resolve11(directory, "messages", message.id, "message.json"),
+          resolve12(directory, "messages", message.id, "message.json"),
           `reply target is missing or damaged: ${message.replyTo}`
         )
       );
@@ -11068,7 +11232,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_TYPE_MISMATCH",
-          resolve11(directory, "messages", firstMessage.id, "message.json"),
+          resolve12(directory, "messages", firstMessage.id, "message.json"),
           "first message type does not match thread kind"
         )
       );
@@ -11077,7 +11241,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_AUTHOR_MISMATCH",
-          resolve11(directory, "messages", firstMessage.id, "message.json"),
+          resolve12(directory, "messages", firstMessage.id, "message.json"),
           "first message author does not match thread creator"
         )
       );
@@ -11086,7 +11250,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_REPLY_INVALID",
-          resolve11(directory, "messages", firstMessage.id, "message.json"),
+          resolve12(directory, "messages", firstMessage.id, "message.json"),
           "first message replyTo must be null"
         )
       );
@@ -11109,7 +11273,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
   );
   warnings.push(...eventResult.warnings);
   for (const event of eventResult.events) {
-    const eventPath = resolve11(
+    const eventPath = resolve12(
       directory,
       "events",
       String(event.id),
@@ -11159,7 +11323,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
 async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const roomResult = await showRoom(forumAlias, room, paths);
   const { registration } = await openForum(forumAlias, paths);
-  const directory = resolve11(
+  const directory = resolve12(
     registration.path,
     "rooms",
     roomResult.room.id,
@@ -11167,7 +11331,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   );
   let entries;
   try {
-    entries = await readdir5(directory, { withFileTypes: true });
+    entries = await readdir6(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return {
@@ -11181,7 +11345,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const threads = [];
   const warnings = [...roomResult.warnings];
   for (const entry of entries) {
-    const path = resolve11(directory, entry.name);
+    const path = resolve12(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -11281,7 +11445,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
         mentions: [],
         references: []
       };
-      const threadDirectory = resolve11(
+      const threadDirectory = resolve12(
         registration.path,
         "rooms",
         roomResult.room.id,
@@ -11292,12 +11456,12 @@ async function createThread(input, paths = createAgentForumPaths()) {
       try {
         await createImmutableDirectory(threadDirectory, async (temporary) => {
           await writeValidatedJsonAtomic(
-            resolve11(temporary, "thread.json"),
+            resolve12(temporary, "thread.json"),
             "thread",
             thread
           );
           await createImmutableMessage(
-            resolve11(temporary, "messages", messageId),
+            resolve12(temporary, "messages", messageId),
             metadata,
             input.body
           );
@@ -11337,7 +11501,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", threadDirectory]);
         if (directoryCreated) {
-          await rm6(threadDirectory, { recursive: true, force: true });
+          await rm7(threadDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -11413,7 +11577,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
         mentions: input.mentions ?? [],
         references: input.references ?? []
       };
-      const messageDirectory = resolve11(
+      const messageDirectory = resolve12(
         registration.path,
         "rooms",
         detail.room.id,
@@ -11458,7 +11622,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", messageDirectory]);
         if (messageCreated) {
-          await rm6(messageDirectory, { recursive: true, force: true });
+          await rm7(messageDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -11513,7 +11677,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
         },
         event
       );
-      const eventDirectory = resolve11(
+      const eventDirectory = resolve12(
         registration.path,
         "rooms",
         detail.room.id,
@@ -11544,7 +11708,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", eventDirectory]);
         if (eventCreated) {
-          await rm6(eventDirectory, { recursive: true, force: true });
+          await rm7(eventDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -11606,8 +11770,12 @@ function warningIssue(warning) {
   return blocking.has(warning.code) ? { code: warning.code, path: warning.path, message: warning.message } : void 0;
 }
 async function validateCurrentTree(forumAlias, paths) {
+  const forum = await showForum(forumAlias, paths);
   const result = await listRooms(forumAlias, paths);
-  const issues = result.warnings.map(warningIssue).filter(Boolean);
+  const issues = [
+    ...forum.warnings,
+    ...result.warnings
+  ].map(warningIssue).filter(Boolean);
   const slugs = /* @__PURE__ */ new Map();
   for (const room of result.rooms) {
     const ids = slugs.get(room.slug) ?? [];
@@ -11933,13 +12101,13 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
 // src/services/local-forum.ts
 import {
   mkdir as mkdir4,
-  readFile as readFile7,
+  readFile as readFile8,
   rename as rename4,
-  rm as rm7,
+  rm as rm8,
   stat as stat3
 } from "node:fs/promises";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { resolve as resolve12 } from "node:path";
+import { resolve as resolve13 } from "node:path";
 async function pathExists3(path) {
   try {
     await stat3(path);
@@ -11973,11 +12141,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
   await mkdir4(paths.forumsDirectory, { recursive: true });
   assertGitBranchName(paths.forumsDirectory, dataBranch);
   const configLock = await acquireForumLock({
-    lockPath: resolve12(paths.locksDirectory, "config.lock"),
+    lockPath: resolve13(paths.locksDirectory, "config.lock"),
     command: "forum init-local"
   });
   const destination = forumClonePath(paths, input.alias);
-  const staging = resolve12(
+  const staging = resolve13(
     paths.forumsDirectory,
     `.agent-forum-tmp-${randomUUID5()}`
   );
@@ -12011,11 +12179,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       identity.memberId
     );
     await writeFileAtomic(
-      resolve12(staging, ".gitattributes"),
+      resolve13(staging, ".gitattributes"),
       "*.json text eol=lf\n*.md text eol=lf\n"
     );
     await writeValidatedJsonAtomic(
-      resolve12(staging, ".forum", "protocol.json"),
+      resolve13(staging, ".forum", "protocol.json"),
       "protocol",
       {
         protocolVersion: "1.0",
@@ -12026,7 +12194,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve12(staging, ".forum", "forum.json"),
+      resolve13(staging, ".forum", "forum.json"),
       "forum",
       {
         schemaVersion: "1.0",
@@ -12038,7 +12206,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve12(staging, "members", identity.memberId, "profile.json"),
+      resolve13(staging, "members", identity.memberId, "profile.json"),
       "member-profile",
       publicProfile(identity, timestamp)
     );
@@ -12071,9 +12239,9 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       commit
     };
   } catch (error) {
-    await rm7(staging, { recursive: true, force: true });
+    await rm8(staging, { recursive: true, force: true });
     if (destinationCreated) {
-      await rm7(destination, { recursive: true, force: true });
+      await rm8(destination, { recursive: true, force: true });
     }
     throw error;
   } finally {
@@ -12088,7 +12256,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     lockPath: forumLockPath(paths, registration.forumId),
     command: "identity publish"
   });
-  const profilePath = resolve12(
+  const profilePath = resolve13(
     registration.path,
     "members",
     identity.memberId,
@@ -12099,7 +12267,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       "rev-parse",
       "--show-toplevel"
     ]).stdout.trim();
-    if (resolve12(topLevel) !== resolve12(registration.path)) {
+    if (resolve13(topLevel) !== resolve13(registration.path)) {
       throw new ServiceError(
         "FORUM_PROTOCOL_MISMATCH",
         `configured forum path is not the Git root: ${registration.path}`
@@ -12117,8 +12285,8 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       );
     }
     const protocol = JSON.parse(
-      await readFile7(
-        resolve12(registration.path, ".forum", "protocol.json"),
+      await readFile8(
+        resolve13(registration.path, ".forum", "protocol.json"),
         "utf8"
       )
     );
@@ -12135,7 +12303,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     let previous;
     let existing;
     try {
-      previous = await readFile7(profilePath, "utf8");
+      previous = await readFile8(profilePath, "utf8");
       existing = JSON.parse(previous);
       const validation = validateProtocolDocument("member-profile", existing, {
         mode: "read"
@@ -12209,7 +12377,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     } catch (error) {
       runGit(registration.path, ["reset", "--", profilePath]);
       if (previous === void 0) {
-        await rm7(profilePath, { force: true });
+        await rm8(profilePath, { force: true });
       } else {
         await writeFileAtomic(profilePath, previous, { overwrite: true });
       }
@@ -12232,6 +12400,11 @@ function forumHelp() {
         "publish",
         "list",
         "status",
+        "show",
+        "rename",
+        "set-description",
+        "archive",
+        "restore",
         "sync",
         "conflict",
         "remove"
@@ -12245,6 +12418,10 @@ Usage:
   agent-forum forum publish --forum <alias> --remote <url>
   agent-forum forum list
   agent-forum forum status --forum <alias>
+  agent-forum forum show --forum <alias>
+  agent-forum forum rename --forum <alias> --name <name> --reason <reason>
+  agent-forum forum set-description --forum <alias> --description <text> --reason <reason>
+  agent-forum forum archive|restore --forum <alias> --reason <reason>
   agent-forum forum sync --forum <alias>
   agent-forum forum conflict list|show|retry|prepare-reissue|close ...
   agent-forum forum remove --forum <alias> [--keep-clone]
@@ -12373,6 +12550,54 @@ behind: ${result.remote.behind ?? "unknown"}
 `
       };
     }
+    if (subcommand === "show") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const result = await showForum(forumAlias);
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.show",
+        data: result,
+        human: `${result.forum.name}
+status: ${result.forum.status}
+${result.forum.description}
+`
+      };
+    }
+    if (["rename", "set-description", "archive", "restore"].includes(subcommand)) {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum", "--name", "--description", "--reason", "--identity"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const reason = valueOrError(parsed, "--reason");
+      if (typeof reason !== "string") return reason;
+      const name = parsed.values.get("--name");
+      const description = parsed.values.get("--description");
+      if (subcommand === "rename" && !name) return invalidArgument("--name is required");
+      if (subcommand === "set-description" && !description) return invalidArgument("--description is required");
+      const type = subcommand === "rename" ? "forum-renamed" : subcommand === "set-description" ? "forum-description-changed" : subcommand === "archive" ? "forum-archived" : "forum-restored";
+      const data = name ? { name } : description ? { description } : {};
+      const identityId = parsed.values.get("--identity");
+      const result = await createForumEvent({
+        forumAlias,
+        type,
+        reason,
+        data,
+        ...identityId ? { identityId } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: `forum.${subcommand}`,
+        data: result,
+        human: `${type}: ${result.forum.forumId}
+commit: ${result.commit}
+`
+      };
+    }
     if (subcommand === "sync") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--forum"]
@@ -12490,14 +12715,16 @@ function identityHelp() {
     exitCode: ExitCode.Success,
     command: "identity.help",
     data: {
-      commands: ["create", "show", "publish"]
+      commands: ["create", "show", "update", "publish", "leave"]
     },
     human: `Identity management
 
 Usage:
   agent-forum identity create --name <name> --role <role> --responsibility <text> [--client <client>] [--no-default]
   agent-forum identity show [--id <member-id>]
+  agent-forum identity update [--id <member-id>] [--name <name>] [--role <role>] [--responsibility <text>] [--client <client> | --clear-client] [--set-default]
   agent-forum identity publish --forum <alias> [--id <member-id>]
+  agent-forum identity leave --forum <alias> [--id <member-id>]
 `
   };
 }
@@ -12558,6 +12785,38 @@ responsibility: ${identity.responsibility}
 `
       };
     }
+    if (subcommand === "update") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--id", "--name", "--role", "--responsibility", "--client"],
+        flags: ["--clear-client", "--set-default"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      if (parsed.flags.has("--clear-client") && parsed.values.has("--client")) {
+        return invalidArgument("--client and --clear-client cannot be combined");
+      }
+      if (!parsed.values.has("--name") && !parsed.values.has("--role") && !parsed.values.has("--responsibility") && !parsed.values.has("--client") && !parsed.flags.has("--clear-client") && !parsed.flags.has("--set-default")) return invalidArgument("identity update requires at least one change");
+      const memberId = parsed.values.get("--id");
+      const displayName = parsed.values.get("--name");
+      const role = parsed.values.get("--role");
+      const responsibility = parsed.values.get("--responsibility");
+      const client = parsed.values.get("--client");
+      const result = await updateLocalIdentity({
+        ...memberId ? { memberId } : {},
+        ...displayName ? { displayName } : {},
+        ...role ? { role } : {},
+        ...responsibility ? { responsibility } : {},
+        ...parsed.flags.has("--clear-client") ? { client: null } : client ? { client } : {},
+        setDefault: parsed.flags.has("--set-default")
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "identity.update",
+        data: result,
+        human: `updated: ${result.identity.memberId}
+default: ${result.defaultIdentityId}
+`
+      };
+    }
     if (subcommand === "publish") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--forum", "--id"]
@@ -12575,6 +12834,23 @@ responsibility: ${identity.responsibility}
         data: result,
         human: `${result.action}: ${result.identityId}
 forum: ${result.alias}
+`
+      };
+    }
+    if (subcommand === "leave") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum", "--id"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forum = valueOrError2(parsed, "--forum");
+      if (typeof forum !== "string") return forum;
+      const result = await leaveForum(forum, parsed.values.get("--id"));
+      return {
+        exitCode: ExitCode.Success,
+        command: "identity.leave",
+        data: result,
+        human: `left: ${result.memberId}
+forum: ${forum}
 `
       };
     }
@@ -12919,15 +13195,15 @@ import { createHash, randomUUID as randomUUID6 } from "node:crypto";
 import {
   cp,
   mkdir as mkdir5,
-  readFile as readFile8,
-  readdir as readdir6,
+  readFile as readFile9,
+  readdir as readdir7,
   rename as rename5,
-  rm as rm8,
+  rm as rm9,
   stat as stat4,
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve13, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative, resolve as resolve14, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -12949,14 +13225,14 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve13(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve14(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function skillDestination(target, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve13(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve14(homeDirectory, ".agents", "skills", "agent-forum");
   }
   if (target === "claude-code") {
-    return resolve13(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve14(homeDirectory, ".claude", "skills", "agent-forum");
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
 }
@@ -12973,7 +13249,7 @@ async function pathExists4(path) {
 }
 async function loadState(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile8(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile9(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -13000,16 +13276,16 @@ async function saveState(homeDirectory, state) {
     });
     await rename5(temporary, destination);
   } catch (error) {
-    await rm8(temporary, { force: true });
+    await rm9(temporary, { force: true });
     throw error;
   }
 }
 async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const files = {};
-  const entries = await readdir6(current, { withFileTypes: true });
+  const entries = await readdir7(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve13(current, entry.name);
+    const absolute = resolve14(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -13030,7 +13306,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
     }
     if (!entry.isFile()) continue;
     const relativePath = relative(root, absolute).split(sep2).join("/");
-    files[relativePath] = createHash("sha256").update(await readFile8(absolute)).digest("hex");
+    files[relativePath] = createHash("sha256").update(await readFile9(absolute)).digest("hex");
   }
   return files;
 }
@@ -13042,11 +13318,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve13(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve13(process.cwd(), "skills", "agent-forum")
+    resolve14(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve14(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists4(resolve13(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists4(resolve14(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -13065,9 +13341,9 @@ async function replaceDirectory(source, destination) {
       movedExisting = true;
     }
     await rename5(staging, destination);
-    if (movedExisting) await rm8(backup, { recursive: true, force: true });
+    if (movedExisting) await rm9(backup, { recursive: true, force: true });
   } catch (error) {
-    await rm8(staging, { recursive: true, force: true });
+    await rm9(staging, { recursive: true, force: true });
     if (movedExisting && !await pathExists4(destination)) {
       await rename5(backup, destination);
     }
@@ -13182,7 +13458,7 @@ async function uninstallSkill(options) {
     };
   }
   if (shouldRemoveFiles) {
-    await rm8(destination, { recursive: true, force: true });
+    await rm9(destination, { recursive: true, force: true });
   }
   const installations = shouldRemoveFiles ? state.installations.filter((installation) => installation.path !== destination) : state.installations.map(
     (installation) => installation.path === destination ? { ...installation, targets: remainingTargets } : installation

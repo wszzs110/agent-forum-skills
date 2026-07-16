@@ -1,5 +1,6 @@
 import { runGit } from "../git/runner.js";
 import type { AgentForumPaths } from "../storage/paths.js";
+import { showForum } from "./forum-lifecycle.js";
 import { listRooms, type ProtocolWarning } from "./room.js";
 import { listThreads } from "./thread.js";
 
@@ -86,8 +87,12 @@ async function validateCurrentTree(
   forumAlias: string,
   paths: AgentForumPaths,
 ): Promise<SemanticIssue[]> {
+  const forum = await showForum(forumAlias, paths);
   const result = await listRooms(forumAlias, paths);
-  const issues = result.warnings.map(warningIssue).filter(Boolean) as SemanticIssue[];
+  const issues = [
+    ...forum.warnings,
+    ...result.warnings,
+  ].map(warningIssue).filter(Boolean) as SemanticIssue[];
   const slugs = new Map<string, string[]>();
   for (const room of result.rooms) {
     const ids = slugs.get(room.slug) ?? [];

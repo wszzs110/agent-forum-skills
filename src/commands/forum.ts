@@ -6,6 +6,10 @@ import {
   prepareConflictReissue,
 } from "../services/conflicts.js";
 import {
+  createForumEvent,
+  showForum,
+} from "../services/forum-lifecycle.js";
+import {
   addRemoteForum,
   getForumRemoteStatus,
   listRemoteForums,
@@ -33,12 +37,17 @@ function forumHelp(): CommandExecution {
         "publish",
         "list",
         "status",
+        "show",
+        "rename",
+        "set-description",
+        "archive",
+        "restore",
         "sync",
         "conflict",
         "remove",
       ],
     },
-    human: `Forum management\n\nUsage:\n  agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]\n  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]\n  agent-forum forum publish --forum <alias> --remote <url>\n  agent-forum forum list\n  agent-forum forum status --forum <alias>\n  agent-forum forum sync --forum <alias>\n  agent-forum forum conflict list|show|retry|prepare-reissue|close ...\n  agent-forum forum remove --forum <alias> [--keep-clone]\n`,
+    human: `Forum management\n\nUsage:\n  agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]\n  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]\n  agent-forum forum publish --forum <alias> --remote <url>\n  agent-forum forum list\n  agent-forum forum status --forum <alias>\n  agent-forum forum show --forum <alias>\n  agent-forum forum rename --forum <alias> --name <name> --reason <reason>\n  agent-forum forum set-description --forum <alias> --description <text> --reason <reason>\n  agent-forum forum archive|restore --forum <alias> --reason <reason>\n  agent-forum forum sync --forum <alias>\n  agent-forum forum conflict list|show|retry|prepare-reissue|close ...\n  agent-forum forum remove --forum <alias> [--keep-clone]\n`,
   };
 }
 
@@ -160,6 +169,57 @@ export async function executeForumCommand(
         command: "forum.status",
         data: result,
         human: `forum: ${result.alias}\nhealth: ${result.health}\nbranch: ${result.currentBranch ?? "detached"}\nremote: ${result.remote.displayUrl ?? "not configured"}\nahead: ${result.remote.ahead ?? "unknown"}\nbehind: ${result.remote.behind ?? "unknown"}\n`,
+      };
+    }
+
+    if (subcommand === "show") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const result = await showForum(forumAlias);
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.show",
+        data: result,
+        human: `${result.forum.name}\nstatus: ${result.forum.status}\n${result.forum.description}\n`,
+      };
+    }
+
+    if (["rename", "set-description", "archive", "restore"].includes(subcommand)) {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum", "--name", "--description", "--reason", "--identity"],
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const reason = valueOrError(parsed, "--reason");
+      if (typeof reason !== "string") return reason;
+      const name = parsed.values.get("--name");
+      const description = parsed.values.get("--description");
+      if (subcommand === "rename" && !name) return invalidArgument("--name is required");
+      if (subcommand === "set-description" && !description) return invalidArgument("--description is required");
+      const type = subcommand === "rename"
+        ? "forum-renamed"
+        : subcommand === "set-description"
+          ? "forum-description-changed"
+          : subcommand === "archive"
+            ? "forum-archived"
+            : "forum-restored";
+      const data = name ? { name } : description ? { description } : {};
+      const identityId = parsed.values.get("--identity");
+      const result = await createForumEvent({
+        forumAlias,
+        type,
+        reason,
+        data,
+        ...(identityId ? { identityId } : {}),
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: `forum.${subcommand}`,
+        data: result,
+        human: `${type}: ${result.forum.forumId}\ncommit: ${result.commit}\n`,
       };
     }
 
