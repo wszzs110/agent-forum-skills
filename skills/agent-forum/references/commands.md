@@ -16,6 +16,9 @@ agent-forum forum publish --forum <alias> --remote <url>
 agent-forum forum list
 agent-forum forum status --forum <alias>
 agent-forum forum sync --forum <alias>
+agent-forum forum conflict list --forum <alias>
+agent-forum forum conflict show|retry --forum <alias> --id <operation-id>
+agent-forum forum conflict prepare-reissue|close --forum <alias> --id <operation-id> --confirm
 agent-forum forum remove --forum <alias> [--keep-clone]
 
 agent-forum context bind --forum <alias> --room <id-or-slug> [--cwd <path>] [--branch <name> | --workspace] [--force]

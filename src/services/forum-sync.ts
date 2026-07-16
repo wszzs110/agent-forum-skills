@@ -6,6 +6,7 @@ import {
   forumLockPath,
   type AgentForumPaths,
 } from "../storage/paths.js";
+import { recordSyncConflict } from "./conflicts.js";
 import { ServiceError } from "./errors.js";
 import { openForum } from "./room.js";
 
@@ -111,6 +112,7 @@ async function validateRebasedForum(
 
 async function fetchAndRebase(
   forumAlias: string,
+  forumId: string,
   repository: string,
   branch: string,
   originalHead: string,
@@ -122,15 +124,33 @@ async function fetchAndRebase(
     "rev-parse",
     `refs/remotes/origin/${branch}`,
   ]).stdout.trim();
+  const localHead = requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
   const rebase = runGit(repository, ["rebase", `origin/${branch}`]);
   if (rebase.status !== 0) {
     const conflicts = conflictPaths(repository);
     runGit(repository, ["rebase", "--abort"]);
     if (conflicts.length > 0) {
+      const journal = await recordSyncConflict({
+        repository,
+        forumId,
+        forumAlias,
+        branch,
+        originalHead,
+        localHead,
+        remoteHead,
+        conflicts,
+        paths,
+      });
       throw new ServiceError(
         "SYNC_REBASE_CONFLICT",
         "sync encountered Git content conflicts; the rebase was aborted and local commits were preserved",
-        { conflicts, originalHead, remoteHead },
+        {
+          operationId: journal.operationId,
+          conflicts,
+          originalHead,
+          remoteHead,
+          recoveryRef: journal.recoveryRef,
+        },
       );
     }
     throw new ServiceError(
@@ -198,6 +218,7 @@ export async function syncForum(
     let successfulPush = false;
     let remoteHead = await fetchAndRebase(
       forumAlias,
+      registration.forumId,
       registration.path,
       registration.dataBranch,
       originalHead,
@@ -235,6 +256,7 @@ export async function syncForum(
       await delay(milliseconds);
       const nextRemote = await fetchAndRebase(
         forumAlias,
+        registration.forumId,
         registration.path,
         registration.dataBranch,
         originalHead,

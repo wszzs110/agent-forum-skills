@@ -1,5 +1,11 @@
 import { ExitCode } from "../errors.js";
 import {
+  closeConflict,
+  getConflict,
+  listConflicts,
+  prepareConflictReissue,
+} from "../services/conflicts.js";
+import {
   addRemoteForum,
   getForumRemoteStatus,
   listRemoteForums,
@@ -28,10 +34,11 @@ function forumHelp(): CommandExecution {
         "list",
         "status",
         "sync",
+        "conflict",
         "remove",
       ],
     },
-    human: `Forum management\n\nUsage:\n  agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]\n  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]\n  agent-forum forum publish --forum <alias> --remote <url>\n  agent-forum forum list\n  agent-forum forum status --forum <alias>\n  agent-forum forum sync --forum <alias>\n  agent-forum forum remove --forum <alias> [--keep-clone]\n`,
+    human: `Forum management\n\nUsage:\n  agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]\n  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]\n  agent-forum forum publish --forum <alias> --remote <url>\n  agent-forum forum list\n  agent-forum forum status --forum <alias>\n  agent-forum forum sync --forum <alias>\n  agent-forum forum conflict list|show|retry|prepare-reissue|close ...\n  agent-forum forum remove --forum <alias> [--keep-clone]\n`,
   };
 }
 
@@ -169,6 +176,64 @@ export async function executeForumCommand(
         command: "forum.sync",
         data: result,
         human: `forum: ${result.forumAlias}\noutcome: ${result.outcome}\nhead: ${result.finalHead}\nfetches: ${result.fetches}\npush attempts: ${result.pushAttempts}\n`,
+      };
+    }
+
+    if (subcommand === "conflict") {
+      const action = args[1];
+      if (!action || !["list", "show", "retry", "prepare-reissue", "close"].includes(action)) {
+        return invalidArgument("forum conflict requires list, show, retry, prepare-reissue, or close");
+      }
+      const parsed = parseCommandOptions(args.slice(2), {
+        values: ["--forum", "--id"],
+        flags: ["--confirm"],
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      if (action === "list") {
+        const result = await listConflicts(forumAlias);
+        return {
+          exitCode: ExitCode.Success,
+          command: "forum.conflict.list",
+          data: result,
+          human: result.conflicts.length === 0
+            ? "No conflicts.\n"
+            : `${result.conflicts.map((item) => `${item.operationId}\t${item.status}\t${item.createdAt}`).join("\n")}\n`,
+        };
+      }
+      const operationId = valueOrError(parsed, "--id");
+      if (typeof operationId !== "string") return operationId;
+      if (action === "show") {
+        const result = await getConflict(forumAlias, operationId);
+        return {
+          exitCode: ExitCode.Success,
+          command: "forum.conflict.show",
+          data: result,
+          human: `conflict: ${result.operationId}\nstatus: ${result.status}\npaths: ${result.conflicts.join(", ")}\nrecovery: ${result.recoveryRef}\n`,
+        };
+      }
+      if (action === "retry") {
+        const result = await syncForum(forumAlias);
+        await closeConflict(forumAlias, operationId);
+        return {
+          exitCode: ExitCode.Success,
+          command: "forum.conflict.retry",
+          data: result,
+          human: `resolved by retry: ${operationId}\noutcome: ${result.outcome}\n`,
+        };
+      }
+      if (!parsed.flags.has("--confirm")) {
+        return invalidArgument(`${action} requires --confirm`);
+      }
+      const result = action === "prepare-reissue"
+        ? await prepareConflictReissue(forumAlias, operationId)
+        : await closeConflict(forumAlias, operationId);
+      return {
+        exitCode: ExitCode.Success,
+        command: `forum.conflict.${action}`,
+        data: result,
+        human: `${action}: ${operationId}\n`,
       };
     }
 

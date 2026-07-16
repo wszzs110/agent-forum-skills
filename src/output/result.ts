@@ -9,6 +9,7 @@ export interface ErrorResult {
   error: {
     code: string;
     message: string;
+    details?: unknown;
   };
 }
 
@@ -18,6 +19,17 @@ export function success<T>(command: string, data: T): SuccessResult<T> {
   return { ok: true, command, data };
 }
 
-export function failure(code: string, message: string): ErrorResult {
-  return { ok: false, error: { code, message } };
+export function failure(
+  code: string,
+  message: string,
+  details?: unknown,
+): ErrorResult {
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      ...(details !== undefined ? { details } : {}),
+    },
+  };
 }

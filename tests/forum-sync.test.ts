@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
-import { requireGit } from "../src/git/runner.js";
+import { requireGit, runGit } from "../src/git/runner.js";
+import {
+  closeConflict,
+  listConflicts,
+  prepareConflictReissue,
+} from "../src/services/conflicts.js";
 import { ServiceError } from "../src/services/errors.js";
 import { addRemoteForum, publishLocalForum } from "../src/services/forum-remote.js";
 import { syncForum } from "../src/services/forum-sync.js";
@@ -211,6 +216,31 @@ test("rebase conflicts abort and preserve the original local commit", async () =
       originalHead,
     );
     assert.equal(requireGit(second.forum.path, ["status", "--porcelain"]).stdout, "");
+    const journals = await listConflicts("second", second.paths);
+    assert.equal(journals.conflicts.length, 1);
+    const journal = journals.conflicts[0]!;
+    assert.equal(journal.originalHead, originalHead);
+    assert.equal(journal.conflicts.includes(relativeProfile), true);
+    assert.equal(
+      requireGit(second.forum.path, ["rev-parse", journal.recoveryRef]).stdout.trim(),
+      originalHead,
+    );
+    const prepared = await prepareConflictReissue(
+      "second",
+      journal.operationId,
+      second.paths,
+    );
+    assert.equal(prepared.status, "reissue-prepared");
+    assert.equal(
+      requireGit(second.forum.path, ["rev-parse", "HEAD"]).stdout.trim(),
+      journal.remoteHead,
+    );
+    await closeConflict("second", journal.operationId, second.paths);
+    assert.equal((await listConflicts("second", second.paths)).conflicts.length, 0);
+    assert.notEqual(
+      runGit(second.forum.path, ["rev-parse", journal.recoveryRef]).status,
+      0,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

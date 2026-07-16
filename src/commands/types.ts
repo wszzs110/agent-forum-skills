@@ -4,6 +4,6 @@ export interface CommandExecution {
   exitCode: ExitCodeValue;
   command: string;
   data?: unknown;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; details?: unknown };
   human: string;
 }

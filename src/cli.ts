@@ -129,7 +129,11 @@ export async function runCli(
         writeJson(
           io,
           execution.error
-            ? failure(execution.error.code, execution.error.message)
+            ? failure(
+                execution.error.code,
+                execution.error.message,
+                execution.error.details,
+              )
             : success(execution.command, execution.data),
         );
       } else if (execution.error) {

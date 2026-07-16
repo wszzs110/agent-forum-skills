@@ -2976,7 +2976,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve12.call(this, root, ref);
+      let _sch = resolve13.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3003,7 +3003,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve12(root, ref) {
+    function resolve13(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3634,7 +3634,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve12(baseURI, relativeURI, options) {
+    function resolve13(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3892,7 +3892,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve12,
+      resolve: resolve13,
       resolveComponent,
       equal,
       serialize,
@@ -7446,6 +7446,12 @@ function forumClonePath(paths, alias) {
   assertLocalAlias(alias);
   return resolve2(paths.forumsDirectory, alias);
 }
+function forumStatePath(paths, forumId) {
+  if (!isEntityId(forumId, "forum")) {
+    throw new StorageError("INVALID_FORUM_ID", `invalid forum ID: ${forumId}`);
+  }
+  return resolve2(paths.stateDirectory, forumId);
+}
 function forumLockPath(paths, forumId) {
   if (!isEntityId(forumId, "forum")) {
     throw new StorageError("INVALID_FORUM_ID", `invalid forum ID: ${forumId}`);
@@ -9840,7 +9846,11 @@ function commandError(command, error) {
     return {
       exitCode: ExitCode.Unexpected,
       command,
-      error: { code: error.code, message: error.message },
+      error: {
+        code: error.code,
+        message: error.message,
+        ..."details" in error && error.details !== void 0 ? { details: error.details } : {}
+      },
       human: `Error [${error.code}]: ${error.message}
 `
     };
@@ -10049,10 +10059,144 @@ status: ${result.targetStatus}
   }
 }
 
-// src/services/forum-remote.ts
+// src/services/conflicts.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { lstat as lstat2, mkdir as mkdir3, rename as rename3, rm as rm4 } from "node:fs/promises";
+import { readdir as readdir3, readFile as readFile5, rm as rm4 } from "node:fs/promises";
 import { resolve as resolve8 } from "node:path";
+function operationsDirectory(paths, forumId) {
+  return resolve8(forumStatePath(paths, forumId), "operations");
+}
+function journalPath(paths, forumId, operationId) {
+  if (!/^op_[0-9a-f-]{36}$/u.test(operationId)) {
+    throw new ServiceError("CONFLICT_NOT_FOUND", `invalid conflict ID: ${operationId}`);
+  }
+  return resolve8(operationsDirectory(paths, forumId), `${operationId}.json`);
+}
+function validateJournal(value) {
+  if (!value || typeof value !== "object") throw new Error("journal is not an object");
+  const item = value;
+  if (item.formatVersion !== 1 || typeof item.operationId !== "string" || typeof item.forumId !== "string" || typeof item.forumAlias !== "string" || typeof item.branch !== "string" || !["conflict", "reissue-prepared"].includes(String(item.status)) || typeof item.originalHead !== "string" || typeof item.localHead !== "string" || typeof item.remoteHead !== "string" || typeof item.recoveryRef !== "string" || !Array.isArray(item.conflicts) || !item.conflicts.every((path) => typeof path === "string") || typeof item.createdAt !== "string" || typeof item.updatedAt !== "string") {
+    throw new Error("journal fields are invalid");
+  }
+  return item;
+}
+async function recordSyncConflict(input) {
+  const operationId = `op_${randomUUID3()}`;
+  const recoveryRef = `refs/agent-forum/recovery/${operationId.slice(3)}`;
+  requireGit(input.repository, ["update-ref", recoveryRef, input.originalHead]);
+  const timestamp = currentUtcTimestamp();
+  const journal = {
+    formatVersion: 1,
+    operationId,
+    forumId: input.forumId,
+    forumAlias: input.forumAlias,
+    branch: input.branch,
+    status: "conflict",
+    originalHead: input.originalHead,
+    localHead: input.localHead,
+    remoteHead: input.remoteHead,
+    recoveryRef,
+    conflicts: input.conflicts,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+  try {
+    await writeJsonAtomic(journalPath(input.paths, input.forumId, operationId), journal);
+  } catch (error) {
+    runGit(input.repository, ["update-ref", "-d", recoveryRef]);
+    throw error;
+  }
+  return journal;
+}
+async function registrationFor(alias, paths) {
+  return findForum(await loadLocalConfig(paths), alias);
+}
+async function getConflict(forumAlias, operationId, paths = createAgentForumPaths()) {
+  const registration = await registrationFor(forumAlias, paths);
+  try {
+    return validateJournal(
+      JSON.parse(await readFile5(journalPath(paths, registration.forumId, operationId), "utf8"))
+    );
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      throw new ServiceError("CONFLICT_NOT_FOUND", `conflict was not found: ${operationId}`);
+    }
+    if (error instanceof ServiceError) throw error;
+    throw new ServiceError("CONFLICT_JOURNAL_DAMAGED", `conflict journal is damaged: ${operationId}`);
+  }
+}
+async function listConflicts(forumAlias, paths = createAgentForumPaths()) {
+  const registration = await registrationFor(forumAlias, paths);
+  let entries;
+  try {
+    entries = await readdir3(operationsDirectory(paths, registration.forumId));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { conflicts: [] };
+    }
+    throw error;
+  }
+  const conflicts = [];
+  for (const entry of entries.filter((name) => name.endsWith(".json"))) {
+    conflicts.push(await getConflict(forumAlias, entry.slice(0, -5), paths));
+  }
+  conflicts.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  return { conflicts };
+}
+async function prepareConflictReissue(forumAlias, operationId, paths = createAgentForumPaths()) {
+  const registration = await registrationFor(forumAlias, paths);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "forum conflict prepare-reissue"
+  });
+  try {
+    const journal = await getConflict(forumAlias, operationId, paths);
+    assertCleanWorktree(registration.path);
+    requireGit(registration.path, ["rev-parse", journal.recoveryRef]);
+    const remoteHead = requireGit(registration.path, [
+      "rev-parse",
+      `refs/remotes/origin/${registration.dataBranch}`
+    ]).stdout.trim();
+    if (remoteHead !== journal.remoteHead) {
+      throw new ServiceError(
+        "CONFLICT_REMOTE_CHANGED",
+        "remote-tracking HEAD changed after the conflict; retry sync before preparing a reissue"
+      );
+    }
+    requireGit(registration.path, ["reset", "--hard", journal.remoteHead]);
+    const updated = {
+      ...journal,
+      status: "reissue-prepared",
+      updatedAt: currentUtcTimestamp()
+    };
+    await writeJsonAtomic(journalPath(paths, registration.forumId, operationId), updated, {
+      overwrite: true
+    });
+    return updated;
+  } finally {
+    await lock.release();
+  }
+}
+async function closeConflict(forumAlias, operationId, paths = createAgentForumPaths()) {
+  const registration = await registrationFor(forumAlias, paths);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "forum conflict close"
+  });
+  try {
+    const journal = await getConflict(forumAlias, operationId, paths);
+    requireGit(registration.path, ["update-ref", "-d", journal.recoveryRef]);
+    await rm4(journalPath(paths, registration.forumId, operationId), { force: true });
+    return { operationId, closed: true };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/forum-remote.ts
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { lstat as lstat2, mkdir as mkdir3, rename as rename3, rm as rm5 } from "node:fs/promises";
+import { resolve as resolve9 } from "node:path";
 
 // src/git/remote.ts
 import { isAbsolute } from "node:path";
@@ -10162,11 +10306,11 @@ function remoteBranchFromHead(repository) {
 async function validateClonedForum(repository, branch) {
   try {
     const protocol = await readJsonDocument(
-      resolve8(repository, ".forum", "protocol.json"),
+      resolve9(repository, ".forum", "protocol.json"),
       "protocol"
     );
     const forum = await readJsonDocument(
-      resolve8(repository, ".forum", "forum.json"),
+      resolve9(repository, ".forum", "forum.json"),
       "forum"
     );
     if (protocol.dataBranch !== branch || protocol.forumId !== forum.forumId) {
@@ -10258,7 +10402,7 @@ async function addRemoteForum(input, paths = createAgentForumPaths()) {
       remote: safeRemote.display
     };
   } catch (error) {
-    if (cloned) await rm4(destination, { recursive: true, force: true });
+    if (cloned) await rm5(destination, { recursive: true, force: true });
     throw error;
   }
 }
@@ -10350,7 +10494,7 @@ async function getForumRemoteStatus(forumAlias, paths = createAgentForumPaths())
   let protocolValid = false;
   try {
     const protocol = await readJsonDocument(
-      resolve8(registration.path, ".forum", "protocol.json"),
+      resolve9(registration.path, ".forum", "protocol.json"),
       "protocol"
     );
     protocolValid = protocol.forumId === registration.forumId && protocol.dataBranch === registration.dataBranch;
@@ -10436,7 +10580,7 @@ async function removeLocalForum(input, paths = createAgentForumPaths()) {
         "managed clone has no verified upstream or contains local-only commits; use --keep-clone"
       );
     }
-    const temporary = `${registration.path}.removing-${randomUUID3()}`;
+    const temporary = `${registration.path}.removing-${randomUUID4()}`;
     await rename3(registration.path, temporary);
     try {
       await unregisterLocalForum(input.forumAlias, paths);
@@ -10445,7 +10589,7 @@ async function removeLocalForum(input, paths = createAgentForumPaths()) {
       throw error;
     }
     try {
-      await rm4(temporary, { recursive: true, force: true });
+      await rm5(temporary, { recursive: true, force: true });
     } catch (error) {
       throw new ServiceError(
         "LOCAL_CLONE_CLEANUP_FAILED",
@@ -10503,22 +10647,40 @@ async function validateRebasedForum(forumAlias, repository, originalHead, paths)
     );
   }
 }
-async function fetchAndRebase(forumAlias, repository, branch, originalHead, paths) {
+async function fetchAndRebase(forumAlias, forumId, repository, branch, originalHead, paths) {
   const fetch = runGit(repository, ["fetch", "origin", branch]);
   if (fetch.status !== 0) throw classifyTransportFailure("fetch", fetch);
   const remoteHead = requireGit(repository, [
     "rev-parse",
     `refs/remotes/origin/${branch}`
   ]).stdout.trim();
+  const localHead = requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
   const rebase = runGit(repository, ["rebase", `origin/${branch}`]);
   if (rebase.status !== 0) {
     const conflicts = conflictPaths(repository);
     runGit(repository, ["rebase", "--abort"]);
     if (conflicts.length > 0) {
+      const journal = await recordSyncConflict({
+        repository,
+        forumId,
+        forumAlias,
+        branch,
+        originalHead,
+        localHead,
+        remoteHead,
+        conflicts,
+        paths
+      });
       throw new ServiceError(
         "SYNC_REBASE_CONFLICT",
         "sync encountered Git content conflicts; the rebase was aborted and local commits were preserved",
-        { conflicts, originalHead, remoteHead }
+        {
+          operationId: journal.operationId,
+          conflicts,
+          originalHead,
+          remoteHead,
+          recoveryRef: journal.recoveryRef
+        }
       );
     }
     throw new ServiceError(
@@ -10577,6 +10739,7 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
     let successfulPush = false;
     let remoteHead = await fetchAndRebase(
       forumAlias,
+      registration.forumId,
       registration.path,
       registration.dataBranch,
       originalHead,
@@ -10613,6 +10776,7 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
       await delay(milliseconds);
       const nextRemote = await fetchAndRebase(
         forumAlias,
+        registration.forumId,
         registration.path,
         registration.dataBranch,
         originalHead,
@@ -10644,13 +10808,13 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
 // src/services/local-forum.ts
 import {
   mkdir as mkdir4,
-  readFile as readFile5,
+  readFile as readFile6,
   rename as rename4,
-  rm as rm5,
+  rm as rm6,
   stat as stat3
 } from "node:fs/promises";
-import { randomUUID as randomUUID4 } from "node:crypto";
-import { resolve as resolve9 } from "node:path";
+import { randomUUID as randomUUID5 } from "node:crypto";
+import { resolve as resolve10 } from "node:path";
 async function pathExists3(path) {
   try {
     await stat3(path);
@@ -10684,13 +10848,13 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
   await mkdir4(paths.forumsDirectory, { recursive: true });
   assertGitBranchName(paths.forumsDirectory, dataBranch);
   const configLock = await acquireForumLock({
-    lockPath: resolve9(paths.locksDirectory, "config.lock"),
+    lockPath: resolve10(paths.locksDirectory, "config.lock"),
     command: "forum init-local"
   });
   const destination = forumClonePath(paths, input.alias);
-  const staging = resolve9(
+  const staging = resolve10(
     paths.forumsDirectory,
-    `.agent-forum-tmp-${randomUUID4()}`
+    `.agent-forum-tmp-${randomUUID5()}`
   );
   let destinationCreated = false;
   try {
@@ -10722,11 +10886,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       identity.memberId
     );
     await writeFileAtomic(
-      resolve9(staging, ".gitattributes"),
+      resolve10(staging, ".gitattributes"),
       "*.json text eol=lf\n*.md text eol=lf\n"
     );
     await writeValidatedJsonAtomic(
-      resolve9(staging, ".forum", "protocol.json"),
+      resolve10(staging, ".forum", "protocol.json"),
       "protocol",
       {
         protocolVersion: "1.0",
@@ -10737,7 +10901,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve9(staging, ".forum", "forum.json"),
+      resolve10(staging, ".forum", "forum.json"),
       "forum",
       {
         schemaVersion: "1.0",
@@ -10749,7 +10913,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve9(staging, "members", identity.memberId, "profile.json"),
+      resolve10(staging, "members", identity.memberId, "profile.json"),
       "member-profile",
       publicProfile(identity, timestamp)
     );
@@ -10782,9 +10946,9 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       commit
     };
   } catch (error) {
-    await rm5(staging, { recursive: true, force: true });
+    await rm6(staging, { recursive: true, force: true });
     if (destinationCreated) {
-      await rm5(destination, { recursive: true, force: true });
+      await rm6(destination, { recursive: true, force: true });
     }
     throw error;
   } finally {
@@ -10799,7 +10963,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     lockPath: forumLockPath(paths, registration.forumId),
     command: "identity publish"
   });
-  const profilePath = resolve9(
+  const profilePath = resolve10(
     registration.path,
     "members",
     identity.memberId,
@@ -10810,7 +10974,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       "rev-parse",
       "--show-toplevel"
     ]).stdout.trim();
-    if (resolve9(topLevel) !== resolve9(registration.path)) {
+    if (resolve10(topLevel) !== resolve10(registration.path)) {
       throw new ServiceError(
         "FORUM_PROTOCOL_MISMATCH",
         `configured forum path is not the Git root: ${registration.path}`
@@ -10828,8 +10992,8 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       );
     }
     const protocol = JSON.parse(
-      await readFile5(
-        resolve9(registration.path, ".forum", "protocol.json"),
+      await readFile6(
+        resolve10(registration.path, ".forum", "protocol.json"),
         "utf8"
       )
     );
@@ -10846,7 +11010,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     let previous;
     let existing;
     try {
-      previous = await readFile5(profilePath, "utf8");
+      previous = await readFile6(profilePath, "utf8");
       existing = JSON.parse(previous);
       const validation = validateProtocolDocument("member-profile", existing, {
         mode: "read"
@@ -10920,7 +11084,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     } catch (error) {
       runGit(registration.path, ["reset", "--", profilePath]);
       if (previous === void 0) {
-        await rm5(profilePath, { force: true });
+        await rm6(profilePath, { force: true });
       } else {
         await writeFileAtomic(profilePath, previous, { overwrite: true });
       }
@@ -10944,6 +11108,7 @@ function forumHelp() {
         "list",
         "status",
         "sync",
+        "conflict",
         "remove"
       ]
     },
@@ -10956,6 +11121,7 @@ Usage:
   agent-forum forum list
   agent-forum forum status --forum <alias>
   agent-forum forum sync --forum <alias>
+  agent-forum forum conflict list|show|retry|prepare-reissue|close ...
   agent-forum forum remove --forum <alias> [--keep-clone]
 `
   };
@@ -11102,6 +11268,67 @@ push attempts: ${result.pushAttempts}
 `
       };
     }
+    if (subcommand === "conflict") {
+      const action = args[1];
+      if (!action || !["list", "show", "retry", "prepare-reissue", "close"].includes(action)) {
+        return invalidArgument("forum conflict requires list, show, retry, prepare-reissue, or close");
+      }
+      const parsed = parseCommandOptions(args.slice(2), {
+        values: ["--forum", "--id"],
+        flags: ["--confirm"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      if (action === "list") {
+        const result2 = await listConflicts(forumAlias);
+        return {
+          exitCode: ExitCode.Success,
+          command: "forum.conflict.list",
+          data: result2,
+          human: result2.conflicts.length === 0 ? "No conflicts.\n" : `${result2.conflicts.map((item) => `${item.operationId}	${item.status}	${item.createdAt}`).join("\n")}
+`
+        };
+      }
+      const operationId = valueOrError(parsed, "--id");
+      if (typeof operationId !== "string") return operationId;
+      if (action === "show") {
+        const result2 = await getConflict(forumAlias, operationId);
+        return {
+          exitCode: ExitCode.Success,
+          command: "forum.conflict.show",
+          data: result2,
+          human: `conflict: ${result2.operationId}
+status: ${result2.status}
+paths: ${result2.conflicts.join(", ")}
+recovery: ${result2.recoveryRef}
+`
+        };
+      }
+      if (action === "retry") {
+        const result2 = await syncForum(forumAlias);
+        await closeConflict(forumAlias, operationId);
+        return {
+          exitCode: ExitCode.Success,
+          command: "forum.conflict.retry",
+          data: result2,
+          human: `resolved by retry: ${operationId}
+outcome: ${result2.outcome}
+`
+        };
+      }
+      if (!parsed.flags.has("--confirm")) {
+        return invalidArgument(`${action} requires --confirm`);
+      }
+      const result = action === "prepare-reissue" ? await prepareConflictReissue(forumAlias, operationId) : await closeConflict(forumAlias, operationId);
+      return {
+        exitCode: ExitCode.Success,
+        command: `forum.conflict.${action}`,
+        data: result,
+        human: `${action}: ${operationId}
+`
+      };
+    }
     if (subcommand === "remove") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--forum"],
@@ -11233,8 +11460,8 @@ forum: ${result.alias}
 }
 
 // src/services/thread.ts
-import { readFile as readFile6, readdir as readdir3, rm as rm6 } from "node:fs/promises";
-import { basename as basename2, resolve as resolve10 } from "node:path";
+import { readFile as readFile7, readdir as readdir4, rm as rm7 } from "node:fs/promises";
+import { basename as basename2, resolve as resolve11 } from "node:path";
 
 // src/domain/thread-kinds.ts
 var knownThreadKinds = [
@@ -11257,7 +11484,7 @@ function structuralWarning(code, path, message) {
   return { code, path, message };
 }
 async function readThreadEvents(registration, roomId, threadId) {
-  const directory = resolve10(
+  const directory = resolve11(
     registration.path,
     "rooms",
     roomId,
@@ -11267,7 +11494,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   );
   let entries;
   try {
-    entries = await readdir3(directory, { withFileTypes: true });
+    entries = await readdir4(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { events: [], warnings: [] };
@@ -11277,12 +11504,12 @@ async function readThreadEvents(registration, roomId, threadId) {
   const events = [];
   const warnings = [];
   for (const entry of entries) {
-    const eventPath = resolve10(directory, entry.name, "event.json");
+    const eventPath = resolve11(directory, entry.name, "event.json");
     if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
       warnings.push(
         structuralWarning(
           "INVALID_EVENT_PATH",
-          resolve10(directory, entry.name),
+          resolve11(directory, entry.name),
           "thread event path is not a valid event ID directory"
         )
       );
@@ -11308,7 +11535,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   return { events, warnings };
 }
 async function readMessageDirectory(directory, threadId) {
-  const metadataPath = resolve10(directory, "message.json");
+  const metadataPath = resolve11(directory, "message.json");
   if (!isEntityId(basename2(directory), "message")) {
     return {
       warnings: [
@@ -11335,11 +11562,11 @@ async function readMessageDirectory(directory, threadId) {
         `message threadId does not match its parent thread: ${metadataPath}`
       );
     }
-    const body = await readFile6(resolve10(directory, "body.md"), "utf8");
+    const body = await readFile7(resolve11(directory, "body.md"), "utf8");
     if (body.trim().length === 0 || body.includes("\0")) {
       throw new StorageError(
         "INVALID_MESSAGE_BODY",
-        `message body is empty or contains NUL: ${resolve10(directory, "body.md")}`
+        `message body is empty or contains NUL: ${resolve11(directory, "body.md")}`
       );
     }
     const message = {
@@ -11373,7 +11600,7 @@ async function readMessageDirectory(directory, threadId) {
   }
 }
 async function readThreadMessages(registration, roomId, threadId) {
-  const directory = resolve10(
+  const directory = resolve11(
     registration.path,
     "rooms",
     roomId,
@@ -11383,7 +11610,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   );
   let entries;
   try {
-    entries = await readdir3(directory, { withFileTypes: true });
+    entries = await readdir4(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { messages: [], warnings: [] };
@@ -11393,7 +11620,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   const messages = [];
   const warnings = [];
   for (const entry of entries) {
-    const path = resolve10(directory, entry.name);
+    const path = resolve11(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -11415,14 +11642,14 @@ async function readThreadMessages(registration, roomId, threadId) {
   return { messages, warnings };
 }
 async function readThreadDirectory(registration, roomId, threadDirectoryName) {
-  const directory = resolve10(
+  const directory = resolve11(
     registration.path,
     "rooms",
     roomId,
     "threads",
     threadDirectoryName
   );
-  const threadPath = resolve10(directory, "thread.json");
+  const threadPath = resolve11(directory, "thread.json");
   if (!isEntityId(threadDirectoryName, "thread")) {
     return {
       messages: [],
@@ -11470,7 +11697,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "MESSAGE_SELF_REPLY",
-          resolve10(directory, "messages", message.id, "message.json"),
+          resolve11(directory, "messages", message.id, "message.json"),
           "message replyTo cannot reference itself"
         )
       );
@@ -11478,7 +11705,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "REPLY_TARGET_MISSING",
-          resolve10(directory, "messages", message.id, "message.json"),
+          resolve11(directory, "messages", message.id, "message.json"),
           `reply target is missing or damaged: ${message.replyTo}`
         )
       );
@@ -11500,7 +11727,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_TYPE_MISMATCH",
-          resolve10(directory, "messages", firstMessage.id, "message.json"),
+          resolve11(directory, "messages", firstMessage.id, "message.json"),
           "first message type does not match thread kind"
         )
       );
@@ -11509,7 +11736,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_AUTHOR_MISMATCH",
-          resolve10(directory, "messages", firstMessage.id, "message.json"),
+          resolve11(directory, "messages", firstMessage.id, "message.json"),
           "first message author does not match thread creator"
         )
       );
@@ -11518,7 +11745,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_REPLY_INVALID",
-          resolve10(directory, "messages", firstMessage.id, "message.json"),
+          resolve11(directory, "messages", firstMessage.id, "message.json"),
           "first message replyTo must be null"
         )
       );
@@ -11541,7 +11768,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
   );
   warnings.push(...eventResult.warnings);
   for (const event of eventResult.events) {
-    const eventPath = resolve10(
+    const eventPath = resolve11(
       directory,
       "events",
       String(event.id),
@@ -11591,7 +11818,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
 async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const roomResult = await showRoom(forumAlias, room, paths);
   const { registration } = await openForum(forumAlias, paths);
-  const directory = resolve10(
+  const directory = resolve11(
     registration.path,
     "rooms",
     roomResult.room.id,
@@ -11599,7 +11826,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   );
   let entries;
   try {
-    entries = await readdir3(directory, { withFileTypes: true });
+    entries = await readdir4(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return {
@@ -11613,7 +11840,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const threads = [];
   const warnings = [...roomResult.warnings];
   for (const entry of entries) {
-    const path = resolve10(directory, entry.name);
+    const path = resolve11(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -11713,7 +11940,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
         mentions: [],
         references: []
       };
-      const threadDirectory = resolve10(
+      const threadDirectory = resolve11(
         registration.path,
         "rooms",
         roomResult.room.id,
@@ -11724,12 +11951,12 @@ async function createThread(input, paths = createAgentForumPaths()) {
       try {
         await createImmutableDirectory(threadDirectory, async (temporary) => {
           await writeValidatedJsonAtomic(
-            resolve10(temporary, "thread.json"),
+            resolve11(temporary, "thread.json"),
             "thread",
             thread
           );
           await createImmutableMessage(
-            resolve10(temporary, "messages", messageId),
+            resolve11(temporary, "messages", messageId),
             metadata,
             input.body
           );
@@ -11769,7 +11996,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", threadDirectory]);
         if (directoryCreated) {
-          await rm6(threadDirectory, { recursive: true, force: true });
+          await rm7(threadDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -11845,7 +12072,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
         mentions: input.mentions ?? [],
         references: input.references ?? []
       };
-      const messageDirectory = resolve10(
+      const messageDirectory = resolve11(
         registration.path,
         "rooms",
         detail.room.id,
@@ -11890,7 +12117,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", messageDirectory]);
         if (messageCreated) {
-          await rm6(messageDirectory, { recursive: true, force: true });
+          await rm7(messageDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -11945,7 +12172,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
         },
         event
       );
-      const eventDirectory = resolve10(
+      const eventDirectory = resolve11(
         registration.path,
         "rooms",
         detail.room.id,
@@ -11976,7 +12203,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", eventDirectory]);
         if (eventCreated) {
-          await rm6(eventDirectory, { recursive: true, force: true });
+          await rm7(eventDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -12315,19 +12542,19 @@ commit: ${result.commit}
 }
 
 // src/skill/installer.ts
-import { createHash, randomUUID as randomUUID5 } from "node:crypto";
+import { createHash, randomUUID as randomUUID6 } from "node:crypto";
 import {
   cp,
   mkdir as mkdir5,
-  readFile as readFile7,
-  readdir as readdir4,
+  readFile as readFile8,
+  readdir as readdir5,
   rename as rename5,
-  rm as rm7,
+  rm as rm8,
   stat as stat4,
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve11, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative, resolve as resolve12, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -12349,14 +12576,14 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve11(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve12(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function skillDestination(target, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve11(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve12(homeDirectory, ".agents", "skills", "agent-forum");
   }
   if (target === "claude-code") {
-    return resolve11(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve12(homeDirectory, ".claude", "skills", "agent-forum");
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
 }
@@ -12373,7 +12600,7 @@ async function pathExists4(path) {
 }
 async function loadState(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile7(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile8(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -12391,7 +12618,7 @@ async function loadState(homeDirectory) {
 async function saveState(homeDirectory, state) {
   const destination = stateFile(homeDirectory);
   await mkdir5(dirname3(destination), { recursive: true });
-  const temporary = `${destination}.tmp-${randomUUID5()}`;
+  const temporary = `${destination}.tmp-${randomUUID6()}`;
   try {
     await writeFile2(temporary, `${JSON.stringify(state, null, 2)}
 `, {
@@ -12400,16 +12627,16 @@ async function saveState(homeDirectory, state) {
     });
     await rename5(temporary, destination);
   } catch (error) {
-    await rm7(temporary, { force: true });
+    await rm8(temporary, { force: true });
     throw error;
   }
 }
 async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const files = {};
-  const entries = await readdir4(current, { withFileTypes: true });
+  const entries = await readdir5(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve11(current, entry.name);
+    const absolute = resolve12(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -12430,7 +12657,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
     }
     if (!entry.isFile()) continue;
     const relativePath = relative(root, absolute).split(sep2).join("/");
-    files[relativePath] = createHash("sha256").update(await readFile7(absolute)).digest("hex");
+    files[relativePath] = createHash("sha256").update(await readFile8(absolute)).digest("hex");
   }
   return files;
 }
@@ -12442,11 +12669,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve11(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve11(process.cwd(), "skills", "agent-forum")
+    resolve12(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve12(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists4(resolve11(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists4(resolve12(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -12455,8 +12682,8 @@ async function resolveSkillSource(explicit) {
 }
 async function replaceDirectory(source, destination) {
   await mkdir5(dirname3(destination), { recursive: true });
-  const staging = `${destination}.staging-${randomUUID5()}`;
-  const backup = `${destination}.backup-${randomUUID5()}`;
+  const staging = `${destination}.staging-${randomUUID6()}`;
+  const backup = `${destination}.backup-${randomUUID6()}`;
   let movedExisting = false;
   try {
     await cp(source, staging, { recursive: true, errorOnExist: true });
@@ -12465,9 +12692,9 @@ async function replaceDirectory(source, destination) {
       movedExisting = true;
     }
     await rename5(staging, destination);
-    if (movedExisting) await rm7(backup, { recursive: true, force: true });
+    if (movedExisting) await rm8(backup, { recursive: true, force: true });
   } catch (error) {
-    await rm7(staging, { recursive: true, force: true });
+    await rm8(staging, { recursive: true, force: true });
     if (movedExisting && !await pathExists4(destination)) {
       await rename5(backup, destination);
     }
@@ -12582,7 +12809,7 @@ async function uninstallSkill(options) {
     };
   }
   if (shouldRemoveFiles) {
-    await rm7(destination, { recursive: true, force: true });
+    await rm8(destination, { recursive: true, force: true });
   }
   const installations = shouldRemoveFiles ? state.installations.filter((installation) => installation.path !== destination) : state.installations.map(
     (installation) => installation.path === destination ? { ...installation, targets: remainingTargets } : installation
@@ -12928,8 +13155,15 @@ commit: ${result.commit}
 function success(command, data) {
   return { ok: true, command, data };
 }
-function failure(code, message) {
-  return { ok: false, error: { code, message } };
+function failure(code, message, details) {
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      ...details !== void 0 ? { details } : {}
+    }
+  };
 }
 
 // src/cli.ts
@@ -13014,7 +13248,11 @@ async function runCli(args, io = defaultIo) {
       if (json) {
         writeJson(
           io,
-          execution.error ? failure(execution.error.code, execution.error.message) : success(execution.command, execution.data)
+          execution.error ? failure(
+            execution.error.code,
+            execution.error.message,
+            execution.error.details
+          ) : success(execution.command, execution.data)
         );
       } else if (execution.error) {
         io.stderr(execution.human);

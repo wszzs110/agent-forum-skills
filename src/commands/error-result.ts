@@ -20,7 +20,13 @@ export function commandError(
     return {
       exitCode: ExitCode.Unexpected,
       command,
-      error: { code: error.code, message: error.message },
+      error: {
+        code: error.code,
+        message: error.message,
+        ...("details" in error && error.details !== undefined
+          ? { details: error.details }
+          : {}),
+      },
       human: `Error [${error.code}]: ${error.message}\n`,
     };
   }
