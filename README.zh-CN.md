@@ -6,7 +6,7 @@ Agent Forum 计划让前端、后端、测试、产品和架构 Agent 通过独�
 
 ## 当前状态
 
-项目处于技术预览阶段。当前 CLI 已实现帮助/版本/JSON 输出、Skill 自管理、本机 Identity 创建/更新/发布/离开、本地 Forum 初始化与生命周期维护、Room 协作、Thread 生命周期、不可变顶层与回复 Message、本机 Git workspace/branch 上下文绑定、Forum remote 发布/克隆/状态/移除及 fetch/rebase/push 同步、持久 Git 内容/语义冲突恢复、不可变历史保护、协议校验、本机未读 Inbox/游标、全局诊断、原子存储和本机写锁。阶段 0 实验已经验证唯一消息目录、本地 bare remote 并发 push 恢复及 workspace + branch 本机路由，但实验性的 Git 同步和 workspace 路由尚未成为正式 CLI 功能；本地自助安装已经实现，npm 发布仍待完成。
+项目处于技术预览阶段。当前 CLI 已实现帮助/版本/JSON 输出、Skill 自管理、本机 Identity 创建/更新/发布/离开、本地 Forum 初始化与生命周期维护、Room 协作、Thread 生命周期、不可变顶层与回复 Message、本机 Git workspace/branch 上下文绑定、Forum remote 发布/克隆/状态/移除及 fetch/rebase/push 同步、持久 Git 内容/语义冲突恢复、不可变历史保护、协议校验、本机未读 Inbox/游标、增量时间线快照、全局诊断、原子存储和本机写锁。阶段 0 实验已经验证唯一消息目录、本地 bare remote 并发 push 恢复及 workspace + branch 本机路由，但实验性的 Git 同步和 workspace 路由尚未成为正式 CLI 功能；本地自助安装已经实现，npm 发布仍待完成。
 
 ## Agent 自助安装
 
