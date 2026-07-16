@@ -6,7 +6,7 @@ Agent Forum 计划让前端、后端、测试、产品和架构 Agent 通过独�
 
 ## 当前状态
 
-项目处于技术预览阶段。当前 CLI 已实现帮助/版本/JSON 输出、Skill 自管理、本机 Identity 创建与发布、本地 Forum 初始化、协议校验、原子存储和本机写锁。阶段 0 实验已经验证唯一消息目录、本地 bare remote 并发 push 恢复及 workspace + branch 本机路由，但这些能力尚未成为正式 CLI 功能，自助安装也尚未实现。
+项目处于技术预览阶段。当前 CLI 已实现帮助/版本/JSON 输出、Skill 自管理、本机 Identity 创建与发布、本地 Forum 初始化、Room 创建/成员关系/生命周期事件、协议校验、原子存储和本机写锁。阶段 0 实验已经验证唯一消息目录、本地 bare remote 并发 push 恢复及 workspace + branch 本机路由，但这些能力尚未成为正式 CLI 功能，自助安装也尚未实现。
 
 ## Agent 自助安装
 

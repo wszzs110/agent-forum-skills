@@ -1,0 +1,248 @@
+import { ExitCode } from "../errors.js";
+import {
+  createRoom,
+  createRoomEvent,
+  joinRoom,
+  leaveRoom,
+  listRooms,
+  showRoom,
+} from "../services/room.js";
+import { commandError, invalidArgument } from "./error-result.js";
+import {
+  parseCommandOptions,
+  requireOption,
+  type ParsedCommandOptions,
+} from "./options.js";
+import type { CommandExecution } from "./types.js";
+
+function roomHelp(): CommandExecution {
+  return {
+    exitCode: ExitCode.Success,
+    command: "room.help",
+    data: {
+      commands: [
+        "create",
+        "list",
+        "show",
+        "join",
+        "leave",
+        "rename",
+        "set-description",
+        "archive",
+        "restore",
+      ],
+    },
+    human: `Room management\n\nUsage:\n  agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text>\n  agent-forum room list --forum <alias>\n  agent-forum room show --forum <alias> --room <id-or-slug>\n  agent-forum room join --forum <alias> --room <id-or-slug> [--role <role>] [--responsibility <text>]\n  agent-forum room leave --forum <alias> --room <id-or-slug>\n  agent-forum room rename --forum <alias> --room <id-or-slug> --title <title> --reason <reason>\n  agent-forum room set-description --forum <alias> --room <id-or-slug> --description <text> --reason <reason>\n  agent-forum room archive|restore --forum <alias> --room <id-or-slug> --reason <reason>\n`,
+  };
+}
+
+function valueOrError(
+  parsed: ParsedCommandOptions,
+  name: string,
+): string | CommandExecution {
+  const value = requireOption(parsed, name);
+  return typeof value === "string" ? value : invalidArgument(value.error);
+}
+
+function commonRoomOptions(
+  args: readonly string[],
+  extraValues: readonly string[] = [],
+): ParsedCommandOptions | CommandExecution {
+  const parsed = parseCommandOptions(args, {
+    values: ["--forum", "--room", "--identity", ...extraValues],
+  });
+  return "error" in parsed ? invalidArgument(parsed.error) : parsed;
+}
+
+export async function executeRoomCommand(
+  args: readonly string[],
+): Promise<CommandExecution> {
+  const subcommand = args[0];
+  if (!subcommand || subcommand === "help" || subcommand === "--help") {
+    return roomHelp();
+  }
+
+  try {
+    if (subcommand === "create") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: [
+          "--forum",
+          "--slug",
+          "--title",
+          "--description",
+          "--identity",
+        ],
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const slug = valueOrError(parsed, "--slug");
+      if (typeof slug !== "string") return slug;
+      const title = valueOrError(parsed, "--title");
+      if (typeof title !== "string") return title;
+      const description = valueOrError(parsed, "--description");
+      if (typeof description !== "string") return description;
+      const identityId = parsed.values.get("--identity");
+      const result = await createRoom({
+        forumAlias,
+        slug,
+        title,
+        description,
+        ...(identityId ? { identityId } : {}),
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.create",
+        data: result,
+        human: `created: ${result.room.slug}\nroom: ${result.room.id}\ncommit: ${result.commit}\n`,
+      };
+    }
+
+    if (subcommand === "list") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum"],
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const result = await listRooms(forumAlias);
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.list",
+        data: result,
+        human:
+          result.rooms.length === 0
+            ? "No rooms.\n"
+            : `${result.rooms.map((room) => `${room.slug}\t${room.status}\t${room.title}`).join("\n")}\n`,
+      };
+    }
+
+    if (subcommand === "show") {
+      const parsed = commonRoomOptions(args.slice(1));
+      if ("exitCode" in parsed) return parsed;
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = valueOrError(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const result = await showRoom(forumAlias, room);
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.show",
+        data: result,
+        human: `${result.room.title} (${result.room.slug})\nstatus: ${result.room.status}\n${result.room.description}\n`,
+      };
+    }
+
+    if (subcommand === "join") {
+      const parsed = commonRoomOptions(args.slice(1), [
+        "--role",
+        "--responsibility",
+      ]);
+      if ("exitCode" in parsed) return parsed;
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = valueOrError(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const identityId = parsed.values.get("--identity");
+      const role = parsed.values.get("--role");
+      const responsibility = parsed.values.get("--responsibility");
+      const result = await joinRoom({
+        forumAlias,
+        room,
+        ...(identityId ? { identityId } : {}),
+        ...(role ? { role } : {}),
+        ...(responsibility ? { responsibility } : {}),
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.join",
+        data: result,
+        human: `${result.action}: ${result.member.roomId}\n`,
+      };
+    }
+
+    if (subcommand === "leave") {
+      const parsed = commonRoomOptions(args.slice(1));
+      if ("exitCode" in parsed) return parsed;
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = valueOrError(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const identityId = parsed.values.get("--identity");
+      const result = await leaveRoom({
+        forumAlias,
+        room,
+        ...(identityId ? { identityId } : {}),
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.leave",
+        data: result,
+        human: `${result.action}: ${result.member.roomId}\n`,
+      };
+    }
+
+    if (
+      subcommand === "rename" ||
+      subcommand === "set-description" ||
+      subcommand === "archive" ||
+      subcommand === "restore"
+    ) {
+      const extra =
+        subcommand === "rename"
+          ? ["--title", "--reason"]
+          : subcommand === "set-description"
+            ? ["--description", "--reason"]
+            : ["--reason"];
+      const parsed = commonRoomOptions(args.slice(1), extra);
+      if ("exitCode" in parsed) return parsed;
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = valueOrError(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const reason = valueOrError(parsed, "--reason");
+      if (typeof reason !== "string") return reason;
+      const identityId = parsed.values.get("--identity");
+      const type =
+        subcommand === "rename"
+          ? "room-renamed"
+          : subcommand === "set-description"
+            ? "room-description-changed"
+            : subcommand === "archive"
+              ? "room-archived"
+              : "room-restored";
+      const data =
+        subcommand === "rename"
+          ? { title: parsed.values.get("--title") }
+          : subcommand === "set-description"
+            ? { description: parsed.values.get("--description") }
+            : {};
+      if (subcommand === "rename" && !data.title) {
+        return invalidArgument("--title is required");
+      }
+      if (subcommand === "set-description" && !("description" in data && data.description)) {
+        return invalidArgument("--description is required");
+      }
+      const result = await createRoomEvent({
+        forumAlias,
+        room,
+        type,
+        reason,
+        data,
+        ...(identityId ? { identityId } : {}),
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: `room.${subcommand}`,
+        data: result,
+        human: `${type}: ${result.room.slug}\ncommit: ${result.commit}\n`,
+      };
+    }
+
+    return invalidArgument(`unknown room subcommand: ${subcommand}`);
+  } catch (error) {
+    const handled = commandError(`room.${subcommand}`, error);
+    if (handled) return handled;
+    throw error;
+  }
+}

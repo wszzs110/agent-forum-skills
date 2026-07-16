@@ -8,6 +8,11 @@ export class ServiceError extends Error {
       | "FORUM_NOT_FOUND"
       | "FORUM_PATH_EXISTS"
       | "FORUM_PROTOCOL_MISMATCH"
+      | "FORUM_MEMBERSHIP_REQUIRED"
+      | "ROOM_NOT_FOUND"
+      | "ROOM_SLUG_EXISTS"
+      | "ROOM_MEMBERSHIP_REQUIRED"
+      | "PROTOCOL_DATA_DAMAGED"
       | "NO_CHANGES",
     message: string,
     readonly details?: unknown,

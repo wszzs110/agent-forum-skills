@@ -2976,7 +2976,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve7.call(this, root, ref);
+      let _sch = resolve9.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3003,7 +3003,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve7(root, ref) {
+    function resolve9(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3634,7 +3634,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve7(baseURI, relativeURI, options) {
+    function resolve9(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3892,7 +3892,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve7,
+      resolve: resolve9,
       resolveComponent,
       equal,
       serialize,
@@ -8105,6 +8105,33 @@ async function writeValidatedJsonAtomic(destination, schema, value, options = {}
   }
   await writeJsonAtomic(destination, value, options);
 }
+async function createImmutableDirectory(destination, writer) {
+  await mkdir2(dirname2(destination), { recursive: true });
+  if (await pathExists(destination)) {
+    throw new StorageError(
+      "IMMUTABLE_PATH_EXISTS",
+      `immutable directory already exists: ${destination}`
+    );
+  }
+  const temporary = resolve3(
+    dirname2(destination),
+    `${temporaryPrefix}${randomUUID2()}`
+  );
+  try {
+    await mkdir2(temporary, { mode: 448 });
+    await writer(temporary);
+    await rename2(temporary, destination);
+  } catch (error) {
+    await rm2(temporary, { recursive: true, force: true });
+    if (!(error instanceof StorageError) && await pathExists(destination)) {
+      throw new StorageError(
+        "IMMUTABLE_PATH_EXISTS",
+        `immutable directory already exists: ${destination}`
+      );
+    }
+    throw error;
+  }
+}
 
 // src/services/errors.ts
 var ServiceError = class extends Error {
@@ -8614,9 +8641,139 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
   }
 }
 
+// src/domain/state-transitions.ts
+var knownLifecycleEventTypes = [
+  "forum-renamed",
+  "forum-description-changed",
+  "forum-archived",
+  "forum-restored",
+  "room-renamed",
+  "room-description-changed",
+  "room-archived",
+  "room-restored",
+  "thread-renamed",
+  "thread-closed",
+  "thread-reopened"
+];
+var knownLifecycleEventTypeSet = new Set(knownLifecycleEventTypes);
+function isKnownLifecycleEventType(value) {
+  return knownLifecycleEventTypeSet.has(value);
+}
+var StateTransitionError = class extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+    this.name = "StateTransitionError";
+  }
+};
+function requiredText(data, field, maxLength) {
+  const value = data[field];
+  if (typeof value !== "string" || value.trim().length === 0 || value.length > maxLength) {
+    throw new StateTransitionError(
+      "INVALID_EVENT_DATA",
+      `${field} must be a non-empty string with at most ${maxLength} characters`
+    );
+  }
+  return value;
+}
+function assertTarget(state, event) {
+  if (state.scope !== event.scope || state.id !== event.targetId) {
+    throw new StateTransitionError(
+      "EVENT_TARGET_MISMATCH",
+      `event target ${event.scope}:${event.targetId} does not match ${state.scope}:${state.id}`
+    );
+  }
+}
+function archive(state) {
+  if (state.status === "archived") {
+    throw new StateTransitionError(
+      "INVALID_STATE_TRANSITION",
+      `${state.scope} is already archived`
+    );
+  }
+  return { ...state, status: "archived" };
+}
+function restore(state) {
+  if (state.status === "active") {
+    throw new StateTransitionError(
+      "INVALID_STATE_TRANSITION",
+      `${state.scope} is already active`
+    );
+  }
+  return { ...state, status: "active" };
+}
+function applyLifecycleEvent(state, event) {
+  assertTarget(state, event);
+  if (state.scope === "forum") {
+    const forum = state;
+    switch (event.type) {
+      case "forum-renamed":
+        return { ...forum, name: requiredText(event.data, "name", 200) };
+      case "forum-description-changed":
+        return {
+          ...forum,
+          description: requiredText(event.data, "description", 2e3)
+        };
+      case "forum-archived":
+        return archive(forum);
+      case "forum-restored":
+        return restore(forum);
+      default:
+        break;
+    }
+  }
+  if (state.scope === "room") {
+    const room = state;
+    switch (event.type) {
+      case "room-renamed":
+        return { ...room, title: requiredText(event.data, "title", 200) };
+      case "room-description-changed":
+        return {
+          ...room,
+          description: requiredText(event.data, "description", 2e3)
+        };
+      case "room-archived":
+        return archive(room);
+      case "room-restored":
+        return restore(room);
+      default:
+        break;
+    }
+  }
+  if (state.scope === "thread") {
+    const thread = state;
+    switch (event.type) {
+      case "thread-renamed":
+        return { ...thread, title: requiredText(event.data, "title", 200) };
+      case "thread-closed":
+        if (thread.status === "closed") {
+          throw new StateTransitionError(
+            "INVALID_STATE_TRANSITION",
+            "thread is already closed"
+          );
+        }
+        return { ...thread, status: "closed" };
+      case "thread-reopened":
+        if (thread.status === "open") {
+          throw new StateTransitionError(
+            "INVALID_STATE_TRANSITION",
+            "thread is already open"
+          );
+        }
+        return { ...thread, status: "open" };
+      default:
+        break;
+    }
+  }
+  throw new StateTransitionError(
+    "UNKNOWN_EVENT_TYPE",
+    `unsupported ${event.scope} event type: ${event.type}`
+  );
+}
+
 // src/commands/error-result.ts
 function commandError(command, error) {
-  if (error instanceof ServiceError || error instanceof StorageError || error instanceof GitCommandError) {
+  if (error instanceof ServiceError || error instanceof StorageError || error instanceof GitCommandError || error instanceof StateTransitionError) {
     return {
       exitCode: ExitCode.Unexpected,
       command,
@@ -8830,20 +8987,884 @@ forum: ${result.alias}
   }
 }
 
+// src/services/room.ts
+import {
+  readFile as readFile4,
+  readdir as readdir2,
+  rm as rm4
+} from "node:fs/promises";
+import { resolve as resolve7 } from "node:path";
+
+// src/storage/protocol-store.ts
+import { basename, resolve as resolve6 } from "node:path";
+
+// src/domain/message-types.ts
+var knownMessageTypes = [
+  "discussion",
+  "question",
+  "answer",
+  "proposal",
+  "decision",
+  "change",
+  "blocker",
+  "review",
+  "status",
+  "test-result",
+  "acknowledgement",
+  "objection",
+  "correction"
+];
+var knownMessageTypeSet = new Set(knownMessageTypes);
+
+// src/storage/protocol-store.ts
+async function createImmutableEvent(destination, event) {
+  if (event && typeof event === "object" && "id" in event && typeof event.id === "string" && basename(destination) !== event.id) {
+    throw new StorageError(
+      "PATH_ID_MISMATCH",
+      `event path does not match event ID: ${destination}`
+    );
+  }
+  if (event && typeof event === "object" && "type" in event && typeof event.type === "string" && !isKnownLifecycleEventType(event.type)) {
+    throw new StorageError(
+      "UNKNOWN_EVENT_TYPE",
+      `current writer cannot publish lifecycle event type: ${event.type}`
+    );
+  }
+  await createImmutableDirectory(destination, async (temporaryDirectory) => {
+    await writeValidatedJsonAtomic(
+      resolve6(temporaryDirectory, "event.json"),
+      "event",
+      event
+    );
+  });
+}
+
+// src/services/room.ts
+async function readJsonDocument(path, schema) {
+  let value;
+  try {
+    value = JSON.parse(await readFile4(path, "utf8"));
+  } catch (error) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `failed to read JSON document: ${path}`,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+  const validation = validateProtocolDocument(schema, value, { mode: "read" });
+  if (!validation.ok) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `document does not satisfy the ${schema} schema: ${path}`,
+      validation.issues
+    );
+  }
+  return value;
+}
+function warning(path, error) {
+  if (error instanceof StorageError || error instanceof ServiceError) {
+    return { code: error.code, path, message: error.message };
+  }
+  return {
+    code: "PROTOCOL_DATA_DAMAGED",
+    path,
+    message: error instanceof Error ? error.message : String(error)
+  };
+}
+async function openForum(alias, paths, options = {}) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, alias);
+  const topLevel = requireGit(registration.path, [
+    "rev-parse",
+    "--show-toplevel"
+  ]).stdout.trim();
+  if (resolve7(topLevel) !== resolve7(registration.path)) {
+    throw new ServiceError(
+      "FORUM_PROTOCOL_MISMATCH",
+      `configured forum path is not the Git root: ${registration.path}`
+    );
+  }
+  const branch = requireGit(registration.path, [
+    "branch",
+    "--show-current"
+  ]).stdout.trim();
+  if (branch !== registration.dataBranch) {
+    throw new ServiceError(
+      "FORUM_PROTOCOL_MISMATCH",
+      `managed forum is on '${branch}', expected '${registration.dataBranch}'`
+    );
+  }
+  if (options.requireClean) assertCleanWorktree(registration.path);
+  const protocolPath = resolve7(
+    registration.path,
+    ".forum",
+    "protocol.json"
+  );
+  const protocol = await readJsonDocument(protocolPath, "protocol");
+  if (protocol.forumId !== registration.forumId || protocol.dataBranch !== registration.dataBranch) {
+    throw new ServiceError(
+      "FORUM_PROTOCOL_MISMATCH",
+      `forum protocol does not match local registration: ${alias}`
+    );
+  }
+  return { registration };
+}
+async function readForumMember(registration, identity) {
+  const path = resolve7(
+    registration.path,
+    "members",
+    identity.memberId,
+    "profile.json"
+  );
+  let profile;
+  try {
+    profile = await readJsonDocument(path, "member-profile");
+  } catch (error) {
+    if (error instanceof StorageError && error.details && typeof error.details === "string" && error.details.includes("ENOENT")) {
+      throw new ServiceError(
+        "FORUM_MEMBERSHIP_REQUIRED",
+        `identity is not published in forum: ${identity.memberId}`
+      );
+    }
+    throw error;
+  }
+  if (profile.memberId !== identity.memberId || profile.status !== "active") {
+    throw new ServiceError(
+      "FORUM_MEMBERSHIP_REQUIRED",
+      `identity is not an active forum member: ${identity.memberId}`
+    );
+  }
+  return profile;
+}
+async function readRoomEvents(registration, roomId) {
+  const eventsDirectory = resolve7(
+    registration.path,
+    "rooms",
+    roomId,
+    "events"
+  );
+  let entries;
+  try {
+    entries = await readdir2(eventsDirectory, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { events: [], warnings: [] };
+    }
+    throw error;
+  }
+  const events = [];
+  const warnings = [];
+  for (const entry of entries) {
+    const eventPath = resolve7(eventsDirectory, entry.name, "event.json");
+    if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
+      warnings.push({
+        code: "INVALID_EVENT_PATH",
+        path: resolve7(eventsDirectory, entry.name),
+        message: "room event path is not a valid event ID directory"
+      });
+      continue;
+    }
+    try {
+      const event = await readJsonDocument(eventPath, "event");
+      if (event.id !== entry.name) {
+        throw new StorageError(
+          "PATH_ID_MISMATCH",
+          `event ID does not match its directory: ${eventPath}`
+        );
+      }
+      events.push(event);
+    } catch (error) {
+      warnings.push(warning(eventPath, error));
+    }
+  }
+  events.sort((left, right) => {
+    const byTime = String(left.createdAt).localeCompare(String(right.createdAt));
+    return byTime || String(left.id).localeCompare(String(right.id));
+  });
+  return { events, warnings };
+}
+async function readRoomDirectory(registration, roomDirectoryName) {
+  const roomPath = resolve7(
+    registration.path,
+    "rooms",
+    roomDirectoryName,
+    "room.json"
+  );
+  if (!isEntityId(roomDirectoryName, "room")) {
+    return {
+      warnings: [
+        {
+          code: "INVALID_ROOM_PATH",
+          path: resolve7(registration.path, "rooms", roomDirectoryName),
+          message: "room path is not a valid room ID directory"
+        }
+      ]
+    };
+  }
+  let base;
+  try {
+    base = await readJsonDocument(roomPath, "room");
+    if (base.id !== roomDirectoryName) {
+      throw new StorageError(
+        "PATH_ID_MISMATCH",
+        `room ID does not match its directory: ${roomPath}`
+      );
+    }
+  } catch (error) {
+    return { warnings: [warning(roomPath, error)] };
+  }
+  let state = {
+    scope: "room",
+    id: String(base.id),
+    title: String(base.initialTitle),
+    description: String(base.initialDescription),
+    status: "active"
+  };
+  let lastActivityAt = String(base.createdAt);
+  const eventResult = await readRoomEvents(registration, roomDirectoryName);
+  const warnings = [...eventResult.warnings];
+  for (const event of eventResult.events) {
+    const eventPath = resolve7(
+      registration.path,
+      "rooms",
+      roomDirectoryName,
+      "events",
+      String(event.id),
+      "event.json"
+    );
+    if (!isKnownLifecycleEventType(String(event.type))) {
+      warnings.push({
+        code: "UNKNOWN_EVENT_TYPE",
+        path: eventPath,
+        message: `unknown room event type: ${String(event.type)}`
+      });
+      continue;
+    }
+    try {
+      state = applyLifecycleEvent(state, {
+        scope: "room",
+        targetId: String(event.targetId),
+        type: String(event.type),
+        data: event.data
+      });
+      lastActivityAt = String(event.createdAt);
+    } catch (error) {
+      warnings.push(warning(eventPath, error));
+    }
+  }
+  return {
+    room: {
+      id: String(base.id),
+      slug: String(base.slug),
+      title: state.title,
+      description: state.description,
+      status: state.status,
+      createdBy: String(base.createdBy),
+      createdAt: String(base.createdAt),
+      lastActivityAt
+    },
+    warnings
+  };
+}
+async function listRooms(forumAlias, paths = createAgentForumPaths()) {
+  const { registration } = await openForum(forumAlias, paths);
+  const roomsDirectory = resolve7(registration.path, "rooms");
+  let entries;
+  try {
+    entries = await readdir2(roomsDirectory, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { rooms: [], warnings: [] };
+    }
+    throw error;
+  }
+  const rooms = [];
+  const warnings = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      warnings.push({
+        code: "INVALID_ROOM_PATH",
+        path: resolve7(roomsDirectory, entry.name),
+        message: "rooms directory contains a non-directory entry"
+      });
+      continue;
+    }
+    const result = await readRoomDirectory(registration, entry.name);
+    if (result.room) rooms.push(result.room);
+    warnings.push(...result.warnings);
+  }
+  rooms.sort((left, right) => left.slug.localeCompare(right.slug));
+  return { rooms, warnings };
+}
+async function showRoom(forumAlias, room, paths = createAgentForumPaths()) {
+  const result = await listRooms(forumAlias, paths);
+  const found = result.rooms.find(
+    (candidate) => candidate.id === room || candidate.slug === room
+  );
+  if (!found) {
+    throw new ServiceError(
+      "ROOM_NOT_FOUND",
+      `room was not found: ${room}`,
+      result.warnings
+    );
+  }
+  return { room: found, warnings: result.warnings };
+}
+async function withForumWrite(forumAlias, identityId, paths, command, operation) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const identity = findIdentity(config, identityId);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command
+  });
+  try {
+    await openForum(forumAlias, paths, { requireClean: true });
+    await readForumMember(registration, identity);
+    configureForumCommitIdentity(
+      registration.path,
+      identity.displayName,
+      identity.memberId
+    );
+    return await operation(registration, identity);
+  } finally {
+    await lock.release();
+  }
+}
+function roomMemberDocument(roomId, identity, role, responsibility, status, joinedAt, updatedAt) {
+  return {
+    schemaVersion: "1.0",
+    roomId,
+    memberId: identity.memberId,
+    role,
+    responsibility,
+    status,
+    joinedAt,
+    updatedAt
+  };
+}
+async function readRoomMember(path) {
+  try {
+    return await readJsonDocument(path, "room-member");
+  } catch (error) {
+    if (error instanceof StorageError && typeof error.details === "string" && error.details.includes("ENOENT")) {
+      return void 0;
+    }
+    throw error;
+  }
+}
+async function commitMutableDocument(repository, path, schema, value, commitMessage) {
+  let previous;
+  try {
+    previous = await readFile4(path, "utf8");
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+  try {
+    await writeValidatedJsonAtomic(path, schema, value, { overwrite: true });
+    return commitPaths(repository, [path], commitMessage);
+  } catch (error) {
+    runGit(repository, ["reset", "--", path]);
+    if (previous === void 0) await rm4(path, { force: true });
+    else await writeFileAtomic(path, previous, { overwrite: true });
+    throw error;
+  }
+}
+async function createRoom(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    "room create",
+    async (registration, identity) => {
+      const existing = await listRooms(input.forumAlias, paths);
+      if (existing.warnings.some((item) => item.code === "SCHEMA_VALIDATION_FAILED")) {
+        throw new ServiceError(
+          "PROTOCOL_DATA_DAMAGED",
+          "cannot safely check room slug uniqueness while room data is damaged",
+          existing.warnings
+        );
+      }
+      if (existing.rooms.some((room2) => room2.slug === input.slug)) {
+        throw new ServiceError(
+          "ROOM_SLUG_EXISTS",
+          `room slug already exists: ${input.slug}`
+        );
+      }
+      const id = input.roomId ?? createEntityId("room");
+      const timestamp = currentUtcTimestamp(input.now);
+      const roomDirectory = resolve7(registration.path, "rooms", id);
+      const room = {
+        schemaVersion: "1.0",
+        id,
+        slug: input.slug,
+        initialTitle: input.title,
+        initialDescription: input.description,
+        createdBy: identity.memberId,
+        createdAt: timestamp
+      };
+      const member = roomMemberDocument(
+        id,
+        identity,
+        identity.role,
+        identity.responsibility,
+        "active",
+        timestamp,
+        timestamp
+      );
+      let directoryCreated = false;
+      try {
+        await createImmutableDirectory(roomDirectory, async (temporary) => {
+          await writeValidatedJsonAtomic(
+            resolve7(temporary, "room.json"),
+            "room",
+            room
+          );
+          await writeValidatedJsonAtomic(
+            resolve7(temporary, "members", `${identity.memberId}.json`),
+            "room-member",
+            member
+          );
+        });
+        directoryCreated = true;
+        const commit = commitPaths(
+          registration.path,
+          [roomDirectory],
+          `Create room ${input.slug}`
+        );
+        return {
+          room: {
+            id,
+            slug: input.slug,
+            title: input.title,
+            description: input.description,
+            status: "active",
+            createdBy: identity.memberId,
+            createdAt: timestamp,
+            lastActivityAt: timestamp
+          },
+          identityId: identity.memberId,
+          commit
+        };
+      } catch (error) {
+        runGit(registration.path, ["reset", "--", roomDirectory]);
+        if (directoryCreated) {
+          await rm4(roomDirectory, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    }
+  );
+}
+async function joinRoom(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    "room join",
+    async (registration, identity) => {
+      const roomResult = await showRoom(input.forumAlias, input.room, paths);
+      if (roomResult.room.status !== "active") {
+        throw new ServiceError(
+          "NO_CHANGES",
+          `cannot join archived room: ${roomResult.room.id}`
+        );
+      }
+      const memberPath = resolve7(
+        registration.path,
+        "rooms",
+        roomResult.room.id,
+        "members",
+        `${identity.memberId}.json`
+      );
+      const existing = await readRoomMember(memberPath);
+      const role = input.role ?? identity.role;
+      const responsibility = input.responsibility ?? identity.responsibility;
+      if (existing?.status === "active" && existing.role === role && existing.responsibility === responsibility) {
+        return { action: "unchanged", member: existing };
+      }
+      const timestamp = currentUtcTimestamp(input.now);
+      const member = roomMemberDocument(
+        roomResult.room.id,
+        identity,
+        role,
+        responsibility,
+        "active",
+        existing?.joinedAt ?? timestamp,
+        timestamp
+      );
+      const commit = await commitMutableDocument(
+        registration.path,
+        memberPath,
+        "room-member",
+        member,
+        `Join room ${roomResult.room.slug}`
+      );
+      return {
+        action: existing ? "updated" : "joined",
+        member,
+        commit
+      };
+    }
+  );
+}
+async function leaveRoom(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    "room leave",
+    async (registration, identity) => {
+      const roomResult = await showRoom(input.forumAlias, input.room, paths);
+      const memberPath = resolve7(
+        registration.path,
+        "rooms",
+        roomResult.room.id,
+        "members",
+        `${identity.memberId}.json`
+      );
+      const existing = await readRoomMember(memberPath);
+      if (!existing) {
+        throw new ServiceError(
+          "ROOM_MEMBERSHIP_REQUIRED",
+          `identity is not a room member: ${identity.memberId}`
+        );
+      }
+      if (existing.status === "left") {
+        return { action: "unchanged", member: existing };
+      }
+      const member = {
+        ...existing,
+        status: "left",
+        updatedAt: currentUtcTimestamp(input.now)
+      };
+      const commit = await commitMutableDocument(
+        registration.path,
+        memberPath,
+        "room-member",
+        member,
+        `Leave room ${roomResult.room.slug}`
+      );
+      return { action: "left", member, commit };
+    }
+  );
+}
+async function requireActiveRoomMember(registration, roomId, identity) {
+  const memberPath = resolve7(
+    registration.path,
+    "rooms",
+    roomId,
+    "members",
+    `${identity.memberId}.json`
+  );
+  const member = await readRoomMember(memberPath);
+  if (!member || member.status !== "active") {
+    throw new ServiceError(
+      "ROOM_MEMBERSHIP_REQUIRED",
+      `identity is not an active room member: ${identity.memberId}`
+    );
+  }
+  return member;
+}
+async function createRoomEvent(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    input.type,
+    async (registration, identity) => {
+      const roomResult = await showRoom(input.forumAlias, input.room, paths);
+      await requireActiveRoomMember(registration, roomResult.room.id, identity);
+      const eventId = input.eventId ?? createEntityId("event");
+      const timestamp = currentUtcTimestamp(input.now);
+      const event = {
+        schemaVersion: "1.0",
+        id: eventId,
+        scope: "room",
+        targetId: roomResult.room.id,
+        type: input.type,
+        actorId: identity.memberId,
+        createdAt: timestamp,
+        reason: input.reason,
+        data: input.data
+      };
+      const currentState = {
+        scope: "room",
+        id: roomResult.room.id,
+        title: roomResult.room.title,
+        description: roomResult.room.description,
+        status: roomResult.room.status
+      };
+      const nextState = applyLifecycleEvent(
+        currentState,
+        event
+      );
+      const eventDirectory = resolve7(
+        registration.path,
+        "rooms",
+        roomResult.room.id,
+        "events",
+        eventId
+      );
+      let eventCreated = false;
+      try {
+        await createImmutableEvent(eventDirectory, event);
+        eventCreated = true;
+        const commit = commitPaths(
+          registration.path,
+          [eventDirectory],
+          `${input.type} ${roomResult.room.slug}`
+        );
+        return {
+          eventId,
+          room: {
+            ...roomResult.room,
+            title: nextState.title,
+            description: nextState.description,
+            status: nextState.status,
+            lastActivityAt: timestamp
+          },
+          commit
+        };
+      } catch (error) {
+        runGit(registration.path, ["reset", "--", eventDirectory]);
+        if (eventCreated) {
+          await rm4(eventDirectory, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    }
+  );
+}
+
+// src/commands/room.ts
+function roomHelp() {
+  return {
+    exitCode: ExitCode.Success,
+    command: "room.help",
+    data: {
+      commands: [
+        "create",
+        "list",
+        "show",
+        "join",
+        "leave",
+        "rename",
+        "set-description",
+        "archive",
+        "restore"
+      ]
+    },
+    human: `Room management
+
+Usage:
+  agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text>
+  agent-forum room list --forum <alias>
+  agent-forum room show --forum <alias> --room <id-or-slug>
+  agent-forum room join --forum <alias> --room <id-or-slug> [--role <role>] [--responsibility <text>]
+  agent-forum room leave --forum <alias> --room <id-or-slug>
+  agent-forum room rename --forum <alias> --room <id-or-slug> --title <title> --reason <reason>
+  agent-forum room set-description --forum <alias> --room <id-or-slug> --description <text> --reason <reason>
+  agent-forum room archive|restore --forum <alias> --room <id-or-slug> --reason <reason>
+`
+  };
+}
+function valueOrError3(parsed, name) {
+  const value = requireOption(parsed, name);
+  return typeof value === "string" ? value : invalidArgument(value.error);
+}
+function commonRoomOptions(args, extraValues = []) {
+  const parsed = parseCommandOptions(args, {
+    values: ["--forum", "--room", "--identity", ...extraValues]
+  });
+  return "error" in parsed ? invalidArgument(parsed.error) : parsed;
+}
+async function executeRoomCommand(args) {
+  const subcommand = args[0];
+  if (!subcommand || subcommand === "help" || subcommand === "--help") {
+    return roomHelp();
+  }
+  try {
+    if (subcommand === "create") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: [
+          "--forum",
+          "--slug",
+          "--title",
+          "--description",
+          "--identity"
+        ]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError3(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const slug = valueOrError3(parsed, "--slug");
+      if (typeof slug !== "string") return slug;
+      const title = valueOrError3(parsed, "--title");
+      if (typeof title !== "string") return title;
+      const description = valueOrError3(parsed, "--description");
+      if (typeof description !== "string") return description;
+      const identityId = parsed.values.get("--identity");
+      const result = await createRoom({
+        forumAlias,
+        slug,
+        title,
+        description,
+        ...identityId ? { identityId } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.create",
+        data: result,
+        human: `created: ${result.room.slug}
+room: ${result.room.id}
+commit: ${result.commit}
+`
+      };
+    }
+    if (subcommand === "list") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError3(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const result = await listRooms(forumAlias);
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.list",
+        data: result,
+        human: result.rooms.length === 0 ? "No rooms.\n" : `${result.rooms.map((room) => `${room.slug}	${room.status}	${room.title}`).join("\n")}
+`
+      };
+    }
+    if (subcommand === "show") {
+      const parsed = commonRoomOptions(args.slice(1));
+      if ("exitCode" in parsed) return parsed;
+      const forumAlias = valueOrError3(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = valueOrError3(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const result = await showRoom(forumAlias, room);
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.show",
+        data: result,
+        human: `${result.room.title} (${result.room.slug})
+status: ${result.room.status}
+${result.room.description}
+`
+      };
+    }
+    if (subcommand === "join") {
+      const parsed = commonRoomOptions(args.slice(1), [
+        "--role",
+        "--responsibility"
+      ]);
+      if ("exitCode" in parsed) return parsed;
+      const forumAlias = valueOrError3(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = valueOrError3(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const identityId = parsed.values.get("--identity");
+      const role = parsed.values.get("--role");
+      const responsibility = parsed.values.get("--responsibility");
+      const result = await joinRoom({
+        forumAlias,
+        room,
+        ...identityId ? { identityId } : {},
+        ...role ? { role } : {},
+        ...responsibility ? { responsibility } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.join",
+        data: result,
+        human: `${result.action}: ${result.member.roomId}
+`
+      };
+    }
+    if (subcommand === "leave") {
+      const parsed = commonRoomOptions(args.slice(1));
+      if ("exitCode" in parsed) return parsed;
+      const forumAlias = valueOrError3(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = valueOrError3(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const identityId = parsed.values.get("--identity");
+      const result = await leaveRoom({
+        forumAlias,
+        room,
+        ...identityId ? { identityId } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "room.leave",
+        data: result,
+        human: `${result.action}: ${result.member.roomId}
+`
+      };
+    }
+    if (subcommand === "rename" || subcommand === "set-description" || subcommand === "archive" || subcommand === "restore") {
+      const extra = subcommand === "rename" ? ["--title", "--reason"] : subcommand === "set-description" ? ["--description", "--reason"] : ["--reason"];
+      const parsed = commonRoomOptions(args.slice(1), extra);
+      if ("exitCode" in parsed) return parsed;
+      const forumAlias = valueOrError3(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = valueOrError3(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const reason = valueOrError3(parsed, "--reason");
+      if (typeof reason !== "string") return reason;
+      const identityId = parsed.values.get("--identity");
+      const type = subcommand === "rename" ? "room-renamed" : subcommand === "set-description" ? "room-description-changed" : subcommand === "archive" ? "room-archived" : "room-restored";
+      const data = subcommand === "rename" ? { title: parsed.values.get("--title") } : subcommand === "set-description" ? { description: parsed.values.get("--description") } : {};
+      if (subcommand === "rename" && !data.title) {
+        return invalidArgument("--title is required");
+      }
+      if (subcommand === "set-description" && !("description" in data && data.description)) {
+        return invalidArgument("--description is required");
+      }
+      const result = await createRoomEvent({
+        forumAlias,
+        room,
+        type,
+        reason,
+        data,
+        ...identityId ? { identityId } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: `room.${subcommand}`,
+        data: result,
+        human: `${type}: ${result.room.slug}
+commit: ${result.commit}
+`
+      };
+    }
+    return invalidArgument(`unknown room subcommand: ${subcommand}`);
+  } catch (error) {
+    const handled = commandError(`room.${subcommand}`, error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
 // src/skill/installer.ts
 import { createHash, randomUUID as randomUUID4 } from "node:crypto";
 import {
   cp,
   mkdir as mkdir4,
-  readFile as readFile4,
-  readdir as readdir2,
+  readFile as readFile5,
+  readdir as readdir3,
   rename as rename4,
-  rm as rm4,
+  rm as rm5,
   stat as stat4,
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve6, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative, resolve as resolve8, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -8865,14 +9886,14 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve6(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve8(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function skillDestination(target, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve6(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve8(homeDirectory, ".agents", "skills", "agent-forum");
   }
   if (target === "claude-code") {
-    return resolve6(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve8(homeDirectory, ".claude", "skills", "agent-forum");
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
 }
@@ -8889,7 +9910,7 @@ async function pathExists3(path) {
 }
 async function loadState(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile4(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile5(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -8916,16 +9937,16 @@ async function saveState(homeDirectory, state) {
     });
     await rename4(temporary, destination);
   } catch (error) {
-    await rm4(temporary, { force: true });
+    await rm5(temporary, { force: true });
     throw error;
   }
 }
 async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const files = {};
-  const entries = await readdir2(current, { withFileTypes: true });
+  const entries = await readdir3(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve6(current, entry.name);
+    const absolute = resolve8(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -8946,7 +9967,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
     }
     if (!entry.isFile()) continue;
     const relativePath = relative(root, absolute).split(sep2).join("/");
-    files[relativePath] = createHash("sha256").update(await readFile4(absolute)).digest("hex");
+    files[relativePath] = createHash("sha256").update(await readFile5(absolute)).digest("hex");
   }
   return files;
 }
@@ -8958,11 +9979,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve6(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve6(process.cwd(), "skills", "agent-forum")
+    resolve8(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve8(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists3(resolve6(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists3(resolve8(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -8981,9 +10002,9 @@ async function replaceDirectory(source, destination) {
       movedExisting = true;
     }
     await rename4(staging, destination);
-    if (movedExisting) await rm4(backup, { recursive: true, force: true });
+    if (movedExisting) await rm5(backup, { recursive: true, force: true });
   } catch (error) {
-    await rm4(staging, { recursive: true, force: true });
+    await rm5(staging, { recursive: true, force: true });
     if (movedExisting && !await pathExists3(destination)) {
       await rename4(backup, destination);
     }
@@ -9098,7 +10119,7 @@ async function uninstallSkill(options) {
     };
   }
   if (shouldRemoveFiles) {
-    await rm4(destination, { recursive: true, force: true });
+    await rm5(destination, { recursive: true, force: true });
   }
   const installations = shouldRemoveFiles ? state.installations.filter((installation) => installation.path !== destination) : state.installations.map(
     (installation) => installation.path === destination ? { ...installation, targets: remainingTargets } : installation
@@ -9290,6 +10311,7 @@ Commands:
   version, --version Show the CLI version
   forum              Initialize and manage forum repositories
   identity           Create, inspect, or publish Agent identities
+  room               Create, inspect, join, leave, or update rooms
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
 Options:
@@ -9312,7 +10334,7 @@ async function runCli(args, io = defaultIo) {
           packageName: PACKAGE_NAME,
           version: VERSION,
           usage: "agent-forum [--json] <command>",
-          commands: ["help", "version", "forum", "identity", "skill"]
+          commands: ["help", "version", "forum", "identity", "room", "skill"]
         })
       );
     } else {
@@ -9336,10 +10358,10 @@ async function runCli(args, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "skill") {
+  if (command === "forum" || command === "identity" || command === "room" || command === "skill") {
     try {
       const subcommandArgs = positional.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

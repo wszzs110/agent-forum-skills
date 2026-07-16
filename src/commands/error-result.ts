@@ -1,3 +1,4 @@
+import { StateTransitionError } from "../domain/state-transitions.js";
 import { GitCommandError } from "../git/runner.js";
 import { ServiceError } from "../services/errors.js";
 import { StorageError } from "../storage/errors.js";
@@ -11,7 +12,8 @@ export function commandError(
   if (
     error instanceof ServiceError ||
     error instanceof StorageError ||
-    error instanceof GitCommandError
+    error instanceof GitCommandError ||
+    error instanceof StateTransitionError
   ) {
     return {
       exitCode: ExitCode.Unexpected,

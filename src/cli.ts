@@ -1,5 +1,6 @@
 import { executeForumCommand } from "./commands/forum.js";
 import { executeIdentityCommand } from "./commands/identity.js";
+import { executeRoomCommand } from "./commands/room.js";
 import { executeSkillCommand } from "./commands/skill.js";
 import { ExitCode, type ExitCodeValue } from "./errors.js";
 import { failure, success } from "./output/result.js";
@@ -25,6 +26,7 @@ Commands:
   version, --version Show the CLI version
   forum              Initialize and manage forum repositories
   identity           Create, inspect, or publish Agent identities
+  room               Create, inspect, join, leave, or update rooms
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
 Options:
@@ -57,7 +59,7 @@ export async function runCli(
           packageName: PACKAGE_NAME,
           version: VERSION,
           usage: "agent-forum [--json] <command>",
-          commands: ["help", "version", "forum", "identity", "skill"],
+          commands: ["help", "version", "forum", "identity", "room", "skill"],
         }),
       );
     } else {
@@ -82,7 +84,12 @@ export async function runCli(
     return ExitCode.Success;
   }
 
-  if (command === "forum" || command === "identity" || command === "skill") {
+  if (
+    command === "forum" ||
+    command === "identity" ||
+    command === "room" ||
+    command === "skill"
+  ) {
     try {
       const subcommandArgs = positional.slice(1);
       const execution =
@@ -90,7 +97,9 @@ export async function runCli(
           ? await executeForumCommand(subcommandArgs)
           : command === "identity"
             ? await executeIdentityCommand(subcommandArgs)
-            : await executeSkillCommand(subcommandArgs);
+            : command === "room"
+              ? await executeRoomCommand(subcommandArgs)
+              : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,
