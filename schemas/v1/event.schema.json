@@ -38,5 +38,40 @@
     "data": {
       "type": "object"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "scope": { "const": "forum" } } },
+      "then": {
+        "properties": {
+          "targetId": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+          },
+          "type": { "type": "string", "pattern": "^forum-" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "scope": { "const": "room" } } },
+      "then": {
+        "properties": {
+          "targetId": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+          },
+          "type": { "type": "string", "pattern": "^room-" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "scope": { "const": "thread" } } },
+      "then": {
+        "properties": {
+          "targetId": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
+          },
+          "type": { "type": "string", "pattern": "^thread-" }
+        }
+      }
+    }
+  ]
 }

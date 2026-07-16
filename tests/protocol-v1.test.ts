@@ -191,6 +191,21 @@ test("read compatibility accepts same-major optional fields but writers remain s
   );
 });
 
+test("event schema requires scope, target ID, and type prefix to agree", () => {
+  const invalid = validateProtocolDocument("event", {
+    schemaVersion: "1.0",
+    id: ids.event,
+    scope: "thread",
+    targetId: ids.room,
+    type: "room-archived",
+    actorId: ids.member,
+    createdAt,
+    reason: "Invalid cross-scope event.",
+    data: {},
+  });
+  assert.equal(invalid.ok, false);
+});
+
 test("reader schema preserves unknown message types while writers classify known types", () => {
   const value = {
     schemaVersion: "1.0",

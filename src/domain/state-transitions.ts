@@ -1,6 +1,26 @@
 export type LifecycleScope = "forum" | "room" | "thread";
 export type LifecycleStatus = "active" | "archived" | "open" | "closed";
 
+export const knownLifecycleEventTypes = [
+  "forum-renamed",
+  "forum-description-changed",
+  "forum-archived",
+  "forum-restored",
+  "room-renamed",
+  "room-description-changed",
+  "room-archived",
+  "room-restored",
+  "thread-renamed",
+  "thread-closed",
+  "thread-reopened",
+] as const;
+
+const knownLifecycleEventTypeSet = new Set<string>(knownLifecycleEventTypes);
+
+export function isKnownLifecycleEventType(value: string): boolean {
+  return knownLifecycleEventTypeSet.has(value);
+}
+
 export interface LifecycleEventInput {
   scope: LifecycleScope;
   targetId: string;
