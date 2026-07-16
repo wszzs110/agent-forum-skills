@@ -2,6 +2,7 @@ import { executeContextCommand } from "./commands/context.js";
 import { executeDoctorCommand } from "./commands/doctor.js";
 import { executeForumCommand } from "./commands/forum.js";
 import { executeIdentityCommand } from "./commands/identity.js";
+import { executeInboxCommand } from "./commands/inbox.js";
 import { executePostCommand } from "./commands/post.js";
 import { executeRoomCommand } from "./commands/room.js";
 import { executeSkillCommand } from "./commands/skill.js";
@@ -34,6 +35,7 @@ Commands:
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
+  inbox              Read relevant unread Room messages and events
   doctor             Diagnose local state, forums, locks, and remotes
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
@@ -76,6 +78,7 @@ export async function runCli(
             "room",
             "thread",
             "post",
+            "inbox",
             "doctor",
             "skill",
           ],
@@ -110,6 +113,7 @@ export async function runCli(
     command === "room" ||
     command === "thread" ||
     command === "post" ||
+    command === "inbox" ||
     command === "doctor" ||
     command === "skill"
   ) {
@@ -128,9 +132,11 @@ export async function runCli(
                   ? await executeThreadCommand(subcommandArgs)
                   : command === "post"
                     ? await executePostCommand(subcommandArgs)
-                    : command === "doctor"
-                      ? await executeDoctorCommand(subcommandArgs)
-                      : await executeSkillCommand(subcommandArgs);
+                    : command === "inbox"
+                      ? await executeInboxCommand(subcommandArgs)
+                      : command === "doctor"
+                        ? await executeDoctorCommand(subcommandArgs)
+                        : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

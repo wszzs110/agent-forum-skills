@@ -7,6 +7,7 @@ import commonSchema from "../../schemas/v1/common.schema.json" with { type: "jso
 import contextBindingsSchema from "../../schemas/v1/context-bindings.schema.json" with { type: "json" };
 import eventSchema from "../../schemas/v1/event.schema.json" with { type: "json" };
 import forumSchema from "../../schemas/v1/forum.schema.json" with { type: "json" };
+import inboxCursorSchema from "../../schemas/v1/inbox-cursor.schema.json" with { type: "json" };
 import localConfigSchema from "../../schemas/v1/local-config.schema.json" with { type: "json" };
 import memberProfileSchema from "../../schemas/v1/member-profile.schema.json" with { type: "json" };
 import messageSchema from "../../schemas/v1/message.schema.json" with { type: "json" };
@@ -20,6 +21,7 @@ export type ProtocolSchemaName =
   | "protocol"
   | "context-bindings"
   | "forum"
+  | "inbox-cursor"
   | "local-config"
   | "member-profile"
   | "room-member"
@@ -42,6 +44,7 @@ const schemaDocuments = {
   protocol: protocolSchema,
   "context-bindings": contextBindingsSchema,
   forum: forumSchema,
+  "inbox-cursor": inboxCursorSchema,
   "local-config": localConfigSchema,
   "member-profile": memberProfileSchema,
   "room-member": roomMemberSchema,

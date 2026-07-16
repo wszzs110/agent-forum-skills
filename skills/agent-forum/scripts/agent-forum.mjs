@@ -2976,7 +2976,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve15.call(this, root, ref);
+      let _sch = resolve16.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3003,7 +3003,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve15(root, ref) {
+    function resolve16(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3634,7 +3634,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve15(baseURI, relativeURI, options) {
+    function resolve16(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3892,7 +3892,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve15,
+      resolve: resolve16,
       resolveComponent,
       equal,
       serialize,
@@ -7826,6 +7826,30 @@ var forum_schema_default = {
   }
 };
 
+// schemas/v1/inbox-cursor.schema.json
+var inbox_cursor_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://agent-forum.dev/schemas/v1/inbox-cursor.schema.json",
+  title: "Agent Forum Local Inbox Cursor 1.0",
+  type: "object",
+  additionalProperties: false,
+  required: ["formatVersion", "forumId", "memberId", "seenIds", "updatedAt"],
+  properties: {
+    formatVersion: { const: 1 },
+    forumId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId" },
+    memberId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
+    seenIds: {
+      type: "array",
+      uniqueItems: true,
+      items: {
+        type: "string",
+        pattern: "^(?:msg|evt)_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      }
+    },
+    updatedAt: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp" }
+  }
+};
+
 // schemas/v1/local-config.schema.json
 var local_config_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -8148,6 +8172,7 @@ var schemaDocuments = {
   protocol: protocol_schema_default,
   "context-bindings": context_bindings_schema_default,
   forum: forum_schema_default,
+  "inbox-cursor": inbox_cursor_schema_default,
   "local-config": local_config_schema_default,
   "member-profile": member_profile_schema_default,
   "room-member": room_member_schema_default,
@@ -12860,6 +12885,265 @@ forum: ${forum}
   }
 }
 
+// src/services/inbox.ts
+import { readFile as readFile9, readdir as readdir7 } from "node:fs/promises";
+import { resolve as resolve14 } from "node:path";
+function cursorPath(paths, forumId, memberId) {
+  return resolve14(forumStatePath(paths, forumId), "cursors", `${memberId}.json`);
+}
+async function loadCursor(paths, forumId, memberId) {
+  const path = cursorPath(paths, forumId, memberId);
+  try {
+    const value = JSON.parse(await readFile9(path, "utf8"));
+    const validation = validateProtocolDocument("inbox-cursor", value);
+    if (!validation.ok || value.forumId !== forumId || value.memberId !== memberId) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `inbox cursor is invalid: ${path}`,
+        validation.ok ? void 0 : validation.issues
+      );
+    }
+    return value;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return {
+        formatVersion: 1,
+        forumId,
+        memberId,
+        seenIds: [],
+        updatedAt: currentUtcTimestamp()
+      };
+    }
+    if (error instanceof StorageError) throw error;
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `inbox cursor contains invalid JSON: ${path}`
+    );
+  }
+}
+async function readEvents(directory, roomId, roomSlug, threadId, actorId, activeSince) {
+  let names;
+  try {
+    names = await readdir7(directory);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { entries: [], warnings: [] };
+    }
+    throw error;
+  }
+  const entries = [];
+  const warnings = [];
+  for (const name of names) {
+    const path = resolve14(directory, name, "event.json");
+    try {
+      const event = await readJsonDocument(path, "event");
+      if (event.actorId !== actorId && String(event.createdAt) >= activeSince) {
+        entries.push({
+          id: String(event.id),
+          kind: "event",
+          roomId,
+          roomSlug,
+          threadId,
+          type: String(event.type),
+          actorId: String(event.actorId),
+          createdAt: String(event.createdAt),
+          summary: String(event.reason),
+          replyTo: null
+        });
+      }
+    } catch (error) {
+      warnings.push(protocolWarning(path, error));
+    }
+  }
+  return { entries, warnings };
+}
+async function collectRelevantEntries(forumAlias, memberId, paths) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const rooms = await listRooms(forumAlias, paths);
+  const entries = [];
+  const warnings = [...rooms.warnings];
+  for (const room of rooms.rooms) {
+    const membershipPath = resolve14(
+      registration.path,
+      "rooms",
+      room.id,
+      "members",
+      `${memberId}.json`
+    );
+    let membership;
+    try {
+      membership = await readJsonDocument(membershipPath, "room-member");
+    } catch (error) {
+      if (error instanceof StorageError && typeof error.details === "string" && error.details.includes("ENOENT")) continue;
+      warnings.push(protocolWarning(membershipPath, error));
+      continue;
+    }
+    if (membership.status !== "active") continue;
+    const activeSince = String(membership.updatedAt);
+    const roomEvents = await readEvents(
+      resolve14(registration.path, "rooms", room.id, "events"),
+      room.id,
+      room.slug,
+      null,
+      memberId,
+      activeSince
+    );
+    entries.push(...roomEvents.entries);
+    warnings.push(...roomEvents.warnings);
+    const threads = await listThreads(forumAlias, room.id, paths);
+    warnings.push(...threads.warnings);
+    for (const thread of threads.threads) {
+      const detail = await showThread(forumAlias, room.id, thread.id, paths);
+      warnings.push(...detail.warnings);
+      for (const message of detail.messages) {
+        if (message.authorId === memberId || message.createdAt < activeSince) continue;
+        const compact = message.body.replace(/\s+/gu, " ").trim();
+        entries.push({
+          id: message.id,
+          kind: "message",
+          roomId: room.id,
+          roomSlug: room.slug,
+          threadId: thread.id,
+          type: message.type,
+          actorId: message.authorId,
+          createdAt: message.createdAt,
+          summary: compact.length > 500 ? `${compact.slice(0, 497)}...` : compact,
+          replyTo: message.replyTo
+        });
+      }
+      const threadEvents = await readEvents(
+        resolve14(
+          registration.path,
+          "rooms",
+          room.id,
+          "threads",
+          thread.id,
+          "events"
+        ),
+        room.id,
+        room.slug,
+        thread.id,
+        memberId,
+        activeSince
+      );
+      entries.push(...threadEvents.entries);
+      warnings.push(...threadEvents.warnings);
+    }
+  }
+  const unique = new Map(entries.map((entry) => [entry.id, entry]));
+  return { entries: [...unique.values()], warnings };
+}
+async function getInbox(input, paths = createAgentForumPaths()) {
+  const limit = input.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new StorageError("SCHEMA_VALIDATION_FAILED", "inbox limit must be between 1 and 100");
+  }
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const publicProfile2 = await readJsonDocument(
+    resolve14(registration.path, "members", identity.memberId, "profile.json"),
+    "member-profile"
+  );
+  if (publicProfile2.status !== "active") {
+    throw new ServiceError(
+      "FORUM_MEMBERSHIP_REQUIRED",
+      `identity is not an active Forum member: ${identity.memberId}`
+    );
+  }
+  const syncResult = input.sync ? await syncForum(input.forumAlias, paths) : null;
+  const [collected, cursor] = await Promise.all([
+    collectRelevantEntries(input.forumAlias, identity.memberId, paths),
+    loadCursor(paths, registration.forumId, identity.memberId)
+  ]);
+  const seen = new Set(cursor.seenIds);
+  const unread = collected.entries.filter((entry) => !seen.has(entry.id)).sort(
+    (left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
+  );
+  const page = unread.slice(0, limit);
+  const idsToMark = input.markAllRead ? unread.map((entry) => entry.id) : input.markRead ? page.map((entry) => entry.id) : [];
+  if (idsToMark.length > 0) {
+    const lock = await acquireForumLock({
+      lockPath: resolve14(
+        paths.locksDirectory,
+        `${registration.forumId}-${identity.memberId}-cursor.lock`
+      ),
+      command: "inbox mark read"
+    });
+    try {
+      const latest = await loadCursor(paths, registration.forumId, identity.memberId);
+      const nextSeen = [.../* @__PURE__ */ new Set([...latest.seenIds, ...idsToMark])];
+      await writeValidatedJsonAtomic(
+        cursorPath(paths, registration.forumId, identity.memberId),
+        "inbox-cursor",
+        {
+          formatVersion: 1,
+          forumId: registration.forumId,
+          memberId: identity.memberId,
+          seenIds: nextSeen,
+          updatedAt: currentUtcTimestamp()
+        },
+        { overwrite: true, mode: 384 }
+      );
+    } finally {
+      await lock.release();
+    }
+  }
+  return {
+    entries: input.markAllRead ? [] : page,
+    totalUnread: unread.length,
+    hasMore: unread.length > page.length,
+    markedRead: idsToMark.length,
+    warnings: collected.warnings,
+    sync: syncResult
+  };
+}
+
+// src/commands/inbox.ts
+async function executeInboxCommand(args) {
+  const parsed = parseCommandOptions(args, {
+    values: ["--forum", "--identity", "--limit"],
+    flags: ["--sync", "--mark-read", "--mark-all-read"]
+  });
+  if ("error" in parsed) return invalidArgument(parsed.error);
+  if (parsed.flags.has("--mark-read") && parsed.flags.has("--mark-all-read")) {
+    return invalidArgument("--mark-read and --mark-all-read cannot be combined");
+  }
+  const forumAlias = requireOption(parsed, "--forum");
+  if (typeof forumAlias !== "string") return invalidArgument(forumAlias.error);
+  const limitText = parsed.values.get("--limit");
+  const limit = limitText === void 0 ? void 0 : Number(limitText);
+  if (limit !== void 0 && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
+    return invalidArgument("--limit must be an integer between 1 and 100");
+  }
+  try {
+    const identityId = parsed.values.get("--identity");
+    const result = await getInbox({
+      forumAlias,
+      ...identityId ? { identityId } : {},
+      sync: parsed.flags.has("--sync"),
+      ...limit !== void 0 ? { limit } : {},
+      markRead: parsed.flags.has("--mark-read"),
+      markAllRead: parsed.flags.has("--mark-all-read")
+    });
+    return {
+      exitCode: ExitCode.Success,
+      command: "inbox",
+      data: result,
+      human: result.entries.length === 0 ? `No unread entries.
+marked read: ${result.markedRead}
+` : `${result.entries.map((entry) => `${entry.createdAt}	${entry.roomSlug}	${entry.type}	${entry.summary}`).join("\n")}
+unread: ${result.totalUnread}${result.hasMore ? " (more available)" : ""}
+`
+    };
+  } catch (error) {
+    const handled = commandError("inbox", error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
 // src/commands/post.ts
 var referenceKinds = /* @__PURE__ */ new Set([
   "repository",
@@ -13195,15 +13479,15 @@ import { createHash, randomUUID as randomUUID6 } from "node:crypto";
 import {
   cp,
   mkdir as mkdir5,
-  readFile as readFile9,
-  readdir as readdir7,
+  readFile as readFile10,
+  readdir as readdir8,
   rename as rename5,
   rm as rm9,
   stat as stat4,
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve14, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative, resolve as resolve15, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -13225,14 +13509,14 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve14(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve15(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function skillDestination(target, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve14(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve15(homeDirectory, ".agents", "skills", "agent-forum");
   }
   if (target === "claude-code") {
-    return resolve14(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve15(homeDirectory, ".claude", "skills", "agent-forum");
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
 }
@@ -13249,7 +13533,7 @@ async function pathExists4(path) {
 }
 async function loadState(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile9(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile10(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -13282,10 +13566,10 @@ async function saveState(homeDirectory, state) {
 }
 async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const files = {};
-  const entries = await readdir7(current, { withFileTypes: true });
+  const entries = await readdir8(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve14(current, entry.name);
+    const absolute = resolve15(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -13306,7 +13590,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
     }
     if (!entry.isFile()) continue;
     const relativePath = relative(root, absolute).split(sep2).join("/");
-    files[relativePath] = createHash("sha256").update(await readFile9(absolute)).digest("hex");
+    files[relativePath] = createHash("sha256").update(await readFile10(absolute)).digest("hex");
   }
   return files;
 }
@@ -13318,11 +13602,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve14(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve14(process.cwd(), "skills", "agent-forum")
+    resolve15(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve15(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists4(resolve14(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists4(resolve15(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -13834,6 +14118,7 @@ Commands:
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
+  inbox              Read relevant unread Room messages and events
   doctor             Diagnose local state, forums, locks, and remotes
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
@@ -13866,6 +14151,7 @@ async function runCli(args, io = defaultIo) {
             "room",
             "thread",
             "post",
+            "inbox",
             "doctor",
             "skill"
           ]
@@ -13892,10 +14178,10 @@ async function runCli(args, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "doctor" || command === "skill") {
+  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "inbox" || command === "doctor" || command === "skill") {
     try {
       const subcommandArgs = positional.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

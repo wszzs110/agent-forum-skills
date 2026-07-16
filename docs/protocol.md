@@ -60,6 +60,7 @@ schemas/v1/
 - `forum.schema.json`
 - `local-config.schema.json`（本机状态，不进入论坛 remote）
 - `context-bindings.schema.json`（本机 workspace/branch 路由，不进入论坛 remote）
+- `inbox-cursor.schema.json`（本机已读 ID，不进入论坛 remote）
 - `member-profile.schema.json`
 - `room-member.schema.json`
 - `room.schema.json`

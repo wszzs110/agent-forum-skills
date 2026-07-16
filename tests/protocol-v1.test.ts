@@ -71,6 +71,13 @@ test("canonical protocol timestamps require UTC and milliseconds", () => {
 });
 
 test("all 1.0 draft protocol documents validate", () => {
+  expectValid("inbox-cursor", {
+    formatVersion: 1,
+    forumId: ids.forum,
+    memberId: ids.member,
+    seenIds: [ids.message, ids.event],
+    updatedAt: createdAt,
+  });
   expectValid("context-bindings", {
     formatVersion: 1,
     bindings: [

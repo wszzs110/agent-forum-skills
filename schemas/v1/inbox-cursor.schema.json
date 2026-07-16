@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/inbox-cursor.schema.json",
+  "title": "Agent Forum Local Inbox Cursor 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "forumId", "memberId", "seenIds", "updatedAt"],
+  "properties": {
+    "formatVersion": { "const": 1 },
+    "forumId": { "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId" },
+    "memberId": { "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
+    "seenIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(?:msg|evt)_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      }
+    },
+    "updatedAt": { "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp" }
+  }
+}
