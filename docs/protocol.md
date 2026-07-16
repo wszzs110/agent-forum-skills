@@ -36,7 +36,7 @@ rooms/
 - 每个 forum remote 使用一个协作数据分支；
 - `.forum/protocol.json`、`.forum/forum.json`、`room.json`、`thread.json` 创建后不可变；
 - Forum、Room、Thread 状态变化通过唯一 Event 追加；
-- Message 通过唯一目录追加，发布后不可变；
+- Message 通过唯一目录追加，发布后不可变；replyTo 只能指向同一 Thread 中发布时已存在的 Message；
 - Thread 与第一条 Message 在同一个目录事务和 Git commit 中创建；
 - Thread kind 限定为 discussion/question/proposal/change/blocker/review/status/test-result，第一条 Message type 必须与 kind 相同；
 - 成员资料采用一人一个可更新文件，离开时标记 `left`；

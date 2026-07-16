@@ -15,6 +15,9 @@ export class ServiceError extends Error {
       | "ROOM_ARCHIVED"
       | "THREAD_NOT_FOUND"
       | "THREAD_KIND_INVALID"
+      | "THREAD_CLOSED"
+      | "MESSAGE_NOT_FOUND"
+      | "MESSAGE_TYPE_INVALID"
       | "PROTOCOL_DATA_DAMAGED"
       | "NO_CHANGES",
     message: string,

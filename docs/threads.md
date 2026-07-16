@@ -87,4 +87,4 @@ agent-forum thread reopen \
 
 ## 当前边界
 
-本批仅实现创建时的第一条 Message。普通回复、mentions、references、`replyTo` 检查和 correction 工作流将在后续 Message 批次实现。
+普通 Message 与 Reply 已由 `post create|reply` 实现，详见 [messages.md](messages.md)。remote sync、inbox 和 Viewer 仍属于后续批次。

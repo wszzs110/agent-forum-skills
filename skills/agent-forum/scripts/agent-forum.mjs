@@ -8804,8 +8804,10 @@ function invalidArgument(message) {
 // src/commands/options.ts
 function parseCommandOptions(args, definitions) {
   const valueOptions = new Set(definitions.values);
+  const repeatableValueOptions = new Set(definitions.repeatableValues ?? []);
   const flagOptions = new Set(definitions.flags ?? []);
   const values = /* @__PURE__ */ new Map();
+  const multiValues = /* @__PURE__ */ new Map();
   const flags = /* @__PURE__ */ new Set();
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -8817,16 +8819,26 @@ function parseCommandOptions(args, definitions) {
       flags.add(argument);
       continue;
     }
-    if (!valueOptions.has(argument)) return { error: `unknown option: ${argument}` };
-    if (values.has(argument)) return { error: `duplicate option: ${argument}` };
+    if (!valueOptions.has(argument) && !repeatableValueOptions.has(argument)) {
+      return { error: `unknown option: ${argument}` };
+    }
+    if (valueOptions.has(argument) && values.has(argument)) {
+      return { error: `duplicate option: ${argument}` };
+    }
     const value = args[index + 1];
     if (!value || value.startsWith("--")) {
       return { error: `${argument} requires a value` };
     }
-    values.set(argument, value);
+    if (repeatableValueOptions.has(argument)) {
+      const existing = multiValues.get(argument) ?? [];
+      existing.push(value);
+      multiValues.set(argument, existing);
+    } else {
+      values.set(argument, value);
+    }
     index += 1;
   }
-  return { values, flags };
+  return { values, multiValues, flags };
 }
 function requireOption(parsed, name) {
   const value = parsed.values.get(name);
@@ -8994,16 +9006,9 @@ forum: ${result.alias}
   }
 }
 
-// src/services/room.ts
-import {
-  readFile as readFile4,
-  readdir as readdir2,
-  rm as rm4
-} from "node:fs/promises";
-import { resolve as resolve7 } from "node:path";
-
-// src/storage/protocol-store.ts
-import { basename, resolve as resolve6 } from "node:path";
+// src/services/thread.ts
+import { readFile as readFile5, readdir as readdir3, rm as rm5 } from "node:fs/promises";
+import { basename as basename2, resolve as resolve8 } from "node:path";
 
 // src/domain/message-types.ts
 var knownMessageTypes = [
@@ -9026,7 +9031,24 @@ function isKnownMessageType(value) {
   return knownMessageTypeSet.has(value);
 }
 
+// src/domain/thread-kinds.ts
+var knownThreadKinds = [
+  "discussion",
+  "question",
+  "proposal",
+  "change",
+  "blocker",
+  "review",
+  "status",
+  "test-result"
+];
+var knownThreadKindSet = new Set(knownThreadKinds);
+function isKnownThreadKind(value) {
+  return knownThreadKindSet.has(value);
+}
+
 // src/storage/protocol-store.ts
+import { basename, resolve as resolve6 } from "node:path";
 async function createImmutableMessage(destination, metadata, body) {
   if (body.trim().length === 0 || body.includes("\0")) {
     throw new StorageError(
@@ -9078,6 +9100,12 @@ async function createImmutableEvent(destination, event) {
 }
 
 // src/services/room.ts
+import {
+  readFile as readFile4,
+  readdir as readdir2,
+  rm as rm4
+} from "node:fs/promises";
+import { resolve as resolve7 } from "node:path";
 async function readJsonDocument(path, schema) {
   let value;
   try {
@@ -9677,6 +9705,856 @@ async function createRoomEvent(input, paths = createAgentForumPaths()) {
   );
 }
 
+// src/services/thread.ts
+function structuralWarning(code, path, message) {
+  return { code, path, message };
+}
+async function readThreadEvents(registration, roomId, threadId) {
+  const directory = resolve8(
+    registration.path,
+    "rooms",
+    roomId,
+    "threads",
+    threadId,
+    "events"
+  );
+  let entries;
+  try {
+    entries = await readdir3(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { events: [], warnings: [] };
+    }
+    throw error;
+  }
+  const events = [];
+  const warnings = [];
+  for (const entry of entries) {
+    const eventPath = resolve8(directory, entry.name, "event.json");
+    if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
+      warnings.push(
+        structuralWarning(
+          "INVALID_EVENT_PATH",
+          resolve8(directory, entry.name),
+          "thread event path is not a valid event ID directory"
+        )
+      );
+      continue;
+    }
+    try {
+      const event = await readJsonDocument(eventPath, "event");
+      if (event.id !== entry.name) {
+        throw new StorageError(
+          "PATH_ID_MISMATCH",
+          `event ID does not match its directory: ${eventPath}`
+        );
+      }
+      events.push(event);
+    } catch (error) {
+      warnings.push(protocolWarning(eventPath, error));
+    }
+  }
+  events.sort((left, right) => {
+    const byTime = String(left.createdAt).localeCompare(String(right.createdAt));
+    return byTime || String(left.id).localeCompare(String(right.id));
+  });
+  return { events, warnings };
+}
+async function readMessageDirectory(directory, threadId) {
+  const metadataPath = resolve8(directory, "message.json");
+  if (!isEntityId(basename2(directory), "message")) {
+    return {
+      warnings: [
+        structuralWarning(
+          "INVALID_MESSAGE_PATH",
+          directory,
+          "message path is not a valid message ID directory"
+        )
+      ]
+    };
+  }
+  const directoryId = basename2(directory);
+  try {
+    const metadata = await readJsonDocument(metadataPath, "message");
+    if (metadata.id !== directoryId) {
+      throw new StorageError(
+        "PATH_ID_MISMATCH",
+        `message ID does not match its directory: ${metadataPath}`
+      );
+    }
+    if (metadata.threadId !== threadId) {
+      throw new StorageError(
+        "PATH_ID_MISMATCH",
+        `message threadId does not match its parent thread: ${metadataPath}`
+      );
+    }
+    const body = await readFile5(resolve8(directory, "body.md"), "utf8");
+    if (body.trim().length === 0 || body.includes("\0")) {
+      throw new StorageError(
+        "INVALID_MESSAGE_BODY",
+        `message body is empty or contains NUL: ${resolve8(directory, "body.md")}`
+      );
+    }
+    const message = {
+      id: String(metadata.id),
+      threadId: String(metadata.threadId),
+      authorId: String(metadata.authorId),
+      type: String(metadata.type),
+      createdAt: String(metadata.createdAt),
+      replyTo: metadata.replyTo === null ? null : String(metadata.replyTo),
+      mentions: metadata.mentions.map(String),
+      references: metadata.references.map(
+        (reference) => ({
+          kind: String(reference.kind),
+          value: String(reference.value)
+        })
+      ),
+      body
+    };
+    return {
+      message,
+      warnings: isKnownMessageType(message.type) ? [] : [
+        structuralWarning(
+          "UNKNOWN_MESSAGE_TYPE",
+          metadataPath,
+          `unknown message type: ${message.type}`
+        )
+      ]
+    };
+  } catch (error) {
+    return { warnings: [protocolWarning(metadataPath, error)] };
+  }
+}
+async function readThreadMessages(registration, roomId, threadId) {
+  const directory = resolve8(
+    registration.path,
+    "rooms",
+    roomId,
+    "threads",
+    threadId,
+    "messages"
+  );
+  let entries;
+  try {
+    entries = await readdir3(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { messages: [], warnings: [] };
+    }
+    throw error;
+  }
+  const messages = [];
+  const warnings = [];
+  for (const entry of entries) {
+    const path = resolve8(directory, entry.name);
+    if (!entry.isDirectory()) {
+      warnings.push(
+        structuralWarning(
+          "INVALID_MESSAGE_PATH",
+          path,
+          "messages directory contains a non-directory entry"
+        )
+      );
+      continue;
+    }
+    const result = await readMessageDirectory(path, threadId);
+    if (result.message) messages.push(result.message);
+    warnings.push(...result.warnings);
+  }
+  messages.sort((left, right) => {
+    const byTime = left.createdAt.localeCompare(right.createdAt);
+    return byTime || left.id.localeCompare(right.id);
+  });
+  return { messages, warnings };
+}
+async function readThreadDirectory(registration, roomId, threadDirectoryName) {
+  const directory = resolve8(
+    registration.path,
+    "rooms",
+    roomId,
+    "threads",
+    threadDirectoryName
+  );
+  const threadPath = resolve8(directory, "thread.json");
+  if (!isEntityId(threadDirectoryName, "thread")) {
+    return {
+      messages: [],
+      warnings: [
+        structuralWarning(
+          "INVALID_THREAD_PATH",
+          directory,
+          "thread path is not a valid thread ID directory"
+        )
+      ]
+    };
+  }
+  let base;
+  try {
+    base = await readJsonDocument(threadPath, "thread");
+    if (base.id !== threadDirectoryName || base.roomId !== roomId) {
+      throw new StorageError(
+        "PATH_ID_MISMATCH",
+        `thread ID or roomId does not match its path: ${threadPath}`
+      );
+    }
+    if (!isKnownThreadKind(String(base.kind))) {
+      throw new ServiceError(
+        "THREAD_KIND_INVALID",
+        `unsupported thread kind: ${String(base.kind)}`
+      );
+    }
+  } catch (error) {
+    return {
+      messages: [],
+      warnings: [protocolWarning(threadPath, error)]
+    };
+  }
+  const messageResult = await readThreadMessages(
+    registration,
+    roomId,
+    threadDirectoryName
+  );
+  const warnings = [...messageResult.warnings];
+  const messageIds = new Set(
+    messageResult.messages.map((message) => message.id)
+  );
+  for (const message of messageResult.messages) {
+    if (message.replyTo === message.id) {
+      warnings.push(
+        structuralWarning(
+          "MESSAGE_SELF_REPLY",
+          resolve8(directory, "messages", message.id, "message.json"),
+          "message replyTo cannot reference itself"
+        )
+      );
+    } else if (message.replyTo !== null && !messageIds.has(message.replyTo)) {
+      warnings.push(
+        structuralWarning(
+          "REPLY_TARGET_MISSING",
+          resolve8(directory, "messages", message.id, "message.json"),
+          `reply target is missing or damaged: ${message.replyTo}`
+        )
+      );
+    }
+  }
+  const firstMessage = messageResult.messages.find(
+    (message) => message.id === base.firstMessageId
+  );
+  if (!firstMessage) {
+    warnings.push(
+      structuralWarning(
+        "FIRST_MESSAGE_MISSING",
+        threadPath,
+        `first message is missing or damaged: ${String(base.firstMessageId)}`
+      )
+    );
+  } else {
+    if (firstMessage.type !== base.kind) {
+      warnings.push(
+        structuralWarning(
+          "FIRST_MESSAGE_TYPE_MISMATCH",
+          resolve8(directory, "messages", firstMessage.id, "message.json"),
+          "first message type does not match thread kind"
+        )
+      );
+    }
+    if (firstMessage.authorId !== base.createdBy) {
+      warnings.push(
+        structuralWarning(
+          "FIRST_MESSAGE_AUTHOR_MISMATCH",
+          resolve8(directory, "messages", firstMessage.id, "message.json"),
+          "first message author does not match thread creator"
+        )
+      );
+    }
+    if (firstMessage.replyTo !== null) {
+      warnings.push(
+        structuralWarning(
+          "FIRST_MESSAGE_REPLY_INVALID",
+          resolve8(directory, "messages", firstMessage.id, "message.json"),
+          "first message replyTo must be null"
+        )
+      );
+    }
+  }
+  let state = {
+    scope: "thread",
+    id: String(base.id),
+    title: String(base.initialTitle),
+    status: "open"
+  };
+  let lastActivityAt = String(base.createdAt);
+  for (const message of messageResult.messages) {
+    if (message.createdAt > lastActivityAt) lastActivityAt = message.createdAt;
+  }
+  const eventResult = await readThreadEvents(
+    registration,
+    roomId,
+    threadDirectoryName
+  );
+  warnings.push(...eventResult.warnings);
+  for (const event of eventResult.events) {
+    const eventPath = resolve8(
+      directory,
+      "events",
+      String(event.id),
+      "event.json"
+    );
+    if (!isKnownLifecycleEventType(String(event.type))) {
+      warnings.push(
+        structuralWarning(
+          "UNKNOWN_EVENT_TYPE",
+          eventPath,
+          `unknown thread event type: ${String(event.type)}`
+        )
+      );
+      continue;
+    }
+    try {
+      state = applyLifecycleEvent(state, {
+        scope: "thread",
+        targetId: String(event.targetId),
+        type: String(event.type),
+        data: event.data
+      });
+      if (String(event.createdAt) > lastActivityAt) {
+        lastActivityAt = String(event.createdAt);
+      }
+    } catch (error) {
+      warnings.push(protocolWarning(eventPath, error));
+    }
+  }
+  return {
+    thread: {
+      id: String(base.id),
+      roomId: String(base.roomId),
+      title: state.title,
+      kind: base.kind,
+      status: state.status,
+      createdBy: String(base.createdBy),
+      createdAt: String(base.createdAt),
+      firstMessageId: String(base.firstMessageId),
+      lastActivityAt,
+      messageCount: messageResult.messages.length
+    },
+    messages: messageResult.messages,
+    warnings
+  };
+}
+async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
+  const roomResult = await showRoom(forumAlias, room, paths);
+  const { registration } = await openForum(forumAlias, paths);
+  const directory = resolve8(
+    registration.path,
+    "rooms",
+    roomResult.room.id,
+    "threads"
+  );
+  let entries;
+  try {
+    entries = await readdir3(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return {
+        room: roomResult.room,
+        threads: [],
+        warnings: roomResult.warnings
+      };
+    }
+    throw error;
+  }
+  const threads = [];
+  const warnings = [...roomResult.warnings];
+  for (const entry of entries) {
+    const path = resolve8(directory, entry.name);
+    if (!entry.isDirectory()) {
+      warnings.push(
+        structuralWarning(
+          "INVALID_THREAD_PATH",
+          path,
+          "threads directory contains a non-directory entry"
+        )
+      );
+      continue;
+    }
+    const result = await readThreadDirectory(
+      registration,
+      roomResult.room.id,
+      entry.name
+    );
+    if (result.thread) threads.push(result.thread);
+    warnings.push(...result.warnings);
+  }
+  threads.sort((left, right) => {
+    const byActivity = right.lastActivityAt.localeCompare(left.lastActivityAt);
+    return byActivity || left.id.localeCompare(right.id);
+  });
+  return { room: roomResult.room, threads, warnings };
+}
+async function showThread(forumAlias, room, threadId, paths = createAgentForumPaths()) {
+  const roomResult = await showRoom(forumAlias, room, paths);
+  const { registration } = await openForum(forumAlias, paths);
+  const result = await readThreadDirectory(
+    registration,
+    roomResult.room.id,
+    threadId
+  );
+  if (!result.thread) {
+    throw new ServiceError(
+      "THREAD_NOT_FOUND",
+      `thread was not found: ${threadId}`,
+      result.warnings
+    );
+  }
+  return {
+    room: roomResult.room,
+    thread: result.thread,
+    messages: result.messages,
+    warnings: [...roomResult.warnings, ...result.warnings]
+  };
+}
+function assertRoomWritable(room) {
+  if (room.status !== "active") {
+    throw new ServiceError(
+      "ROOM_ARCHIVED",
+      `cannot write to archived room: ${room.id}`
+    );
+  }
+}
+async function createThread(input, paths = createAgentForumPaths()) {
+  if (!isKnownThreadKind(input.kind)) {
+    throw new ServiceError(
+      "THREAD_KIND_INVALID",
+      `unsupported thread kind: ${input.kind}`
+    );
+  }
+  const kind = input.kind;
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    "thread create",
+    async (registration, identity) => {
+      const roomResult = await showRoom(input.forumAlias, input.room, paths);
+      assertRoomWritable(roomResult.room);
+      await requireActiveRoomMember(
+        registration,
+        roomResult.room.id,
+        identity
+      );
+      const threadId = input.threadId ?? createEntityId("thread");
+      const messageId = input.messageId ?? createEntityId("message");
+      const timestamp = currentUtcTimestamp(input.now);
+      const thread = {
+        schemaVersion: "1.0",
+        id: threadId,
+        roomId: roomResult.room.id,
+        initialTitle: input.title,
+        kind,
+        createdBy: identity.memberId,
+        createdAt: timestamp,
+        firstMessageId: messageId
+      };
+      const metadata = {
+        schemaVersion: "1.0",
+        id: messageId,
+        threadId,
+        authorId: identity.memberId,
+        type: kind,
+        createdAt: timestamp,
+        replyTo: null,
+        mentions: [],
+        references: []
+      };
+      const threadDirectory = resolve8(
+        registration.path,
+        "rooms",
+        roomResult.room.id,
+        "threads",
+        threadId
+      );
+      let directoryCreated = false;
+      try {
+        await createImmutableDirectory(threadDirectory, async (temporary) => {
+          await writeValidatedJsonAtomic(
+            resolve8(temporary, "thread.json"),
+            "thread",
+            thread
+          );
+          await createImmutableMessage(
+            resolve8(temporary, "messages", messageId),
+            metadata,
+            input.body
+          );
+        });
+        directoryCreated = true;
+        const commit = commitPaths(
+          registration.path,
+          [threadDirectory],
+          `Create thread ${input.title}`
+        );
+        return {
+          thread: {
+            id: threadId,
+            roomId: roomResult.room.id,
+            title: input.title,
+            kind,
+            status: "open",
+            createdBy: identity.memberId,
+            createdAt: timestamp,
+            firstMessageId: messageId,
+            lastActivityAt: timestamp,
+            messageCount: 1
+          },
+          firstMessage: {
+            id: messageId,
+            threadId,
+            authorId: identity.memberId,
+            type: kind,
+            createdAt: timestamp,
+            replyTo: null,
+            mentions: [],
+            references: [],
+            body: input.body
+          },
+          commit
+        };
+      } catch (error) {
+        runGit(registration.path, ["reset", "--", threadDirectory]);
+        if (directoryCreated) {
+          await rm5(threadDirectory, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    }
+  );
+}
+function hasStructuralThreadDamage(thread, warnings) {
+  return warnings.some((item) => {
+    if (!item.path.includes(thread.id)) return false;
+    if (item.code.startsWith("FIRST_MESSAGE_")) return true;
+    if (!["SCHEMA_VALIDATION_FAILED", "PATH_ID_MISMATCH"].includes(item.code)) {
+      return false;
+    }
+    return item.path.endsWith("thread.json") || item.path.includes(thread.firstMessageId);
+  });
+}
+async function createPost(input, paths = createAgentForumPaths()) {
+  if (!isKnownMessageType(input.type)) {
+    throw new ServiceError(
+      "MESSAGE_TYPE_INVALID",
+      `unsupported message type: ${input.type}`
+    );
+  }
+  const type = input.type;
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    input.replyTo ? "post reply" : "post create",
+    async (registration, identity) => {
+      const detail = await showThread(
+        input.forumAlias,
+        input.room,
+        input.thread,
+        paths
+      );
+      assertRoomWritable(detail.room);
+      if (hasStructuralThreadDamage(detail.thread, detail.warnings)) {
+        throw new ServiceError(
+          "PROTOCOL_DATA_DAMAGED",
+          `cannot post to damaged thread: ${detail.thread.id}`,
+          detail.warnings
+        );
+      }
+      if (detail.thread.status !== "open") {
+        throw new ServiceError(
+          "THREAD_CLOSED",
+          `cannot post to closed thread: ${detail.thread.id}`
+        );
+      }
+      await requireActiveRoomMember(
+        registration,
+        detail.room.id,
+        identity
+      );
+      const replyTo = input.replyTo ?? null;
+      if (replyTo !== null && !detail.messages.some((message) => message.id === replyTo)) {
+        throw new ServiceError(
+          "MESSAGE_NOT_FOUND",
+          `reply target was not found in thread ${detail.thread.id}: ${replyTo}`
+        );
+      }
+      const messageId = input.messageId ?? createEntityId("message");
+      const timestamp = currentUtcTimestamp(input.now);
+      const metadata = {
+        schemaVersion: "1.0",
+        id: messageId,
+        threadId: detail.thread.id,
+        authorId: identity.memberId,
+        type,
+        createdAt: timestamp,
+        replyTo,
+        mentions: input.mentions ?? [],
+        references: input.references ?? []
+      };
+      const messageDirectory = resolve8(
+        registration.path,
+        "rooms",
+        detail.room.id,
+        "threads",
+        detail.thread.id,
+        "messages",
+        messageId
+      );
+      let messageCreated = false;
+      try {
+        await createImmutableMessage(
+          messageDirectory,
+          metadata,
+          input.body
+        );
+        messageCreated = true;
+        const commit = commitPaths(
+          registration.path,
+          [messageDirectory],
+          `${replyTo ? "Reply in" : "Post to"} thread ${detail.thread.id}`
+        );
+        const message = {
+          id: messageId,
+          threadId: detail.thread.id,
+          authorId: identity.memberId,
+          type,
+          createdAt: timestamp,
+          replyTo,
+          mentions: [...input.mentions ?? []],
+          references: [...input.references ?? []],
+          body: input.body
+        };
+        return {
+          message,
+          thread: {
+            ...detail.thread,
+            lastActivityAt: timestamp > detail.thread.lastActivityAt ? timestamp : detail.thread.lastActivityAt,
+            messageCount: detail.thread.messageCount + 1
+          },
+          commit
+        };
+      } catch (error) {
+        runGit(registration.path, ["reset", "--", messageDirectory]);
+        if (messageCreated) {
+          await rm5(messageDirectory, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    }
+  );
+}
+async function createThreadEvent(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    input.type,
+    async (registration, identity) => {
+      const detail = await showThread(
+        input.forumAlias,
+        input.room,
+        input.thread,
+        paths
+      );
+      assertRoomWritable(detail.room);
+      if (hasStructuralThreadDamage(detail.thread, detail.warnings)) {
+        throw new ServiceError(
+          "PROTOCOL_DATA_DAMAGED",
+          `cannot update damaged thread: ${detail.thread.id}`,
+          detail.warnings
+        );
+      }
+      await requireActiveRoomMember(
+        registration,
+        detail.room.id,
+        identity
+      );
+      const eventId = input.eventId ?? createEntityId("event");
+      const timestamp = currentUtcTimestamp(input.now);
+      const event = {
+        schemaVersion: "1.0",
+        id: eventId,
+        scope: "thread",
+        targetId: detail.thread.id,
+        type: input.type,
+        actorId: identity.memberId,
+        createdAt: timestamp,
+        reason: input.reason,
+        data: input.data
+      };
+      const nextState = applyLifecycleEvent(
+        {
+          scope: "thread",
+          id: detail.thread.id,
+          title: detail.thread.title,
+          status: detail.thread.status
+        },
+        event
+      );
+      const eventDirectory = resolve8(
+        registration.path,
+        "rooms",
+        detail.room.id,
+        "threads",
+        detail.thread.id,
+        "events",
+        eventId
+      );
+      let eventCreated = false;
+      try {
+        await createImmutableEvent(eventDirectory, event);
+        eventCreated = true;
+        const commit = commitPaths(
+          registration.path,
+          [eventDirectory],
+          `${input.type} ${detail.thread.id}`
+        );
+        return {
+          eventId,
+          thread: {
+            ...detail.thread,
+            title: nextState.title,
+            status: nextState.status,
+            lastActivityAt: timestamp
+          },
+          commit
+        };
+      } catch (error) {
+        runGit(registration.path, ["reset", "--", eventDirectory]);
+        if (eventCreated) {
+          await rm5(eventDirectory, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    }
+  );
+}
+
+// src/commands/post.ts
+var referenceKinds = /* @__PURE__ */ new Set([
+  "repository",
+  "branch",
+  "commit",
+  "path",
+  "symbol",
+  "endpoint",
+  "ticket",
+  "url"
+]);
+function postHelp() {
+  return {
+    exitCode: ExitCode.Success,
+    command: "post.help",
+    data: {
+      commands: ["create", "reply"],
+      repeatableOptions: ["--mention", "--reference"],
+      referenceFormat: "<kind>=<value>"
+    },
+    human: `Post messages
+
+Usage:
+  agent-forum post create --forum <alias> --room <id-or-slug> --thread <thread-id> --type <type> --body <markdown> [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]
+  agent-forum post reply --forum <alias> --room <id-or-slug> --thread <thread-id> --reply-to <message-id> --type <type> --body <markdown> [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]
+`
+  };
+}
+function parseReferences(values) {
+  const references = [];
+  for (const input of values) {
+    const separator = input.indexOf("=");
+    if (separator <= 0 || separator === input.length - 1) {
+      return invalidArgument(
+        `invalid --reference '${input}'; expected <kind>=<value>`
+      );
+    }
+    const kind = input.slice(0, separator);
+    const value = input.slice(separator + 1);
+    if (!referenceKinds.has(kind)) {
+      return invalidArgument(`unsupported reference kind: ${kind}`);
+    }
+    references.push({ kind, value });
+  }
+  return references;
+}
+async function executePostCommand(args) {
+  const subcommand = args[0];
+  if (!subcommand || subcommand === "help" || subcommand === "--help") {
+    return postHelp();
+  }
+  if (subcommand !== "create" && subcommand !== "reply") {
+    return invalidArgument(`unknown post subcommand: ${subcommand}`);
+  }
+  try {
+    const parsed = parseCommandOptions(args.slice(1), {
+      values: [
+        "--forum",
+        "--room",
+        "--thread",
+        "--type",
+        "--body",
+        "--identity",
+        ...subcommand === "reply" ? ["--reply-to"] : []
+      ],
+      repeatableValues: ["--mention", "--reference"]
+    });
+    if ("error" in parsed) return invalidArgument(parsed.error);
+    const requiredValues = [
+      "--forum",
+      "--room",
+      "--thread",
+      "--type",
+      "--body",
+      ...subcommand === "reply" ? ["--reply-to"] : []
+    ];
+    const values = /* @__PURE__ */ new Map();
+    for (const name of requiredValues) {
+      const value = requireOption(parsed, name);
+      if (typeof value !== "string") return invalidArgument(value.error);
+      values.set(name, value);
+    }
+    const mentions = parsed.multiValues.get("--mention") ?? [];
+    if (new Set(mentions).size !== mentions.length) {
+      return invalidArgument("duplicate --mention values are not allowed");
+    }
+    const references = parseReferences(
+      parsed.multiValues.get("--reference") ?? []
+    );
+    if ("exitCode" in references) return references;
+    const identityId = parsed.values.get("--identity");
+    const result = await createPost({
+      forumAlias: values.get("--forum"),
+      room: values.get("--room"),
+      thread: values.get("--thread"),
+      type: values.get("--type"),
+      body: values.get("--body"),
+      mentions,
+      references,
+      ...subcommand === "reply" ? { replyTo: values.get("--reply-to") } : {},
+      ...identityId ? { identityId } : {}
+    });
+    return {
+      exitCode: ExitCode.Success,
+      command: `post.${subcommand}`,
+      data: result,
+      human: `${subcommand === "reply" ? "replied" : "posted"}: ${result.message.id}
+thread: ${result.thread.id}
+commit: ${result.commit}
+`
+    };
+  } catch (error) {
+    const handled = commandError(`post.${subcommand}`, error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
 // src/commands/room.ts
 function roomHelp() {
   return {
@@ -9894,15 +10772,15 @@ import { createHash, randomUUID as randomUUID4 } from "node:crypto";
 import {
   cp,
   mkdir as mkdir4,
-  readFile as readFile5,
-  readdir as readdir3,
+  readFile as readFile6,
+  readdir as readdir4,
   rename as rename4,
-  rm as rm5,
+  rm as rm6,
   stat as stat4,
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve8, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative, resolve as resolve9, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -9924,14 +10802,14 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve8(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve9(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function skillDestination(target, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve8(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve9(homeDirectory, ".agents", "skills", "agent-forum");
   }
   if (target === "claude-code") {
-    return resolve8(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve9(homeDirectory, ".claude", "skills", "agent-forum");
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
 }
@@ -9948,7 +10826,7 @@ async function pathExists3(path) {
 }
 async function loadState(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile5(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile6(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -9975,16 +10853,16 @@ async function saveState(homeDirectory, state) {
     });
     await rename4(temporary, destination);
   } catch (error) {
-    await rm5(temporary, { force: true });
+    await rm6(temporary, { force: true });
     throw error;
   }
 }
 async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const files = {};
-  const entries = await readdir3(current, { withFileTypes: true });
+  const entries = await readdir4(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve8(current, entry.name);
+    const absolute = resolve9(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -10005,7 +10883,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
     }
     if (!entry.isFile()) continue;
     const relativePath = relative(root, absolute).split(sep2).join("/");
-    files[relativePath] = createHash("sha256").update(await readFile5(absolute)).digest("hex");
+    files[relativePath] = createHash("sha256").update(await readFile6(absolute)).digest("hex");
   }
   return files;
 }
@@ -10017,11 +10895,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve8(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve8(process.cwd(), "skills", "agent-forum")
+    resolve9(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve9(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists3(resolve8(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists3(resolve9(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -10040,9 +10918,9 @@ async function replaceDirectory(source, destination) {
       movedExisting = true;
     }
     await rename4(staging, destination);
-    if (movedExisting) await rm5(backup, { recursive: true, force: true });
+    if (movedExisting) await rm6(backup, { recursive: true, force: true });
   } catch (error) {
-    await rm5(staging, { recursive: true, force: true });
+    await rm6(staging, { recursive: true, force: true });
     if (movedExisting && !await pathExists3(destination)) {
       await rename4(backup, destination);
     }
@@ -10157,7 +11035,7 @@ async function uninstallSkill(options) {
     };
   }
   if (shouldRemoveFiles) {
-    await rm5(destination, { recursive: true, force: true });
+    await rm6(destination, { recursive: true, force: true });
   }
   const installations = shouldRemoveFiles ? state.installations.filter((installation) => installation.path !== destination) : state.installations.map(
     (installation) => installation.path === destination ? { ...installation, targets: remainingTargets } : installation
@@ -10324,627 +11202,6 @@ Reload the agent to discover the skill.
     }
     throw error;
   }
-}
-
-// src/services/thread.ts
-import { readFile as readFile6, readdir as readdir4, rm as rm6 } from "node:fs/promises";
-import { basename as basename2, resolve as resolve9 } from "node:path";
-
-// src/domain/thread-kinds.ts
-var knownThreadKinds = [
-  "discussion",
-  "question",
-  "proposal",
-  "change",
-  "blocker",
-  "review",
-  "status",
-  "test-result"
-];
-var knownThreadKindSet = new Set(knownThreadKinds);
-function isKnownThreadKind(value) {
-  return knownThreadKindSet.has(value);
-}
-
-// src/services/thread.ts
-function structuralWarning(code, path, message) {
-  return { code, path, message };
-}
-async function readThreadEvents(registration, roomId, threadId) {
-  const directory = resolve9(
-    registration.path,
-    "rooms",
-    roomId,
-    "threads",
-    threadId,
-    "events"
-  );
-  let entries;
-  try {
-    entries = await readdir4(directory, { withFileTypes: true });
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return { events: [], warnings: [] };
-    }
-    throw error;
-  }
-  const events = [];
-  const warnings = [];
-  for (const entry of entries) {
-    const eventPath = resolve9(directory, entry.name, "event.json");
-    if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
-      warnings.push(
-        structuralWarning(
-          "INVALID_EVENT_PATH",
-          resolve9(directory, entry.name),
-          "thread event path is not a valid event ID directory"
-        )
-      );
-      continue;
-    }
-    try {
-      const event = await readJsonDocument(eventPath, "event");
-      if (event.id !== entry.name) {
-        throw new StorageError(
-          "PATH_ID_MISMATCH",
-          `event ID does not match its directory: ${eventPath}`
-        );
-      }
-      events.push(event);
-    } catch (error) {
-      warnings.push(protocolWarning(eventPath, error));
-    }
-  }
-  events.sort((left, right) => {
-    const byTime = String(left.createdAt).localeCompare(String(right.createdAt));
-    return byTime || String(left.id).localeCompare(String(right.id));
-  });
-  return { events, warnings };
-}
-async function readMessageDirectory(directory, threadId) {
-  const metadataPath = resolve9(directory, "message.json");
-  if (!isEntityId(basename2(directory), "message")) {
-    return {
-      warnings: [
-        structuralWarning(
-          "INVALID_MESSAGE_PATH",
-          directory,
-          "message path is not a valid message ID directory"
-        )
-      ]
-    };
-  }
-  const directoryId = basename2(directory);
-  try {
-    const metadata = await readJsonDocument(metadataPath, "message");
-    if (metadata.id !== directoryId) {
-      throw new StorageError(
-        "PATH_ID_MISMATCH",
-        `message ID does not match its directory: ${metadataPath}`
-      );
-    }
-    if (metadata.threadId !== threadId) {
-      throw new StorageError(
-        "PATH_ID_MISMATCH",
-        `message threadId does not match its parent thread: ${metadataPath}`
-      );
-    }
-    const body = await readFile6(resolve9(directory, "body.md"), "utf8");
-    if (body.trim().length === 0 || body.includes("\0")) {
-      throw new StorageError(
-        "INVALID_MESSAGE_BODY",
-        `message body is empty or contains NUL: ${resolve9(directory, "body.md")}`
-      );
-    }
-    const message = {
-      id: String(metadata.id),
-      threadId: String(metadata.threadId),
-      authorId: String(metadata.authorId),
-      type: String(metadata.type),
-      createdAt: String(metadata.createdAt),
-      replyTo: metadata.replyTo === null ? null : String(metadata.replyTo),
-      mentions: metadata.mentions.map(String),
-      references: metadata.references.map(
-        (reference) => ({
-          kind: String(reference.kind),
-          value: String(reference.value)
-        })
-      ),
-      body
-    };
-    return {
-      message,
-      warnings: isKnownMessageType(message.type) ? [] : [
-        structuralWarning(
-          "UNKNOWN_MESSAGE_TYPE",
-          metadataPath,
-          `unknown message type: ${message.type}`
-        )
-      ]
-    };
-  } catch (error) {
-    return { warnings: [protocolWarning(metadataPath, error)] };
-  }
-}
-async function readThreadMessages(registration, roomId, threadId) {
-  const directory = resolve9(
-    registration.path,
-    "rooms",
-    roomId,
-    "threads",
-    threadId,
-    "messages"
-  );
-  let entries;
-  try {
-    entries = await readdir4(directory, { withFileTypes: true });
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return { messages: [], warnings: [] };
-    }
-    throw error;
-  }
-  const messages = [];
-  const warnings = [];
-  for (const entry of entries) {
-    const path = resolve9(directory, entry.name);
-    if (!entry.isDirectory()) {
-      warnings.push(
-        structuralWarning(
-          "INVALID_MESSAGE_PATH",
-          path,
-          "messages directory contains a non-directory entry"
-        )
-      );
-      continue;
-    }
-    const result = await readMessageDirectory(path, threadId);
-    if (result.message) messages.push(result.message);
-    warnings.push(...result.warnings);
-  }
-  messages.sort((left, right) => {
-    const byTime = left.createdAt.localeCompare(right.createdAt);
-    return byTime || left.id.localeCompare(right.id);
-  });
-  return { messages, warnings };
-}
-async function readThreadDirectory(registration, roomId, threadDirectoryName) {
-  const directory = resolve9(
-    registration.path,
-    "rooms",
-    roomId,
-    "threads",
-    threadDirectoryName
-  );
-  const threadPath = resolve9(directory, "thread.json");
-  if (!isEntityId(threadDirectoryName, "thread")) {
-    return {
-      messages: [],
-      warnings: [
-        structuralWarning(
-          "INVALID_THREAD_PATH",
-          directory,
-          "thread path is not a valid thread ID directory"
-        )
-      ]
-    };
-  }
-  let base;
-  try {
-    base = await readJsonDocument(threadPath, "thread");
-    if (base.id !== threadDirectoryName || base.roomId !== roomId) {
-      throw new StorageError(
-        "PATH_ID_MISMATCH",
-        `thread ID or roomId does not match its path: ${threadPath}`
-      );
-    }
-    if (!isKnownThreadKind(String(base.kind))) {
-      throw new ServiceError(
-        "THREAD_KIND_INVALID",
-        `unsupported thread kind: ${String(base.kind)}`
-      );
-    }
-  } catch (error) {
-    return {
-      messages: [],
-      warnings: [protocolWarning(threadPath, error)]
-    };
-  }
-  const messageResult = await readThreadMessages(
-    registration,
-    roomId,
-    threadDirectoryName
-  );
-  const warnings = [...messageResult.warnings];
-  const firstMessage = messageResult.messages.find(
-    (message) => message.id === base.firstMessageId
-  );
-  if (!firstMessage) {
-    warnings.push(
-      structuralWarning(
-        "FIRST_MESSAGE_MISSING",
-        threadPath,
-        `first message is missing or damaged: ${String(base.firstMessageId)}`
-      )
-    );
-  } else {
-    if (firstMessage.type !== base.kind) {
-      warnings.push(
-        structuralWarning(
-          "FIRST_MESSAGE_TYPE_MISMATCH",
-          resolve9(directory, "messages", firstMessage.id, "message.json"),
-          "first message type does not match thread kind"
-        )
-      );
-    }
-    if (firstMessage.authorId !== base.createdBy) {
-      warnings.push(
-        structuralWarning(
-          "FIRST_MESSAGE_AUTHOR_MISMATCH",
-          resolve9(directory, "messages", firstMessage.id, "message.json"),
-          "first message author does not match thread creator"
-        )
-      );
-    }
-    if (firstMessage.replyTo !== null) {
-      warnings.push(
-        structuralWarning(
-          "FIRST_MESSAGE_REPLY_INVALID",
-          resolve9(directory, "messages", firstMessage.id, "message.json"),
-          "first message replyTo must be null"
-        )
-      );
-    }
-  }
-  let state = {
-    scope: "thread",
-    id: String(base.id),
-    title: String(base.initialTitle),
-    status: "open"
-  };
-  let lastActivityAt = String(base.createdAt);
-  for (const message of messageResult.messages) {
-    if (message.createdAt > lastActivityAt) lastActivityAt = message.createdAt;
-  }
-  const eventResult = await readThreadEvents(
-    registration,
-    roomId,
-    threadDirectoryName
-  );
-  warnings.push(...eventResult.warnings);
-  for (const event of eventResult.events) {
-    const eventPath = resolve9(
-      directory,
-      "events",
-      String(event.id),
-      "event.json"
-    );
-    if (!isKnownLifecycleEventType(String(event.type))) {
-      warnings.push(
-        structuralWarning(
-          "UNKNOWN_EVENT_TYPE",
-          eventPath,
-          `unknown thread event type: ${String(event.type)}`
-        )
-      );
-      continue;
-    }
-    try {
-      state = applyLifecycleEvent(state, {
-        scope: "thread",
-        targetId: String(event.targetId),
-        type: String(event.type),
-        data: event.data
-      });
-      if (String(event.createdAt) > lastActivityAt) {
-        lastActivityAt = String(event.createdAt);
-      }
-    } catch (error) {
-      warnings.push(protocolWarning(eventPath, error));
-    }
-  }
-  return {
-    thread: {
-      id: String(base.id),
-      roomId: String(base.roomId),
-      title: state.title,
-      kind: base.kind,
-      status: state.status,
-      createdBy: String(base.createdBy),
-      createdAt: String(base.createdAt),
-      firstMessageId: String(base.firstMessageId),
-      lastActivityAt,
-      messageCount: messageResult.messages.length
-    },
-    messages: messageResult.messages,
-    warnings
-  };
-}
-async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
-  const roomResult = await showRoom(forumAlias, room, paths);
-  const { registration } = await openForum(forumAlias, paths);
-  const directory = resolve9(
-    registration.path,
-    "rooms",
-    roomResult.room.id,
-    "threads"
-  );
-  let entries;
-  try {
-    entries = await readdir4(directory, { withFileTypes: true });
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return {
-        room: roomResult.room,
-        threads: [],
-        warnings: roomResult.warnings
-      };
-    }
-    throw error;
-  }
-  const threads = [];
-  const warnings = [...roomResult.warnings];
-  for (const entry of entries) {
-    const path = resolve9(directory, entry.name);
-    if (!entry.isDirectory()) {
-      warnings.push(
-        structuralWarning(
-          "INVALID_THREAD_PATH",
-          path,
-          "threads directory contains a non-directory entry"
-        )
-      );
-      continue;
-    }
-    const result = await readThreadDirectory(
-      registration,
-      roomResult.room.id,
-      entry.name
-    );
-    if (result.thread) threads.push(result.thread);
-    warnings.push(...result.warnings);
-  }
-  threads.sort((left, right) => {
-    const byActivity = right.lastActivityAt.localeCompare(left.lastActivityAt);
-    return byActivity || left.id.localeCompare(right.id);
-  });
-  return { room: roomResult.room, threads, warnings };
-}
-async function showThread(forumAlias, room, threadId, paths = createAgentForumPaths()) {
-  const roomResult = await showRoom(forumAlias, room, paths);
-  const { registration } = await openForum(forumAlias, paths);
-  const result = await readThreadDirectory(
-    registration,
-    roomResult.room.id,
-    threadId
-  );
-  if (!result.thread) {
-    throw new ServiceError(
-      "THREAD_NOT_FOUND",
-      `thread was not found: ${threadId}`,
-      result.warnings
-    );
-  }
-  return {
-    room: roomResult.room,
-    thread: result.thread,
-    messages: result.messages,
-    warnings: [...roomResult.warnings, ...result.warnings]
-  };
-}
-function assertRoomWritable(room) {
-  if (room.status !== "active") {
-    throw new ServiceError(
-      "ROOM_ARCHIVED",
-      `cannot write to archived room: ${room.id}`
-    );
-  }
-}
-async function createThread(input, paths = createAgentForumPaths()) {
-  if (!isKnownThreadKind(input.kind)) {
-    throw new ServiceError(
-      "THREAD_KIND_INVALID",
-      `unsupported thread kind: ${input.kind}`
-    );
-  }
-  const kind = input.kind;
-  return withForumWrite(
-    input.forumAlias,
-    input.identityId,
-    paths,
-    "thread create",
-    async (registration, identity) => {
-      const roomResult = await showRoom(input.forumAlias, input.room, paths);
-      assertRoomWritable(roomResult.room);
-      await requireActiveRoomMember(
-        registration,
-        roomResult.room.id,
-        identity
-      );
-      const threadId = input.threadId ?? createEntityId("thread");
-      const messageId = input.messageId ?? createEntityId("message");
-      const timestamp = currentUtcTimestamp(input.now);
-      const thread = {
-        schemaVersion: "1.0",
-        id: threadId,
-        roomId: roomResult.room.id,
-        initialTitle: input.title,
-        kind,
-        createdBy: identity.memberId,
-        createdAt: timestamp,
-        firstMessageId: messageId
-      };
-      const metadata = {
-        schemaVersion: "1.0",
-        id: messageId,
-        threadId,
-        authorId: identity.memberId,
-        type: kind,
-        createdAt: timestamp,
-        replyTo: null,
-        mentions: [],
-        references: []
-      };
-      const threadDirectory = resolve9(
-        registration.path,
-        "rooms",
-        roomResult.room.id,
-        "threads",
-        threadId
-      );
-      let directoryCreated = false;
-      try {
-        await createImmutableDirectory(threadDirectory, async (temporary) => {
-          await writeValidatedJsonAtomic(
-            resolve9(temporary, "thread.json"),
-            "thread",
-            thread
-          );
-          await createImmutableMessage(
-            resolve9(temporary, "messages", messageId),
-            metadata,
-            input.body
-          );
-        });
-        directoryCreated = true;
-        const commit = commitPaths(
-          registration.path,
-          [threadDirectory],
-          `Create thread ${input.title}`
-        );
-        return {
-          thread: {
-            id: threadId,
-            roomId: roomResult.room.id,
-            title: input.title,
-            kind,
-            status: "open",
-            createdBy: identity.memberId,
-            createdAt: timestamp,
-            firstMessageId: messageId,
-            lastActivityAt: timestamp,
-            messageCount: 1
-          },
-          firstMessage: {
-            id: messageId,
-            threadId,
-            authorId: identity.memberId,
-            type: kind,
-            createdAt: timestamp,
-            replyTo: null,
-            mentions: [],
-            references: [],
-            body: input.body
-          },
-          commit
-        };
-      } catch (error) {
-        runGit(registration.path, ["reset", "--", threadDirectory]);
-        if (directoryCreated) {
-          await rm6(threadDirectory, { recursive: true, force: true });
-        }
-        throw error;
-      }
-    }
-  );
-}
-function hasStructuralThreadDamage(threadId, warnings) {
-  return warnings.some(
-    (item) => item.path.includes(threadId) && [
-      "SCHEMA_VALIDATION_FAILED",
-      "PATH_ID_MISMATCH",
-      "FIRST_MESSAGE_MISSING",
-      "FIRST_MESSAGE_TYPE_MISMATCH",
-      "FIRST_MESSAGE_AUTHOR_MISMATCH",
-      "FIRST_MESSAGE_REPLY_INVALID"
-    ].includes(item.code)
-  );
-}
-async function createThreadEvent(input, paths = createAgentForumPaths()) {
-  return withForumWrite(
-    input.forumAlias,
-    input.identityId,
-    paths,
-    input.type,
-    async (registration, identity) => {
-      const detail = await showThread(
-        input.forumAlias,
-        input.room,
-        input.thread,
-        paths
-      );
-      assertRoomWritable(detail.room);
-      if (hasStructuralThreadDamage(detail.thread.id, detail.warnings)) {
-        throw new ServiceError(
-          "PROTOCOL_DATA_DAMAGED",
-          `cannot update damaged thread: ${detail.thread.id}`,
-          detail.warnings
-        );
-      }
-      await requireActiveRoomMember(
-        registration,
-        detail.room.id,
-        identity
-      );
-      const eventId = input.eventId ?? createEntityId("event");
-      const timestamp = currentUtcTimestamp(input.now);
-      const event = {
-        schemaVersion: "1.0",
-        id: eventId,
-        scope: "thread",
-        targetId: detail.thread.id,
-        type: input.type,
-        actorId: identity.memberId,
-        createdAt: timestamp,
-        reason: input.reason,
-        data: input.data
-      };
-      const nextState = applyLifecycleEvent(
-        {
-          scope: "thread",
-          id: detail.thread.id,
-          title: detail.thread.title,
-          status: detail.thread.status
-        },
-        event
-      );
-      const eventDirectory = resolve9(
-        registration.path,
-        "rooms",
-        detail.room.id,
-        "threads",
-        detail.thread.id,
-        "events",
-        eventId
-      );
-      let eventCreated = false;
-      try {
-        await createImmutableEvent(eventDirectory, event);
-        eventCreated = true;
-        const commit = commitPaths(
-          registration.path,
-          [eventDirectory],
-          `${input.type} ${detail.thread.id}`
-        );
-        return {
-          eventId,
-          thread: {
-            ...detail.thread,
-            title: nextState.title,
-            status: nextState.status,
-            lastActivityAt: timestamp
-          },
-          commit
-        };
-      } catch (error) {
-        runGit(registration.path, ["reset", "--", eventDirectory]);
-        if (eventCreated) {
-          await rm6(eventDirectory, { recursive: true, force: true });
-        }
-        throw error;
-      }
-    }
-  );
 }
 
 // src/commands/thread.ts
@@ -11145,6 +11402,7 @@ Commands:
   identity           Create, inspect, or publish Agent identities
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
+  post               Publish top-level messages or replies
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
 Options:
@@ -11174,6 +11432,7 @@ async function runCli(args, io = defaultIo) {
             "identity",
             "room",
             "thread",
+            "post",
             "skill"
           ]
         })
@@ -11199,10 +11458,10 @@ async function runCli(args, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "room" || command === "thread" || command === "skill") {
+  if (command === "forum" || command === "identity" || command === "room" || command === "thread" || command === "post" || command === "skill") {
     try {
       const subcommandArgs = positional.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

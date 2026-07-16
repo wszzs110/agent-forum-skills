@@ -5,7 +5,10 @@ import type {
   LocalIdentity,
 } from "../config/local-config.js";
 import { createEntityId, isEntityId } from "../domain/ids.js";
-import { isKnownMessageType } from "../domain/message-types.js";
+import {
+  isKnownMessageType,
+  type KnownMessageType,
+} from "../domain/message-types.js";
 import {
   applyLifecycleEvent,
   isKnownLifecycleEventType,
@@ -86,6 +89,20 @@ export interface CreateThreadInput {
   body: string;
   identityId?: string;
   threadId?: string;
+  messageId?: string;
+  now?: Date;
+}
+
+export interface CreatePostInput {
+  forumAlias: string;
+  room: string;
+  thread: string;
+  type: KnownMessageType | string;
+  body: string;
+  replyTo?: string | null;
+  mentions?: string[];
+  references?: Array<{ kind: string; value: string }>;
+  identityId?: string;
   messageId?: string;
   now?: Date;
 }
@@ -346,6 +363,28 @@ async function readThreadDirectory(
     threadDirectoryName,
   );
   const warnings = [...messageResult.warnings];
+  const messageIds = new Set(
+    messageResult.messages.map((message) => message.id),
+  );
+  for (const message of messageResult.messages) {
+    if (message.replyTo === message.id) {
+      warnings.push(
+        structuralWarning(
+          "MESSAGE_SELF_REPLY",
+          resolve(directory, "messages", message.id, "message.json"),
+          "message replyTo cannot reference itself",
+        ),
+      );
+    } else if (message.replyTo !== null && !messageIds.has(message.replyTo)) {
+      warnings.push(
+        structuralWarning(
+          "REPLY_TARGET_MISSING",
+          resolve(directory, "messages", message.id, "message.json"),
+          `reply target is missing or damaged: ${message.replyTo}`,
+        ),
+      );
+    }
+  }
   const firstMessage = messageResult.messages.find(
     (message) => message.id === base.firstMessageId,
   );
@@ -663,20 +702,143 @@ export async function createThread(
 }
 
 function hasStructuralThreadDamage(
-  threadId: string,
+  thread: Pick<ThreadView, "id" | "firstMessageId">,
   warnings: ProtocolWarning[],
 ): boolean {
-  return warnings.some(
-    (item) =>
-      item.path.includes(threadId) &&
-      [
-        "SCHEMA_VALIDATION_FAILED",
-        "PATH_ID_MISMATCH",
-        "FIRST_MESSAGE_MISSING",
-        "FIRST_MESSAGE_TYPE_MISMATCH",
-        "FIRST_MESSAGE_AUTHOR_MISMATCH",
-        "FIRST_MESSAGE_REPLY_INVALID",
-      ].includes(item.code),
+  return warnings.some((item) => {
+    if (!item.path.includes(thread.id)) return false;
+    if (item.code.startsWith("FIRST_MESSAGE_")) return true;
+    if (
+      !["SCHEMA_VALIDATION_FAILED", "PATH_ID_MISMATCH"].includes(item.code)
+    ) {
+      return false;
+    }
+    return (
+      item.path.endsWith("thread.json") ||
+      item.path.includes(thread.firstMessageId)
+    );
+  });
+}
+
+export async function createPost(
+  input: CreatePostInput,
+  paths: AgentForumPaths = createAgentForumPaths(),
+): Promise<{ message: MessageView; thread: ThreadView; commit: string }> {
+  if (!isKnownMessageType(input.type)) {
+    throw new ServiceError(
+      "MESSAGE_TYPE_INVALID",
+      `unsupported message type: ${input.type}`,
+    );
+  }
+  const type = input.type;
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    input.replyTo ? "post reply" : "post create",
+    async (registration, identity) => {
+      const detail = await showThread(
+        input.forumAlias,
+        input.room,
+        input.thread,
+        paths,
+      );
+      assertRoomWritable(detail.room);
+      if (hasStructuralThreadDamage(detail.thread, detail.warnings)) {
+        throw new ServiceError(
+          "PROTOCOL_DATA_DAMAGED",
+          `cannot post to damaged thread: ${detail.thread.id}`,
+          detail.warnings,
+        );
+      }
+      if (detail.thread.status !== "open") {
+        throw new ServiceError(
+          "THREAD_CLOSED",
+          `cannot post to closed thread: ${detail.thread.id}`,
+        );
+      }
+      await requireActiveRoomMember(
+        registration,
+        detail.room.id,
+        identity,
+      );
+      const replyTo = input.replyTo ?? null;
+      if (
+        replyTo !== null &&
+        !detail.messages.some((message) => message.id === replyTo)
+      ) {
+        throw new ServiceError(
+          "MESSAGE_NOT_FOUND",
+          `reply target was not found in thread ${detail.thread.id}: ${replyTo}`,
+        );
+      }
+
+      const messageId = input.messageId ?? createEntityId("message");
+      const timestamp = currentUtcTimestamp(input.now);
+      const metadata = {
+        schemaVersion: "1.0",
+        id: messageId,
+        threadId: detail.thread.id,
+        authorId: identity.memberId,
+        type,
+        createdAt: timestamp,
+        replyTo,
+        mentions: input.mentions ?? [],
+        references: input.references ?? [],
+      };
+      const messageDirectory = resolve(
+        registration.path,
+        "rooms",
+        detail.room.id,
+        "threads",
+        detail.thread.id,
+        "messages",
+        messageId,
+      );
+      let messageCreated = false;
+      try {
+        await createImmutableMessage(
+          messageDirectory,
+          metadata,
+          input.body,
+        );
+        messageCreated = true;
+        const commit = commitPaths(
+          registration.path,
+          [messageDirectory],
+          `${replyTo ? "Reply in" : "Post to"} thread ${detail.thread.id}`,
+        );
+        const message: MessageView = {
+          id: messageId,
+          threadId: detail.thread.id,
+          authorId: identity.memberId,
+          type,
+          createdAt: timestamp,
+          replyTo,
+          mentions: [...(input.mentions ?? [])],
+          references: [...(input.references ?? [])],
+          body: input.body,
+        };
+        return {
+          message,
+          thread: {
+            ...detail.thread,
+            lastActivityAt:
+              timestamp > detail.thread.lastActivityAt
+                ? timestamp
+                : detail.thread.lastActivityAt,
+            messageCount: detail.thread.messageCount + 1,
+          },
+          commit,
+        };
+      } catch (error) {
+        runGit(registration.path, ["reset", "--", messageDirectory]);
+        if (messageCreated) {
+          await rm(messageDirectory, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    },
   );
 }
 
@@ -697,7 +859,7 @@ export async function createThreadEvent(
         paths,
       );
       assertRoomWritable(detail.room);
-      if (hasStructuralThreadDamage(detail.thread.id, detail.warnings)) {
+      if (hasStructuralThreadDamage(detail.thread, detail.warnings)) {
         throw new ServiceError(
           "PROTOCOL_DATA_DAMAGED",
           `cannot update damaged thread: ${detail.thread.id}`,

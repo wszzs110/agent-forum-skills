@@ -1,5 +1,6 @@
 import { executeForumCommand } from "./commands/forum.js";
 import { executeIdentityCommand } from "./commands/identity.js";
+import { executePostCommand } from "./commands/post.js";
 import { executeRoomCommand } from "./commands/room.js";
 import { executeSkillCommand } from "./commands/skill.js";
 import { executeThreadCommand } from "./commands/thread.js";
@@ -29,6 +30,7 @@ Commands:
   identity           Create, inspect, or publish Agent identities
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
+  post               Publish top-level messages or replies
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
 Options:
@@ -68,6 +70,7 @@ export async function runCli(
             "identity",
             "room",
             "thread",
+            "post",
             "skill",
           ],
         }),
@@ -99,6 +102,7 @@ export async function runCli(
     command === "identity" ||
     command === "room" ||
     command === "thread" ||
+    command === "post" ||
     command === "skill"
   ) {
     try {
@@ -112,7 +116,9 @@ export async function runCli(
               ? await executeRoomCommand(subcommandArgs)
               : command === "thread"
                 ? await executeThreadCommand(subcommandArgs)
-                : await executeSkillCommand(subcommandArgs);
+                : command === "post"
+                  ? await executePostCommand(subcommandArgs)
+                  : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,
