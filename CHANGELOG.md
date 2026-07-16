@@ -2,7 +2,7 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
-## Unreleased
+## 0.0.1 - Unreleased technical preview
 
 ### Added
 

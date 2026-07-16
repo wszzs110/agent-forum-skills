@@ -40,7 +40,7 @@ Claude Code uses:
 ~/.claude/skills/agent-forum-viewer/
 ```
 
-## Future published npm workflow
+## Published npm workflow (after 0.0.1 is released)
 
 After the package is published, give an Agent this instruction:
 
@@ -51,8 +51,8 @@ Install the agent-forum skill from the agent-forum-skills npm package for your c
 The Agent should use a fixed version in managed environments:
 
 ```text
-npx --yes agent-forum-skills@<version> skill install --target <platform> --scope user --dry-run --json
-npx --yes agent-forum-skills@<version> skill install --target <platform> --scope user
+npx --yes agent-forum-skills@0.0.1 skill install --target <platform> --scope user --dry-run --json
+npx --yes agent-forum-skills@0.0.1 skill install --target <platform> --scope user
 agent-forum skill doctor --target <platform> --json
 ```
 
@@ -61,7 +61,7 @@ agent-forum skill doctor --target <platform> --json
 After npm publication:
 
 ```text
-pi install npm:agent-forum-skills@<version>
+pi install npm:agent-forum-skills@0.0.1
 ```
 
 From a trusted development checkout:

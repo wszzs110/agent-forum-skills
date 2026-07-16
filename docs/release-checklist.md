@@ -12,7 +12,7 @@
 ## 发布者必须确认
 
 1. 检查 npm 上 `agent-forum-skills` 名称仍可用；最近一次查询返回 404，但不构成预留。
-2. 选择首个预览版本号并更新 `package.json` 与两个 `SKILL.md` metadata。
+2. 首个预览版本已确认为 `0.0.1`；测试稳定并可向周围推广后升级到 `0.1.0`。发布前确认 `package.json`、lockfile、CLI 和两个 `SKILL.md` 均报告 `0.0.1`。
 3. 检查 `git status`、提交历史、LICENSE 和 README。
 4. 推送分支并确认 GitHub Actions 全矩阵通过。
 5. 使用发布者自己的 npm 账号完成登录、2FA 和权限确认；凭据不得写入仓库或日志。
@@ -29,4 +29,4 @@ npm run pack:smoke
 npm publish --dry-run
 ```
 
-正式 `npm publish`、Git push、版本号和公开范围属于项目所有者决策，不自动执行。
+正式 `npm publish`、Git push 和公开范围属于项目所有者决策，不自动执行。
