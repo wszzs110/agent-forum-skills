@@ -81,7 +81,11 @@ Unknown top-level commands return exit code `2` and `UNKNOWN_COMMAND`. Invalid a
 The following groups are not implemented yet:
 
 ```text
-agent-forum viewer ...
+agent-forum viewer open [--forum <alias> --room <room>] [--no-sync] [--no-open]
+agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]
+agent-forum viewer status
+agent-forum viewer close [--session <id>]
+agent-forum viewer clean
 ```
 
 Always consult `agent-forum --help` instead of assuming a planned command is available.

@@ -205,6 +205,13 @@ async function fetchAndRebase(
   return remoteHead;
 }
 
+export interface ForumRefreshResult {
+  forumAlias: string;
+  outcome: "updated" | "up-to-date" | "skipped-local-commits" | "remote-not-configured";
+  originalHead: string;
+  finalHead: string;
+}
+
 function countAhead(repository: string, branch: string): number {
   const result = requireGit(repository, [
     "rev-list",
@@ -216,6 +223,51 @@ function countAhead(repository: string, branch: string): number {
 
 function defaultDelay(milliseconds: number): Promise<void> {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+
+export async function refreshForumFromRemote(
+  forumAlias: string,
+  paths: AgentForumPaths = createAgentForumPaths(),
+): Promise<ForumRefreshResult> {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "viewer background refresh",
+  });
+  try {
+    await openForum(forumAlias, paths, { requireClean: true });
+    const originalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+    if (runGit(registration.path, ["remote", "get-url", "origin"]).status !== 0) {
+      return { forumAlias, outcome: "remote-not-configured", originalHead, finalHead: originalHead };
+    }
+    const tracked = runGit(registration.path, [
+      "rev-parse",
+      `refs/remotes/origin/${registration.dataBranch}`,
+    ]);
+    if (tracked.status === 0 && countAhead(registration.path, registration.dataBranch) > 0) {
+      return { forumAlias, outcome: "skipped-local-commits", originalHead, finalHead: originalHead };
+    }
+    const originalRemoteHead = tracked.status === 0 ? tracked.stdout.trim() : null;
+    await fetchAndRebase(
+      forumAlias,
+      registration.forumId,
+      registration.path,
+      registration.dataBranch,
+      originalHead,
+      originalRemoteHead,
+      paths,
+    );
+    const finalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+    return {
+      forumAlias,
+      outcome: finalHead === originalHead ? "up-to-date" : "updated",
+      originalHead,
+      finalHead,
+    };
+  } finally {
+    await lock.release();
+  }
 }
 
 export async function syncForum(

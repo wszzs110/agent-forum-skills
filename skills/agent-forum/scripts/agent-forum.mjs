@@ -2976,7 +2976,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve16.call(this, root, ref);
+      let _sch = resolve18.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3003,7 +3003,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve16(root, ref) {
+    function resolve18(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3634,55 +3634,55 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve16(baseURI, relativeURI, options) {
+    function resolve18(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative2, options, skipNormalization) {
+    function resolveComponent(base, relative3, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse(serialize(base, options), options);
-        relative2 = parse(serialize(relative2, options), options);
+        relative3 = parse(serialize(relative3, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative2.scheme) {
-        target.scheme = relative2.scheme;
-        target.userinfo = relative2.userinfo;
-        target.host = relative2.host;
-        target.port = relative2.port;
-        target.path = removeDotSegments(relative2.path || "");
-        target.query = relative2.query;
+      if (!options.tolerant && relative3.scheme) {
+        target.scheme = relative3.scheme;
+        target.userinfo = relative3.userinfo;
+        target.host = relative3.host;
+        target.port = relative3.port;
+        target.path = removeDotSegments(relative3.path || "");
+        target.query = relative3.query;
       } else {
-        if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
-          target.userinfo = relative2.userinfo;
-          target.host = relative2.host;
-          target.port = relative2.port;
-          target.path = removeDotSegments(relative2.path || "");
-          target.query = relative2.query;
+        if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
+          target.userinfo = relative3.userinfo;
+          target.host = relative3.host;
+          target.port = relative3.port;
+          target.path = removeDotSegments(relative3.path || "");
+          target.query = relative3.query;
         } else {
-          if (!relative2.path) {
+          if (!relative3.path) {
             target.path = base.path;
-            if (relative2.query !== void 0) {
-              target.query = relative2.query;
+            if (relative3.query !== void 0) {
+              target.query = relative3.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative2.path[0] === "/") {
-              target.path = removeDotSegments(relative2.path);
+            if (relative3.path[0] === "/") {
+              target.path = removeDotSegments(relative3.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative2.path;
+                target.path = "/" + relative3.path;
               } else if (!base.path) {
-                target.path = relative2.path;
+                target.path = relative3.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative2.query;
+            target.query = relative3.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -3690,7 +3690,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative2.fragment;
+      target.fragment = relative3.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -3892,7 +3892,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve16,
+      resolve: resolve18,
       resolveComponent,
       equal,
       serialize,
@@ -7345,7 +7345,7 @@ async function acquireForumLock(options) {
   const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
   const currentHostname = options.hostname ?? hostname();
   const currentPid = options.pid ?? process.pid;
-  const isProcessAlive = options.isProcessAlive ?? defaultProcessAlive;
+  const isProcessAlive2 = options.isProcessAlive ?? defaultProcessAlive;
   const owner = {
     token: randomUUID(),
     pid: currentPid,
@@ -7389,7 +7389,7 @@ async function acquireForumLock(options) {
       const existing = await readOwner(options.lockPath);
       const age = await lockAgeMs(options.lockPath, existing, now);
       const sameHost = !existing || existing.hostname === currentHostname;
-      const alive = existing && sameHost ? isProcessAlive(existing.pid) : false;
+      const alive = existing && sameHost ? isProcessAlive2(existing.pid) : false;
       const removable = age >= staleAfterMs && sameHost && !alive;
       if (attempt === 0 && removable) {
         try {
@@ -7418,7 +7418,7 @@ async function clearStaleForumLock(options) {
   const now = options.now ?? /* @__PURE__ */ new Date();
   const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
   const currentHostname = options.hostname ?? hostname();
-  const isProcessAlive = options.isProcessAlive ?? defaultProcessAlive;
+  const isProcessAlive2 = options.isProcessAlive ?? defaultProcessAlive;
   let owner;
   try {
     owner = await readOwner(options.lockPath);
@@ -7438,7 +7438,7 @@ async function clearStaleForumLock(options) {
     throw error;
   }
   const sameHost = !owner || owner.hostname === currentHostname;
-  const alive = owner && sameHost ? isProcessAlive(owner.pid) : false;
+  const alive = owner && sameHost ? isProcessAlive2(owner.pid) : false;
   if (age < staleAfterMs || !sameHost || alive) {
     throw new StorageError(
       "LOCK_NOT_STALE",
@@ -11935,8 +11935,8 @@ async function validateRebasedForum(forumAlias, repository, originalHead, paths)
   }
 }
 async function fetchAndRebase(forumAlias, forumId, repository, branch, originalHead, originalRemoteHead, paths) {
-  const fetch = runGit(repository, ["fetch", "origin", branch]);
-  if (fetch.status !== 0) throw classifyTransportFailure("fetch", fetch);
+  const fetch2 = runGit(repository, ["fetch", "origin", branch]);
+  if (fetch2.status !== 0) throw classifyTransportFailure("fetch", fetch2);
   const remoteHead = requireGit(repository, [
     "rev-parse",
     `refs/remotes/origin/${branch}`
@@ -12023,6 +12023,47 @@ function countAhead(repository, branch) {
 }
 function defaultDelay(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+async function refreshForumFromRemote(forumAlias, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "viewer background refresh"
+  });
+  try {
+    await openForum(forumAlias, paths, { requireClean: true });
+    const originalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+    if (runGit(registration.path, ["remote", "get-url", "origin"]).status !== 0) {
+      return { forumAlias, outcome: "remote-not-configured", originalHead, finalHead: originalHead };
+    }
+    const tracked = runGit(registration.path, [
+      "rev-parse",
+      `refs/remotes/origin/${registration.dataBranch}`
+    ]);
+    if (tracked.status === 0 && countAhead(registration.path, registration.dataBranch) > 0) {
+      return { forumAlias, outcome: "skipped-local-commits", originalHead, finalHead: originalHead };
+    }
+    const originalRemoteHead = tracked.status === 0 ? tracked.stdout.trim() : null;
+    await fetchAndRebase(
+      forumAlias,
+      registration.forumId,
+      registration.path,
+      registration.dataBranch,
+      originalHead,
+      originalRemoteHead,
+      paths
+    );
+    const finalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+    return {
+      forumAlias,
+      outcome: finalHead === originalHead ? "up-to-date" : "updated",
+      originalHead,
+      finalHead
+    };
+  } finally {
+    await lock.release();
+  }
 }
 async function syncForum(forumAlias, paths = createAgentForumPaths(), options = {}) {
   const config = await loadLocalConfig(paths);
@@ -13511,14 +13552,20 @@ function emptyState() {
 function stateFile(homeDirectory) {
   return resolve15(homeDirectory, ".AgentForum", "state", "installations.json");
 }
-function skillDestination(target, homeDirectory = homedir2()) {
+function namedSkillDestination(target, skillName, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve15(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve15(homeDirectory, ".agents", "skills", skillName);
   }
   if (target === "claude-code") {
-    return resolve15(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve15(homeDirectory, ".claude", "skills", skillName);
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
+}
+function skillDestination(target, homeDirectory = homedir2()) {
+  return namedSkillDestination(target, "agent-forum", homeDirectory);
+}
+function viewerSkillDestination(target, homeDirectory = homedir2()) {
+  return namedSkillDestination(target, "agent-forum-viewer", homeDirectory);
 }
 async function pathExists4(path) {
   try {
@@ -13636,124 +13683,99 @@ async function replaceDirectory(source, destination) {
 }
 async function installSkill(options) {
   const homeDirectory = options.homeDirectory ?? homedir2();
-  const source = await resolveSkillSource(options.sourceDirectory);
-  const destination = skillDestination(options.target, homeDirectory);
-  const sourceFiles = await collectFiles(source);
-  const destinationExists = await pathExists4(destination);
-  const destinationFiles = destinationExists ? await collectFiles(destination, destination, true) : void 0;
-  const unchanged = destinationFiles ? sameFiles(sourceFiles, destinationFiles) : false;
-  if (destinationExists && !unchanged && !options.force) {
-    throw new SkillInstallationError(
-      "INSTALLATION_CONFLICT",
-      `destination exists with different files: ${destination}`
-    );
+  const coreSource = await resolveSkillSource(options.sourceDirectory);
+  const viewerSource = resolve15(dirname3(coreSource), "agent-forum-viewer");
+  if (!await pathExists4(resolve15(viewerSource, "SKILL.md"))) {
+    throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-viewer/SKILL.md");
   }
+  const payloads = [
+    { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
+    { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) }
+  ];
+  const inspected = await Promise.all(payloads.map(async (payload) => {
+    const files2 = await collectFiles(payload.source);
+    const exists2 = await pathExists4(payload.destination);
+    const current = exists2 ? await collectFiles(payload.destination, payload.destination, true) : void 0;
+    return { ...payload, files: files2, exists: exists2, unchanged: current ? sameFiles(files2, current) : false };
+  }));
+  const conflict = inspected.find((item) => item.exists && !item.unchanged);
+  if (conflict && !options.force) {
+    throw new SkillInstallationError("INSTALLATION_CONFLICT", `destination exists with different files: ${conflict.destination}`);
+  }
+  const destinations = inspected.map((item) => item.destination);
+  const files = inspected.reduce((total, item) => total + Object.keys(item.files).length, 0);
   if (options.dryRun) {
-    return {
-      action: destinationExists ? unchanged ? "unchanged" : "would-replace" : "would-install",
-      target: options.target,
-      destination,
-      version: VERSION,
-      files: Object.keys(sourceFiles).length,
-      requiresReload: true
-    };
+    const changed = inspected.some((item) => !item.unchanged);
+    const action = !changed ? "unchanged" : inspected.some((item) => item.exists && !item.unchanged) ? "would-replace" : "would-install";
+    return { action, target: options.target, destination: destinations[0], destinations, version: VERSION, files, requiresReload: true };
   }
-  if (!unchanged) await replaceDirectory(source, destination);
+  for (const item of inspected) if (!item.unchanged) await replaceDirectory(item.source, item.destination);
   const state = await loadState(homeDirectory);
-  const existing = state.installations.find(
-    (installation) => installation.path === destination
-  );
   const now = options.now ?? (/* @__PURE__ */ new Date()).toISOString();
-  const targets2 = [.../* @__PURE__ */ new Set([...existing?.targets ?? [], options.target])].sort();
-  const record = {
-    path: destination,
-    targets: targets2,
-    version: VERSION,
-    files: sourceFiles,
-    installedAt: existing?.installedAt ?? now,
-    updatedAt: now
-  };
-  const installations = existing ? state.installations.map(
-    (installation) => installation.path === destination ? record : installation
-  ) : [...state.installations, record];
+  let installations = [...state.installations];
+  for (const item of inspected) {
+    const existing = installations.find((record2) => record2.path === item.destination);
+    const record = {
+      path: item.destination,
+      targets: [.../* @__PURE__ */ new Set([...existing?.targets ?? [], options.target])].sort(),
+      version: VERSION,
+      files: item.files,
+      installedAt: existing?.installedAt ?? now,
+      updatedAt: now
+    };
+    installations = existing ? installations.map((candidate) => candidate.path === item.destination ? record : candidate) : [...installations, record];
+  }
   await saveState(homeDirectory, { formatVersion: 1, installations });
-  return {
-    action: unchanged ? "unchanged" : "installed",
-    target: options.target,
-    destination,
-    version: VERSION,
-    files: Object.keys(sourceFiles).length,
-    requiresReload: true
-  };
+  return { action: inspected.every((item) => item.unchanged) ? "unchanged" : "installed", target: options.target, destination: destinations[0], destinations, version: VERSION, files, requiresReload: true };
 }
 async function getSkillStatus(target, homeDirectory = homedir2()) {
   const destination = skillDestination(target, homeDirectory);
+  const destinations = [destination, viewerSkillDestination(target, homeDirectory)];
   const state = await loadState(homeDirectory);
-  const record = state.installations.find(
-    (installation) => installation.path === destination && installation.targets.includes(target)
-  );
-  if (!await pathExists4(destination)) {
-    return { target, destination, status: "not-installed" };
+  const records = destinations.map((path) => state.installations.find(
+    (installation) => installation.path === path && installation.targets.includes(target)
+  ));
+  const exists2 = await Promise.all(destinations.map((path) => pathExists4(path)));
+  if (exists2.every((value) => !value)) return { target, destination, destinations, status: "not-installed" };
+  if (records.some((record) => !record) || exists2.some((value) => !value)) return { target, destination, destinations, status: "unmanaged" };
+  let modified = false;
+  let files = 0;
+  for (let index = 0; index < destinations.length; index += 1) {
+    const record = records[index];
+    const current = await collectFiles(destinations[index], destinations[index], true);
+    if (!sameFiles(current, record.files)) modified = true;
+    files += Object.keys(record.files).length;
   }
-  if (!record) return { target, destination, status: "unmanaged" };
-  const files = await collectFiles(destination, destination, true);
-  return {
-    target,
-    destination,
-    status: sameFiles(files, record.files) ? "installed" : "modified",
-    version: record.version,
-    files: Object.keys(record.files).length
-  };
+  return { target, destination, destinations, status: modified ? "modified" : "installed", version: records[0].version, files };
 }
 async function uninstallSkill(options) {
   const homeDirectory = options.homeDirectory ?? homedir2();
   const destination = skillDestination(options.target, homeDirectory);
+  const destinations = [destination, viewerSkillDestination(options.target, homeDirectory)];
   const state = await loadState(homeDirectory);
-  const record = state.installations.find(
-    (installation) => installation.path === destination && installation.targets.includes(options.target)
-  );
-  if (!record) {
-    return {
-      action: "not-installed",
-      target: options.target,
-      destination,
-      removedFiles: false
-    };
-  }
-  const remainingTargets = record.targets.filter(
-    (target) => target !== options.target
-  );
-  const shouldRemoveFiles = remainingTargets.length === 0;
-  if (shouldRemoveFiles && await pathExists4(destination)) {
-    const currentFiles = await collectFiles(destination, destination, true);
-    if (!sameFiles(currentFiles, record.files) && !options.force) {
-      throw new SkillInstallationError(
-        "INSTALLATION_MODIFIED",
-        `installed skill contains modified or additional files: ${destination}`
-      );
+  const records = state.installations.filter((installation) => destinations.includes(installation.path) && installation.targets.includes(options.target));
+  if (records.length === 0) return { action: "not-installed", target: options.target, destination, destinations, removedFiles: false };
+  for (const record of records) {
+    const remaining = record.targets.filter((target) => target !== options.target);
+    if (remaining.length === 0 && await pathExists4(record.path)) {
+      const current = await collectFiles(record.path, record.path, true);
+      if (!sameFiles(current, record.files) && !options.force) throw new SkillInstallationError("INSTALLATION_MODIFIED", `installed skill contains modified or additional files: ${record.path}`);
     }
   }
-  if (options.dryRun) {
-    return {
-      action: "would-uninstall",
-      target: options.target,
-      destination,
-      removedFiles: shouldRemoveFiles
-    };
+  const removesFiles = records.some((record) => record.targets.length === 1);
+  if (options.dryRun) return { action: "would-uninstall", target: options.target, destination, destinations, removedFiles: removesFiles };
+  let installations = [...state.installations];
+  for (const record of records) {
+    const remaining = record.targets.filter((target) => target !== options.target);
+    if (remaining.length === 0) {
+      await rm9(record.path, { recursive: true, force: true });
+      installations = installations.filter((candidate) => candidate.path !== record.path);
+    } else {
+      installations = installations.map((candidate) => candidate.path === record.path ? { ...candidate, targets: remaining } : candidate);
+    }
   }
-  if (shouldRemoveFiles) {
-    await rm9(destination, { recursive: true, force: true });
-  }
-  const installations = shouldRemoveFiles ? state.installations.filter((installation) => installation.path !== destination) : state.installations.map(
-    (installation) => installation.path === destination ? { ...installation, targets: remainingTargets } : installation
-  );
   await saveState(homeDirectory, { formatVersion: 1, installations });
-  return {
-    action: shouldRemoveFiles ? "uninstalled" : "unregistered",
-    target: options.target,
-    destination,
-    removedFiles: shouldRemoveFiles
-  };
+  return { action: removesFiles ? "uninstalled" : "unregistered", target: options.target, destination, destinations, removedFiles: removesFiles };
 }
 async function doctorSkill(target, homeDirectory = homedir2()) {
   const major = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
@@ -14084,6 +14106,544 @@ commit: ${result.commit}
   }
 }
 
+// src/services/viewer.ts
+import { randomBytes as randomBytes2, randomUUID as randomUUID7 } from "node:crypto";
+import { spawn } from "node:child_process";
+import { mkdir as mkdir6, readFile as readFile12, readdir as readdir10, rm as rm10 } from "node:fs/promises";
+import { dirname as dirname4, resolve as resolve17 } from "node:path";
+
+// src/services/timeline-cache.ts
+import { readFile as readFile11, readdir as readdir9 } from "node:fs/promises";
+import { relative as relative2, resolve as resolve16 } from "node:path";
+function cachePath(paths, forumId) {
+  return resolve16(forumStatePath(paths, forumId), "cache", "snapshot.json");
+}
+function sanitizeWarnings(repository, warnings) {
+  return warnings.map((warning) => {
+    const local = relative2(repository, warning.path).replaceAll("\\", "/");
+    return {
+      ...warning,
+      path: local && !local.startsWith("..") ? local : "<outside-forum>"
+    };
+  });
+}
+async function readEventDirectory(directory) {
+  let names;
+  try {
+    names = await readdir9(directory);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
+    throw error;
+  }
+  const events = [];
+  for (const name of names) {
+    try {
+      const event = await readJsonDocument(resolve16(directory, name, "event.json"), "event");
+      events.push({
+        id: String(event.id),
+        kind: "event",
+        type: String(event.type),
+        actorId: String(event.actorId),
+        createdAt: String(event.createdAt),
+        reason: String(event.reason),
+        data: event.data
+      });
+    } catch {
+    }
+  }
+  return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}
+async function readRoomMembers(repository, roomId) {
+  const members = {};
+  const directory = resolve16(repository, "rooms", roomId, "members");
+  let names = [];
+  try {
+    names = await readdir9(directory);
+  } catch {
+    return members;
+  }
+  for (const name of names) {
+    try {
+      const membership = await readJsonDocument(resolve16(directory, name, "membership.json"), "room-member");
+      members[name] = {
+        role: String(membership.role),
+        responsibility: String(membership.responsibility),
+        status: String(membership.status)
+      };
+    } catch {
+    }
+  }
+  return members;
+}
+async function buildRoom(forumAlias, repository, room, head, paths) {
+  const threads = await listThreads(forumAlias, room.id, paths);
+  const cachedThreads = [];
+  const warnings = [...threads.warnings];
+  for (const thread of threads.threads) {
+    const detail = await showThread(forumAlias, room.id, thread.id, paths);
+    warnings.push(...detail.warnings);
+    const events = await readEventDirectory(
+      resolve16(repository, "rooms", room.id, "threads", thread.id, "events")
+    );
+    const timeline = [
+      ...detail.messages.map((message) => ({ ...message, kind: "message" })),
+      ...events
+    ].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    cachedThreads.push({ thread: detail.thread, timeline });
+  }
+  cachedThreads.sort(
+    (a, b) => b.thread.lastActivityAt.localeCompare(a.thread.lastActivityAt) || a.thread.id.localeCompare(b.thread.id)
+  );
+  return {
+    cached: {
+      room,
+      sourceHead: head,
+      members: await readRoomMembers(repository, room.id),
+      events: await readEventDirectory(resolve16(repository, "rooms", room.id, "events")),
+      threads: cachedThreads
+    },
+    warnings
+  };
+}
+async function readMembers(repository) {
+  const members = {};
+  const directory = resolve16(repository, "members");
+  let names = [];
+  try {
+    names = await readdir9(directory);
+  } catch {
+    return members;
+  }
+  for (const name of names) {
+    try {
+      const profile = await readJsonDocument(resolve16(directory, name, "profile.json"), "member-profile");
+      members[name] = {
+        displayName: String(profile.displayName),
+        role: String(profile.role),
+        responsibility: String(profile.responsibility),
+        status: String(profile.status)
+      };
+    } catch {
+    }
+  }
+  return members;
+}
+async function loadCache(path) {
+  try {
+    const value = JSON.parse(await readFile11(path, "utf8"));
+    const compatible = value.formatVersion === 1 && typeof value.sourceHead === "string" && Array.isArray(value.rooms) && value.rooms.every((room) => room && typeof room === "object" && "members" in room) && value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
+    return compatible ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function affectedRooms(repository, oldHead, newHead) {
+  const diff = runGit(repository, ["diff", "--name-only", `${oldHead}..${newHead}`]);
+  if (diff.status !== 0) return void 0;
+  const ids = /* @__PURE__ */ new Set();
+  for (const path of diff.stdout.split(/\r?\n/u)) {
+    const match = /^rooms\/([^/]+)\//u.exec(path.replaceAll("\\", "/"));
+    if (match?.[1]) ids.add(match[1]);
+  }
+  return ids;
+}
+async function getForumSnapshot(forumAlias, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const head = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+  const path = cachePath(paths, registration.forumId);
+  const existing = await loadCache(path);
+  if (existing?.sourceHead === head) return { snapshot: existing, cache: "hit" };
+  const lock = await acquireForumLock({
+    lockPath: resolve16(paths.locksDirectory, `${registration.forumId}-cache.lock`),
+    command: "cache rebuild"
+  });
+  try {
+    const latest = await loadCache(path);
+    if (latest?.sourceHead === head) return { snapshot: latest, cache: "hit" };
+    const affected = latest ? affectedRooms(registration.path, latest.sourceHead, head) : void 0;
+    const [forum, rooms] = await Promise.all([
+      showForum(forumAlias, paths),
+      listRooms(forumAlias, paths)
+    ]);
+    const oldRooms = new Map((latest?.rooms ?? []).map((room) => [room.room.id, room]));
+    const cachedRooms = [];
+    const warnings = [...forum.warnings, ...rooms.warnings];
+    for (const room of rooms.rooms) {
+      const preserved = affected && !affected.has(room.id) ? oldRooms.get(room.id) : void 0;
+      if (preserved) cachedRooms.push(preserved);
+      else {
+        const built = await buildRoom(forumAlias, registration.path, room, head, paths);
+        cachedRooms.push(built.cached);
+        warnings.push(...built.warnings);
+      }
+    }
+    cachedRooms.sort((a, b) => a.room.slug.localeCompare(b.room.slug));
+    const snapshot = {
+      formatVersion: 1,
+      forumAlias,
+      forumId: registration.forumId,
+      sourceHead: head,
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      forum: forum.forum,
+      members: await readMembers(registration.path),
+      rooms: cachedRooms,
+      warnings: sanitizeWarnings(registration.path, warnings)
+    };
+    await writeJsonAtomic(path, snapshot, { overwrite: true, mode: 384 });
+    return { snapshot, cache: latest && affected ? "incremental" : "rebuilt" };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/viewer/server.ts
+import { randomBytes } from "node:crypto";
+import { createServer } from "node:http";
+function escapeHtml(value) {
+  return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+function renderItem(item, timeline, snapshot) {
+  const actorId = item.kind === "message" ? item.authorId : item.actorId;
+  const profile = snapshot.members[actorId];
+  const actor = profile?.displayName ?? actorId;
+  let content;
+  if (item.kind === "message") {
+    const parent = item.replyTo ? timeline.find((candidate) => candidate.kind === "message" && candidate.id === item.replyTo) : void 0;
+    const reply = item.replyTo ? parent && parent.kind === "message" ? `<div class="reply">Reply to ${escapeHtml(snapshot.members[parent.authorId]?.displayName ?? parent.authorId)}: ${escapeHtml(parent.body.slice(0, 160))}</div>` : `<div class="reply missing">Reply target unavailable: ${escapeHtml(item.replyTo)}</div>` : "";
+    const mentions = item.mentions.length ? `<div class="chips">Mentions: ${item.mentions.map((id) => `<code>${escapeHtml(snapshot.members[id]?.displayName ?? id)}</code>`).join(" ")}</div>` : "";
+    const references = item.references.length ? `<div class="chips">References: ${item.references.map((reference) => `<code>${escapeHtml(reference.kind)}=${escapeHtml(reference.value)}</code>`).join(" ")}</div>` : "";
+    content = `${reply}<div class="body">${escapeHtml(item.body)}</div>${mentions}${references}`;
+  } else {
+    content = `<div class="body">${escapeHtml(item.reason)}</div><div class="chips">${escapeHtml(JSON.stringify(item.data))}</div>`;
+  }
+  const correction = `Please review and correct Agent Forum item ${item.id} in room ${item.kind === "message" ? item.threadId : "event"}. Preserve history and publish a new correction or event.`;
+  return `<article class="item ${item.kind}"><header><span class="type">${escapeHtml(item.type)}</span><span>${escapeHtml(actor)}${profile ? ` \xB7 ${escapeHtml(profile.role)}` : ""}</span><time>${escapeHtml(item.createdAt)}</time></header>${content}<footer><code>${escapeHtml(item.id)}</code> <button class="copy" data-copy="${escapeHtml(item.id)}">Copy ID</button> <button class="copy" data-copy="${escapeHtml(correction)}">Copy correction prompt</button></footer></article>`;
+}
+function renderViewerHtml(snapshot, room) {
+  const threads = room.threads.map(({ thread, timeline }) => {
+    const creator = snapshot.members[thread.createdBy]?.displayName ?? thread.createdBy;
+    return `<section class="thread"><h2>${escapeHtml(thread.title)}</h2><div class="meta"><strong>${escapeHtml(thread.kind)}</strong> \xB7 ${escapeHtml(thread.status)} \xB7 created by ${escapeHtml(creator)} at ${escapeHtml(thread.createdAt)} \xB7 ${timeline.length} timeline items \xB7 last ${escapeHtml(thread.lastActivityAt)}</div><button class="copy" data-copy="${escapeHtml(thread.id)}">Copy thread ID</button>${timeline.map((item) => renderItem(item, timeline, snapshot)).join("")}</section>`;
+  }).join("");
+  const roomEvents = room.events.length ? `<section class="thread"><h2>Room events</h2>${room.events.map((event) => renderItem(event, room.events, snapshot)).join("")}</section>` : "";
+  const activeMembers = Object.entries(room.members ?? {}).filter(([, membership]) => membership.status === "active").map(([id, membership]) => `<li>${escapeHtml(snapshot.members[id]?.displayName ?? id)} \u2014 ${escapeHtml(membership.role)} \u2014 ${escapeHtml(membership.responsibility)}</li>`).join("");
+  const warnings = snapshot.warnings.length ? `<aside class="warnings"><h2>Protocol warnings</h2>${snapshot.warnings.map((warning) => `<p><strong>${escapeHtml(warning.code)}</strong> ${escapeHtml(warning.path)} \u2014 ${escapeHtml(warning.message)}</p>`).join("")}</aside>` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:auto;padding:24px;background:#f6f7f9;color:#1d2433}h1{margin-bottom:4px}.meta,code,time{color:#667085;font-size:13px}.thread{background:#fff;border:1px solid #dfe3ea;border-radius:10px;padding:18px;margin:18px 0}.item{border-left:3px solid #7c8db5;padding:10px 14px;margin:12px 0;background:#fafbfc}.event{border-color:#b7791f}.item header{display:flex;gap:12px;flex-wrap:wrap}.type{font-weight:700}.body{white-space:pre-wrap;margin:8px 0}.reply{font-size:13px;color:#475467;background:#eef2f6;padding:7px}.missing{color:#9b2c2c}.chips{font-size:13px;margin:6px 0}.warnings{background:#fff4e5;border:1px solid #f0b45a;padding:14px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:16px}button{padding:5px 9px}footer{margin-top:8px}.notice{background:#e8f2ff;padding:10px}</style></head><body><div class="toolbar"><div><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${escapeHtml(room.room.status)} \xB7 cache ${escapeHtml(snapshot.sourceHead.slice(0, 12))} \xB7 generated ${escapeHtml(snapshot.generatedAt)}</div></div><button id="close">Close viewer</button></div><p>${escapeHtml(room.room.description)}</p><p class="notice">Read-only view. Return to your Agent conversation to request corrections; history is never edited here.</p><button class="copy" data-copy="${escapeHtml(room.room.id)}">Copy room ID</button>${activeMembers ? `<details><summary>Active members</summary><ul>${activeMembers}</ul></details>` : ""}${warnings}${roomEvents}${threads || "<p>No threads.</p>"}<script nonce="agent-forum">const revision=${JSON.stringify(snapshot.sourceHead)};document.querySelectorAll('.copy').forEach(button=>button.addEventListener('click',()=>navigator.clipboard.writeText(button.dataset.copy||'')));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<p>Viewer closed.</p>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></body></html>`;
+}
+async function startViewerServer(input) {
+  const room = input.snapshot.rooms.find(
+    (candidate) => candidate.room.id === input.roomIdOrSlug || candidate.room.slug === input.roomIdOrSlug
+  );
+  if (!room) throw new Error(`room was not found in snapshot: ${input.roomIdOrSlug}`);
+  const token = input.token ?? randomBytes(16).toString("hex");
+  const basePath = `/session/${token}/`;
+  let currentSnapshot = input.snapshot;
+  let currentRoom = room;
+  let html = renderViewerHtml(currentSnapshot, currentRoom);
+  let revision = currentSnapshot.sourceHead;
+  const idleMs = input.idleMs ?? 5 * 6e4;
+  let timer;
+  let server;
+  let resolveClosed;
+  const closed = new Promise((resolveValue) => {
+    resolveClosed = resolveValue;
+  });
+  let closing;
+  const close = () => {
+    if (closing) return closing;
+    closing = new Promise((resolveClose) => {
+      clearTimeout(timer);
+      server.close(() => {
+        resolveClosed();
+        resolveClose();
+      });
+    });
+    return closing;
+  };
+  const touch = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => void close(), idleMs);
+    timer.unref();
+  };
+  server = createServer((request, response) => {
+    touch();
+    response.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-agent-forum'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Referrer-Policy", "no-referrer");
+    response.setHeader("Cache-Control", "no-store");
+    if (request.method === "GET" && request.url === basePath) {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(html);
+      return;
+    }
+    if (request.method === "GET" && request.url === `${basePath}revision`) {
+      response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ revision }));
+      return;
+    }
+    if (request.method === "POST" && request.url === `${basePath}close`) {
+      response.writeHead(204);
+      response.end();
+      setImmediate(() => void close());
+      return;
+    }
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+  });
+  await new Promise((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(0, "127.0.0.1", () => resolveListen());
+  });
+  touch();
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    await close();
+    throw new Error("viewer did not receive a TCP port");
+  }
+  return {
+    url: `http://127.0.0.1:${address.port}${basePath}`,
+    token,
+    port: address.port,
+    closed,
+    updateSnapshot: (snapshot) => {
+      const nextRoom = snapshot.rooms.find(
+        (candidate) => candidate.room.id === room.room.id
+      );
+      if (!nextRoom) return;
+      currentSnapshot = snapshot;
+      currentRoom = nextRoom;
+      revision = snapshot.sourceHead;
+      html = renderViewerHtml(currentSnapshot, currentRoom);
+    },
+    close
+  };
+}
+
+// src/services/viewer.ts
+function sessionPath(paths, id) {
+  if (!/^[0-9a-f-]{36}$/u.test(id)) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", "invalid Viewer session ID");
+  return resolve17(paths.viewerDirectory, `${id}.json`);
+}
+async function isProcessAlive(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function readSession(path) {
+  try {
+    const value = JSON.parse(await readFile12(path, "utf8"));
+    const url = new URL(value.url);
+    const validUrl = url.protocol === "http:" && url.hostname === "127.0.0.1" && /^\/session\/[0-9a-f]{32}\/$/u.test(url.pathname);
+    return value.formatVersion === 1 && /^[0-9a-f-]{36}$/u.test(value.sessionId) && Number.isSafeInteger(value.pid) && value.pid > 0 && validUrl ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function listViewerSessions(paths = createAgentForumPaths()) {
+  let names = [];
+  try {
+    names = await readdir10(paths.viewerDirectory);
+  } catch {
+    return [];
+  }
+  const sessions = [];
+  for (const name of names.filter((name2) => name2.endsWith(".json"))) {
+    const path = resolve17(paths.viewerDirectory, name);
+    const session = await readSession(path);
+    if (session && await isProcessAlive(session.pid)) sessions.push(session);
+    else await rm10(path, { force: true });
+  }
+  return sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+async function cleanViewerSessions(paths = createAgentForumPaths()) {
+  let names = [];
+  try {
+    names = await readdir10(paths.viewerDirectory);
+  } catch {
+    return { removed: 0 };
+  }
+  let removed = 0;
+  for (const name of names.filter((name2) => name2.endsWith(".json") || name2.endsWith(".ready"))) {
+    const path = resolve17(paths.viewerDirectory, name);
+    const session = name.endsWith(".json") ? await readSession(path) : void 0;
+    if (!session || !await isProcessAlive(session.pid)) {
+      await rm10(path, { force: true });
+      removed += 1;
+    }
+  }
+  return { removed };
+}
+async function closeViewerSession(sessionId, paths = createAgentForumPaths()) {
+  const sessions = await listViewerSessions(paths);
+  const selected = sessionId ? sessions.filter((session) => session.sessionId === sessionId) : sessions;
+  if (sessionId && selected.length === 0) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", `Viewer session not found: ${sessionId}`);
+  const closed = [];
+  for (const session of selected) {
+    try {
+      await fetch(`${session.url}close`, { method: "POST", signal: AbortSignal.timeout(2e3) });
+      closed.push(session.sessionId);
+    } catch {
+    }
+    await rm10(sessionPath(paths, session.sessionId), { force: true });
+  }
+  return { closed };
+}
+async function openBrowser(url) {
+  const command = process.platform === "win32" ? "cmd.exe" : process.platform === "darwin" ? "open" : "xdg-open";
+  const args = process.platform === "win32" ? ["/d", "/s", "/c", "start", "", url] : [url];
+  return new Promise((resolveOpen) => {
+    const child = spawn(command, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
+    child.once("error", () => resolveOpen(false));
+    child.once("spawn", () => {
+      child.unref();
+      resolveOpen(true);
+    });
+  });
+}
+async function runViewerServer(input, paths = createAgentForumPaths()) {
+  const cached = await getForumSnapshot(input.forumAlias, paths);
+  const room = cached.snapshot.rooms.find((item) => item.room.id === input.room || item.room.slug === input.room);
+  if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${input.room}`);
+  const server = await startViewerServer({ snapshot: cached.snapshot, roomIdOrSlug: room.room.id, token: input.token, idleMs: input.idleMs });
+  const session = {
+    formatVersion: 1,
+    sessionId: input.sessionId,
+    forumAlias: input.forumAlias,
+    roomId: room.room.id,
+    url: server.url,
+    pid: process.pid,
+    startedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  await mkdir6(paths.viewerDirectory, { recursive: true });
+  await writeJsonAtomic(sessionPath(paths, input.sessionId), session, { overwrite: true, mode: 384 });
+  if (input.sync) {
+    void refreshForumFromRemote(input.forumAlias, paths).then(() => getForumSnapshot(input.forumAlias, paths)).then((fresh) => server.updateSnapshot(fresh.snapshot)).catch(() => void 0);
+  }
+  await server.closed;
+  await rm10(sessionPath(paths, input.sessionId), { force: true });
+}
+async function openViewer(input, paths = createAgentForumPaths()) {
+  const context = await resolveContext({
+    ...input.cwd ? { cwd: input.cwd } : {},
+    ...input.forumAlias ? { forumAlias: input.forumAlias } : {},
+    ...input.room ? { room: input.room } : {}
+  }, paths);
+  if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  const sessionId = randomUUID7();
+  const token = randomBytes2(16).toString("hex");
+  const entryPath = input.entryPath ?? process.argv[1];
+  if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
+  const args = [entryPath, "viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 6e4), "--home", dirname4(paths.root)];
+  if (input.sync === false) args.push("--no-sync");
+  const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
+  let startError;
+  child.once("error", (error) => {
+    startError = error;
+  });
+  child.unref();
+  const path = sessionPath(paths, sessionId);
+  const deadline = Date.now() + 1e4;
+  let session;
+  while (Date.now() < deadline) {
+    session = await readSession(path);
+    if (session) break;
+    if (!await isProcessAlive(child.pid ?? -1)) break;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  if (!session) throw new ServiceError("VIEWER_START_FAILED", startError?.message ?? "Viewer did not become ready within 10 seconds");
+  const browserOpened = input.openBrowser === false ? false : await openBrowser(session.url);
+  return { ...session, browserOpened };
+}
+async function generateViewerHtml(input, paths = createAgentForumPaths()) {
+  const context = await resolveContext({ ...input.cwd ? { cwd: input.cwd } : {}, ...input.forumAlias ? { forumAlias: input.forumAlias } : {}, ...input.room ? { room: input.room } : {} }, paths);
+  if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  const cached = await getForumSnapshot(context.forumAlias, paths);
+  const output2 = input.output ?? resolve17(paths.viewerDirectory, `${context.roomId}.html`);
+  const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
+  if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
+  await mkdir6(dirname4(output2), { recursive: true });
+  const html = renderViewerHtml(cached.snapshot, room);
+  await import("node:fs/promises").then(({ writeFile: writeFile3 }) => writeFile3(output2, html, { encoding: "utf8", mode: 384 }));
+  return { output: output2 };
+}
+
+// src/commands/viewer.ts
+async function executeViewerCommand(args) {
+  const subcommand = args[0];
+  if (!subcommand || subcommand === "help" || subcommand === "--help") {
+    return {
+      exitCode: ExitCode.Success,
+      command: "viewer.help",
+      data: { usage: "agent-forum viewer <open|generate|status|close|clean> [options]" },
+      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-sync] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
+    };
+  }
+  if (!["open", "generate", "status", "close", "clean", "serve"].includes(subcommand)) {
+    return invalidArgument(`unknown viewer subcommand: ${subcommand}`);
+  }
+  try {
+    if (subcommand === "status") {
+      if (args.length !== 1) return invalidArgument("viewer status accepts no options");
+      const sessions = await listViewerSessions();
+      return { exitCode: ExitCode.Success, command: "viewer.status", data: { sessions }, human: sessions.length ? sessions.map((session) => `${session.sessionId}	${session.forumAlias}	${session.url}`).join("\n") + "\n" : "No active Viewer sessions.\n" };
+    }
+    if (subcommand === "clean") {
+      if (args.length !== 1) return invalidArgument("viewer clean accepts no options");
+      const result2 = await cleanViewerSessions();
+      return { exitCode: ExitCode.Success, command: "viewer.clean", data: result2, human: `Removed ${result2.removed} stale Viewer entries.
+` };
+    }
+    if (subcommand === "close") {
+      const parsed2 = parseCommandOptions(args.slice(1), { values: ["--session"] });
+      if ("error" in parsed2) return invalidArgument(parsed2.error);
+      const result2 = await closeViewerSession(parsed2.values.get("--session"));
+      return { exitCode: ExitCode.Success, command: "viewer.close", data: result2, human: `Closed ${result2.closed.length} Viewer session(s).
+` };
+    }
+    if (subcommand === "serve") {
+      const parsed2 = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home"], flags: ["--no-sync"] });
+      if ("error" in parsed2) return invalidArgument(parsed2.error);
+      const forumAlias2 = parsed2.values.get("--forum");
+      const room2 = parsed2.values.get("--room");
+      const sessionId = parsed2.values.get("--session");
+      const token = parsed2.values.get("--token");
+      const idleMs = Number(parsed2.values.get("--idle-ms"));
+      if (!forumAlias2 || !room2 || !sessionId || !token || !Number.isInteger(idleMs) || idleMs < 1e3) return invalidArgument("invalid internal Viewer server arguments");
+      const home = parsed2.values.get("--home");
+      await runViewerServer({ forumAlias: forumAlias2, room: room2, sessionId, token, idleMs, sync: !parsed2.flags.has("--no-sync") }, createAgentForumPaths(home));
+      return { exitCode: ExitCode.Success, command: "viewer.serve", data: {}, human: "" };
+    }
+    const parsed = parseCommandOptions(args.slice(1), {
+      values: ["--forum", "--room", "--output"],
+      flags: ["--no-sync", "--no-open"]
+    });
+    if ("error" in parsed) return invalidArgument(parsed.error);
+    const forumAlias = parsed.values.get("--forum");
+    const room = parsed.values.get("--room");
+    if (Boolean(forumAlias) !== Boolean(room)) return invalidArgument("--forum and --room must be provided together");
+    if (subcommand === "generate") {
+      if (parsed.flags.size > 0) return invalidArgument("viewer generate does not accept --no-sync or --no-open");
+      const output2 = parsed.values.get("--output");
+      const result2 = await generateViewerHtml({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...output2 ? { output: output2 } : {} });
+      return { exitCode: ExitCode.Success, command: "viewer.generate", data: result2, human: `Generated ${result2.output}
+` };
+    }
+    if (parsed.values.has("--output")) return invalidArgument("viewer open does not accept --output");
+    const result = await openViewer({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, sync: !parsed.flags.has("--no-sync"), openBrowser: !parsed.flags.has("--no-open") });
+    return { exitCode: ExitCode.Success, command: "viewer.open", data: result, human: `${result.url}
+${result.browserOpened ? "Opened in the default browser." : "Open this URL manually."}
+` };
+  } catch (error) {
+    const handled = commandError(`viewer.${subcommand}`, error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
 // src/output/result.ts
 function success(command, data) {
   return { ok: true, command, data };
@@ -14119,6 +14679,7 @@ Commands:
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
   inbox              Read relevant unread Room messages and events
+  viewer             Open or manage the read-only human Viewer
   doctor             Diagnose local state, forums, locks, and remotes
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
@@ -14152,6 +14713,7 @@ async function runCli(args, io = defaultIo) {
             "thread",
             "post",
             "inbox",
+            "viewer",
             "doctor",
             "skill"
           ]
@@ -14178,10 +14740,10 @@ async function runCli(args, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "inbox" || command === "doctor" || command === "skill") {
+  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "inbox" || command === "viewer" || command === "doctor" || command === "skill") {
     try {
       const subcommandArgs = positional.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

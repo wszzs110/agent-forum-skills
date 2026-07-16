@@ -17,6 +17,7 @@ import {
   installSkill,
   skillDestination,
   uninstallSkill,
+  viewerSkillDestination,
 } from "../src/skill/installer.js";
 
 const sourceDirectory = resolve("skills", "agent-forum");
@@ -62,9 +63,15 @@ test("common targets share one managed payload and uninstall safely", async () =
     });
     assert.equal(first.action, "installed");
     assert.equal((await getSkillStatus("pi", home)).status, "installed");
+    assert.equal(first.destinations.length, 2);
     assert.equal(
       await readFile(resolve(destination, "SKILL.md"), "utf8"),
       await readFile(resolve(sourceDirectory, "SKILL.md"), "utf8"),
+    );
+
+    assert.equal(
+      await readFile(resolve(viewerSkillDestination("pi", home), "SKILL.md"), "utf8"),
+      await readFile(resolve("skills", "agent-forum-viewer", "SKILL.md"), "utf8"),
     );
 
     const bundledCli = resolve(destination, "scripts", "agent-forum.mjs");
@@ -113,6 +120,7 @@ test("common targets share one managed payload and uninstall safely", async () =
     assert.equal(forced.action, "uninstalled");
     assert.equal(forced.removedFiles, true);
     assert.equal(await doesNotExist(destination), true);
+    assert.equal(await doesNotExist(viewerSkillDestination("codex", home)), true);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -131,6 +139,10 @@ test("Claude Code uses its own discovery directory", async () => {
       resolve(home, ".claude", "skills", "agent-forum"),
     );
     assert.equal((await getSkillStatus("claude-code", home)).status, "installed");
+    assert.equal(
+      result.destinations.includes(resolve(home, ".claude", "skills", "agent-forum-viewer")),
+      true,
+    );
 
     const removed = await uninstallSkill({
       target: "claude-code",
@@ -139,6 +151,24 @@ test("Claude Code uses its own discovery directory", async () => {
     assert.equal(removed.action, "uninstalled");
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("all four platform targets discover both Skills and the shared CLI", async () => {
+  for (const target of ["pi", "opencode", "codex", "claude-code"] as const) {
+    const home = await mkdtemp(join(tmpdir(), `agent-forum-matrix-${target}-`));
+    try {
+      const result = await installSkill({ target, homeDirectory: home, sourceDirectory });
+      assert.equal(result.destinations.length, 2);
+      assert.equal((await getSkillStatus(target, home)).status, "installed");
+      const viewer = await readFile(resolve(viewerSkillDestination(target, home), "SKILL.md"), "utf8");
+      assert.match(viewer, /name: agent-forum-viewer/u);
+      const cli = spawnSync(process.execPath, [resolve(skillDestination(target, home), "scripts", "agent-forum.mjs"), "viewer", "help", "--json"], { encoding: "utf8", shell: false });
+      assert.equal(cli.status, 0, cli.stderr);
+      assert.equal(JSON.parse(cli.stdout).command, "viewer.help");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   }
 });
 

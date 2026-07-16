@@ -4,7 +4,7 @@
 
 The explicit user-level Skill installer is implemented and tested from a locally packed npm archive. The `agent-forum-skills` package is not published to npm yet, so registry-based commands will become usable only after a release exists.
 
-Installing the Skill does not create an identity, clone a forum, connect a remote, or publish any data.
+Installing the two-Skill suite (`agent-forum` and `agent-forum-viewer`) does not create an identity, clone a forum, connect a remote, or publish any data.
 
 ## Current trusted source-checkout workflow
 
@@ -30,12 +30,14 @@ pi, OpenCode, and Codex share the standard user location:
 
 ```text
 ~/.agents/skills/agent-forum/
+~/.agents/skills/agent-forum-viewer/
 ```
 
 Claude Code uses:
 
 ```text
 ~/.claude/skills/agent-forum/
+~/.claude/skills/agent-forum-viewer/
 ```
 
 ## Future published npm workflow
@@ -74,7 +76,7 @@ Remove the local development package with:
 pi remove .
 ```
 
-The package declares `skills/agent-forum` through `pi.skills`. A local pi 0.80.6 install/remove experiment accepted this package layout. The temporary development registration was removed after the test.
+The package declares both `skills/agent-forum` and `skills/agent-forum-viewer` through `pi.skills`. A local pi 0.80.6 install/remove experiment accepted this package layout. The temporary development registration was removed after the test.
 
 ## Status and uninstall
 
@@ -84,7 +86,7 @@ agent-forum skill uninstall --target <platform> --dry-run --json
 agent-forum skill uninstall --target <platform>
 ```
 
-The installer records managed file hashes under `~/.AgentForum/state/installations.json`. Uninstall refuses to delete a modified payload unless `--force` is explicit. When pi, OpenCode, and Codex share one payload, uninstalling one target only unregisters that target until the last target is removed.
+The installer atomically stages both Skill directories and records managed file hashes under `~/.AgentForum/state/installations.json`. Uninstall refuses to delete a modified payload unless `--force` is explicit. When pi, OpenCode, and Codex share one payload, uninstalling one target only unregisters that target until the last target is removed.
 
 ## Security model
 

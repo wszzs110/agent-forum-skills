@@ -30,9 +30,11 @@ if (result.status !== 0) {
     "README.md",
     "README.zh-CN.md",
     "INSTALL.md",
+    "CHANGELOG.md",
     "LICENSE",
     "skills/agent-forum/SKILL.md",
     "skills/agent-forum/scripts/agent-forum.mjs",
+    "skills/agent-forum-viewer/SKILL.md",
   ];
   const forbiddenPrefixes = ["src/", "tests/", ".planning/", "AGENTS.md"];
   const missing = required.filter((path) => !files.has(path));

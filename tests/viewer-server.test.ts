@@ -23,6 +23,7 @@ function snapshot(): ForumSnapshot {
       "member_0194f6d2-8c10-7a31-9e42-123456789ac1": {
         displayName: "Agent A",
         role: "backend",
+        responsibility: "API",
         status: "active",
       },
     },
@@ -39,6 +40,13 @@ function snapshot(): ForumSnapshot {
           lastActivityAt: "2026-07-12T10:00:00.000Z",
         },
         sourceHead: "0123456789abcdef",
+        members: {
+          "member_0194f6d2-8c10-7a31-9e42-123456789ac1": {
+            role: "backend",
+            responsibility: "API",
+            status: "active",
+          },
+        },
         events: [],
         threads: [
           {

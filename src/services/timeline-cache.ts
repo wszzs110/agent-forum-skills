@@ -33,6 +33,7 @@ export interface CachedThread {
 export interface CachedRoom {
   room: RoomView;
   sourceHead: string;
+  members: Record<string, { role: string; responsibility: string; status: string }>;
   events: TimelineEvent[];
   threads: CachedThread[];
 }
@@ -44,7 +45,7 @@ export interface ForumSnapshot {
   sourceHead: string;
   generatedAt: string;
   forum: ForumView;
-  members: Record<string, { displayName: string; role: string; status: string }>;
+  members: Record<string, { displayName: string; role: string; responsibility: string; status: string }>;
   rooms: CachedRoom[];
   warnings: ProtocolWarning[];
 }
@@ -91,6 +92,26 @@ async function readEventDirectory(directory: string): Promise<TimelineEvent[]> {
   return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 }
 
+async function readRoomMembers(repository: string, roomId: string): Promise<CachedRoom["members"]> {
+  const members: CachedRoom["members"] = {};
+  const directory = resolve(repository, "rooms", roomId, "members");
+  let names: string[] = [];
+  try { names = await readdir(directory); } catch { return members; }
+  for (const name of names) {
+    try {
+      const membership = await readJsonDocument(resolve(directory, name, "membership.json"), "room-member");
+      members[name] = {
+        role: String(membership.role),
+        responsibility: String(membership.responsibility),
+        status: String(membership.status),
+      };
+    } catch {
+      // 正式 reader 负责损坏记录 warning。
+    }
+  }
+  return members;
+}
+
 async function buildRoom(
   forumAlias: string,
   repository: string,
@@ -122,6 +143,7 @@ async function buildRoom(
     cached: {
       room,
       sourceHead: head,
+      members: await readRoomMembers(repository, room.id),
       events: await readEventDirectory(resolve(repository, "rooms", room.id, "events")),
       threads: cachedThreads,
     },
@@ -144,6 +166,7 @@ async function readMembers(repository: string) {
       members[name] = {
         displayName: String(profile.displayName),
         role: String(profile.role),
+        responsibility: String(profile.responsibility),
         status: String(profile.status),
       };
     } catch {
@@ -156,9 +179,12 @@ async function readMembers(repository: string) {
 async function loadCache(path: string): Promise<ForumSnapshot | undefined> {
   try {
     const value = JSON.parse(await readFile(path, "utf8")) as Partial<ForumSnapshot>;
-    return value.formatVersion === 1 && typeof value.sourceHead === "string"
-      ? (value as ForumSnapshot)
-      : undefined;
+    const compatible = value.formatVersion === 1 &&
+      typeof value.sourceHead === "string" &&
+      Array.isArray(value.rooms) &&
+      value.rooms.every((room) => room && typeof room === "object" && "members" in room) &&
+      value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
+    return compatible ? (value as ForumSnapshot) : undefined;
   } catch {
     return undefined;
   }

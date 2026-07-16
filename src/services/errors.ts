@@ -38,6 +38,8 @@ export class ServiceError extends Error {
       | "MESSAGE_NOT_FOUND"
       | "MESSAGE_TYPE_INVALID"
       | "PROTOCOL_DATA_DAMAGED"
+      | "VIEWER_SESSION_NOT_FOUND"
+      | "VIEWER_START_FAILED"
       | "NO_CHANGES",
     message: string,
     readonly details?: unknown,

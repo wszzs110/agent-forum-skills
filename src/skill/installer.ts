@@ -49,6 +49,7 @@ export interface InstallResult {
   action: "installed" | "unchanged" | "would-install" | "would-replace";
   target: SkillTarget;
   destination: string;
+  destinations: string[];
   version: string;
   files: number;
   requiresReload: true;
@@ -57,6 +58,7 @@ export interface InstallResult {
 export interface StatusResult {
   target: SkillTarget;
   destination: string;
+  destinations?: string[];
   status: InstallationStatus;
   version?: string;
   files?: number;
@@ -73,6 +75,7 @@ export interface UninstallResult {
   action: "uninstalled" | "unregistered" | "not-installed" | "would-uninstall";
   target: SkillTarget;
   destination: string;
+  destinations?: string[];
   removedFiles: boolean;
 }
 
@@ -108,17 +111,26 @@ function stateFile(homeDirectory: string): string {
   return resolve(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 
-export function skillDestination(
+function namedSkillDestination(
   target: SkillTarget,
+  skillName: "agent-forum" | "agent-forum-viewer",
   homeDirectory = homedir(),
 ): string {
   if (commonTargets.has(target)) {
-    return resolve(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve(homeDirectory, ".agents", "skills", skillName);
   }
   if (target === "claude-code") {
-    return resolve(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve(homeDirectory, ".claude", "skills", skillName);
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
+}
+
+export function skillDestination(target: SkillTarget, homeDirectory = homedir()): string {
+  return namedSkillDestination(target, "agent-forum", homeDirectory);
+}
+
+export function viewerSkillDestination(target: SkillTarget, homeDirectory = homedir()): string {
+  return namedSkillDestination(target, "agent-forum-viewer", homeDirectory);
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -268,66 +280,50 @@ export async function installSkill(
   options: InstallOptions,
 ): Promise<InstallResult> {
   const homeDirectory = options.homeDirectory ?? homedir();
-  const source = await resolveSkillSource(options.sourceDirectory);
-  const destination = skillDestination(options.target, homeDirectory);
-  const sourceFiles = await collectFiles(source);
-  const destinationExists = await pathExists(destination);
-  const destinationFiles = destinationExists
-    ? await collectFiles(destination, destination, true)
-    : undefined;
-  const unchanged = destinationFiles
-    ? sameFiles(sourceFiles, destinationFiles)
-    : false;
-
-  if (destinationExists && !unchanged && !options.force) {
-    throw new SkillInstallationError(
-      "INSTALLATION_CONFLICT",
-      `destination exists with different files: ${destination}`,
-    );
+  const coreSource = await resolveSkillSource(options.sourceDirectory);
+  const viewerSource = resolve(dirname(coreSource), "agent-forum-viewer");
+  if (!(await pathExists(resolve(viewerSource, "SKILL.md")))) {
+    throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-viewer/SKILL.md");
   }
-
+  const payloads = [
+    { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
+    { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) },
+  ];
+  const inspected = await Promise.all(payloads.map(async (payload) => {
+    const files = await collectFiles(payload.source);
+    const exists = await pathExists(payload.destination);
+    const current = exists ? await collectFiles(payload.destination, payload.destination, true) : undefined;
+    return { ...payload, files, exists, unchanged: current ? sameFiles(files, current) : false };
+  }));
+  const conflict = inspected.find((item) => item.exists && !item.unchanged);
+  if (conflict && !options.force) {
+    throw new SkillInstallationError("INSTALLATION_CONFLICT", `destination exists with different files: ${conflict.destination}`);
+  }
+  const destinations = inspected.map((item) => item.destination);
+  const files = inspected.reduce((total, item) => total + Object.keys(item.files).length, 0);
   if (options.dryRun) {
-    return {
-      action: destinationExists ? (unchanged ? "unchanged" : "would-replace") : "would-install",
-      target: options.target,
-      destination,
-      version: VERSION,
-      files: Object.keys(sourceFiles).length,
-      requiresReload: true,
-    };
+    const changed = inspected.some((item) => !item.unchanged);
+    const action = !changed ? "unchanged" : inspected.some((item) => item.exists && !item.unchanged) ? "would-replace" : "would-install";
+    return { action, target: options.target, destination: destinations[0]!, destinations, version: VERSION, files, requiresReload: true };
   }
-
-  if (!unchanged) await replaceDirectory(source, destination);
-
+  for (const item of inspected) if (!item.unchanged) await replaceDirectory(item.source, item.destination);
   const state = await loadState(homeDirectory);
-  const existing = state.installations.find(
-    (installation) => installation.path === destination,
-  );
   const now = options.now ?? new Date().toISOString();
-  const targets = [...new Set([...(existing?.targets ?? []), options.target])].sort();
-  const record: InstallationRecord = {
-    path: destination,
-    targets,
-    version: VERSION,
-    files: sourceFiles,
-    installedAt: existing?.installedAt ?? now,
-    updatedAt: now,
-  };
-  const installations = existing
-    ? state.installations.map((installation) =>
-        installation.path === destination ? record : installation,
-      )
-    : [...state.installations, record];
+  let installations = [...state.installations];
+  for (const item of inspected) {
+    const existing = installations.find((record) => record.path === item.destination);
+    const record: InstallationRecord = {
+      path: item.destination,
+      targets: [...new Set([...(existing?.targets ?? []), options.target])].sort(),
+      version: VERSION,
+      files: item.files,
+      installedAt: existing?.installedAt ?? now,
+      updatedAt: now,
+    };
+    installations = existing ? installations.map((candidate) => candidate.path === item.destination ? record : candidate) : [...installations, record];
+  }
   await saveState(homeDirectory, { formatVersion: 1, installations });
-
-  return {
-    action: unchanged ? "unchanged" : "installed",
-    target: options.target,
-    destination,
-    version: VERSION,
-    files: Object.keys(sourceFiles).length,
-    requiresReload: true,
-  };
+  return { action: inspected.every((item) => item.unchanged) ? "unchanged" : "installed", target: options.target, destination: destinations[0]!, destinations, version: VERSION, files, requiresReload: true };
 }
 
 export async function getSkillStatus(
@@ -335,24 +331,23 @@ export async function getSkillStatus(
   homeDirectory = homedir(),
 ): Promise<StatusResult> {
   const destination = skillDestination(target, homeDirectory);
+  const destinations = [destination, viewerSkillDestination(target, homeDirectory)];
   const state = await loadState(homeDirectory);
-  const record = state.installations.find(
-    (installation) =>
-      installation.path === destination && installation.targets.includes(target),
-  );
-  if (!(await pathExists(destination))) {
-    return { target, destination, status: "not-installed" };
+  const records = destinations.map((path) => state.installations.find(
+    (installation) => installation.path === path && installation.targets.includes(target),
+  ));
+  const exists = await Promise.all(destinations.map((path) => pathExists(path)));
+  if (exists.every((value) => !value)) return { target, destination, destinations, status: "not-installed" };
+  if (records.some((record) => !record) || exists.some((value) => !value)) return { target, destination, destinations, status: "unmanaged" };
+  let modified = false;
+  let files = 0;
+  for (let index = 0; index < destinations.length; index += 1) {
+    const record = records[index]!;
+    const current = await collectFiles(destinations[index]!, destinations[index]!, true);
+    if (!sameFiles(current, record.files)) modified = true;
+    files += Object.keys(record.files).length;
   }
-  if (!record) return { target, destination, status: "unmanaged" };
-
-  const files = await collectFiles(destination, destination, true);
-  return {
-    target,
-    destination,
-    status: sameFiles(files, record.files) ? "installed" : "modified",
-    version: record.version,
-    files: Object.keys(record.files).length,
-  };
+  return { target, destination, destinations, status: modified ? "modified" : "installed", version: records[0]!.version, files };
 }
 
 export async function uninstallSkill(
@@ -360,61 +355,31 @@ export async function uninstallSkill(
 ): Promise<UninstallResult> {
   const homeDirectory = options.homeDirectory ?? homedir();
   const destination = skillDestination(options.target, homeDirectory);
+  const destinations = [destination, viewerSkillDestination(options.target, homeDirectory)];
   const state = await loadState(homeDirectory);
-  const record = state.installations.find(
-    (installation) =>
-      installation.path === destination && installation.targets.includes(options.target),
-  );
-  if (!record) {
-    return {
-      action: "not-installed",
-      target: options.target,
-      destination,
-      removedFiles: false,
-    };
-  }
-
-  const remainingTargets = record.targets.filter(
-    (target) => target !== options.target,
-  );
-  const shouldRemoveFiles = remainingTargets.length === 0;
-  if (shouldRemoveFiles && (await pathExists(destination))) {
-    const currentFiles = await collectFiles(destination, destination, true);
-    if (!sameFiles(currentFiles, record.files) && !options.force) {
-      throw new SkillInstallationError(
-        "INSTALLATION_MODIFIED",
-        `installed skill contains modified or additional files: ${destination}`,
-      );
+  const records = state.installations.filter((installation) => destinations.includes(installation.path) && installation.targets.includes(options.target));
+  if (records.length === 0) return { action: "not-installed", target: options.target, destination, destinations, removedFiles: false };
+  for (const record of records) {
+    const remaining = record.targets.filter((target) => target !== options.target);
+    if (remaining.length === 0 && await pathExists(record.path)) {
+      const current = await collectFiles(record.path, record.path, true);
+      if (!sameFiles(current, record.files) && !options.force) throw new SkillInstallationError("INSTALLATION_MODIFIED", `installed skill contains modified or additional files: ${record.path}`);
     }
   }
-
-  if (options.dryRun) {
-    return {
-      action: "would-uninstall",
-      target: options.target,
-      destination,
-      removedFiles: shouldRemoveFiles,
-    };
+  const removesFiles = records.some((record) => record.targets.length === 1);
+  if (options.dryRun) return { action: "would-uninstall", target: options.target, destination, destinations, removedFiles: removesFiles };
+  let installations = [...state.installations];
+  for (const record of records) {
+    const remaining = record.targets.filter((target) => target !== options.target);
+    if (remaining.length === 0) {
+      await rm(record.path, { recursive: true, force: true });
+      installations = installations.filter((candidate) => candidate.path !== record.path);
+    } else {
+      installations = installations.map((candidate) => candidate.path === record.path ? { ...candidate, targets: remaining } : candidate);
+    }
   }
-
-  if (shouldRemoveFiles) {
-    await rm(destination, { recursive: true, force: true });
-  }
-  const installations = shouldRemoveFiles
-    ? state.installations.filter((installation) => installation.path !== destination)
-    : state.installations.map((installation) =>
-        installation.path === destination
-          ? { ...installation, targets: remainingTargets }
-          : installation,
-      );
   await saveState(homeDirectory, { formatVersion: 1, installations });
-
-  return {
-    action: shouldRemoveFiles ? "uninstalled" : "unregistered",
-    target: options.target,
-    destination,
-    removedFiles: shouldRemoveFiles,
-  };
+  return { action: removesFiles ? "uninstalled" : "unregistered", target: options.target, destination, destinations, removedFiles: removesFiles };
 }
 
 export async function doctorSkill(

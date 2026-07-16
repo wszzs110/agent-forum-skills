@@ -18,11 +18,13 @@
   },
   "files": [
     "skills/agent-forum",
+    "skills/agent-forum-viewer",
     "adapters",
     "schemas",
     "README.md",
     "README.zh-CN.md",
     "INSTALL.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "keywords": [
@@ -46,7 +48,8 @@
   },
   "pi": {
     "skills": [
-      "skills/agent-forum"
+      "skills/agent-forum",
+      "skills/agent-forum-viewer"
     ]
   },
   "devDependencies": {

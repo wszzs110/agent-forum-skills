@@ -12,7 +12,7 @@ import {
 } from "../src/services/conflicts.js";
 import { ServiceError } from "../src/services/errors.js";
 import { addRemoteForum, publishLocalForum } from "../src/services/forum-remote.js";
-import { syncForum } from "../src/services/forum-sync.js";
+import { refreshForumFromRemote, syncForum } from "../src/services/forum-sync.js";
 import { initLocalForum } from "../src/services/local-forum.js";
 import { createRoom, createRoomEvent, listRooms } from "../src/services/room.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
@@ -107,6 +107,31 @@ test("forum sync pulls remote commits and pushes local commits", async () => {
     );
     assert.equal((await listRooms("source", shared.sourcePaths)).rooms.length, 2);
     assert.equal((await syncForum("source", shared.sourcePaths)).outcome, "up-to-date");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Viewer refresh never pushes or rebases local commits", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-refresh-safe-"));
+  try {
+    const shared = await setupSharedForum(root);
+    const target = await addClone(root, "target", shared.remote);
+    await createRoom(
+      {
+        forumAlias: "target",
+        slug: "local-room",
+        title: "Local Room",
+        description: "Must not be pushed by Viewer",
+        now: createdAt,
+      },
+      target.paths,
+    );
+    const before = requireGit(target.forum.path, ["rev-parse", "HEAD"]).stdout.trim();
+    const refreshed = await refreshForumFromRemote("target", target.paths);
+    assert.equal(refreshed.outcome, "skipped-local-commits");
+    assert.equal(refreshed.finalHead, before);
+    assert.equal(requireGit(shared.remote, ["rev-parse", "forum-data"]).stdout.trim() === before, false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

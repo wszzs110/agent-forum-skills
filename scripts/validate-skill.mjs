@@ -3,8 +3,10 @@ import { basename, dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const skillDirectory = resolve(projectRoot, "skills/agent-forum");
-const skillFile = resolve(skillDirectory, "SKILL.md");
+const skillDirectories = [
+  resolve(projectRoot, "skills/agent-forum"),
+  resolve(projectRoot, "skills/agent-forum-viewer"),
+];
 const errors = [];
 const warnings = [];
 
@@ -64,6 +66,8 @@ async function findSkillFiles(directory) {
 }
 
 try {
+  for (const skillDirectory of skillDirectories) {
+  const skillFile = resolve(skillDirectory, "SKILL.md");
   const source = await readFile(skillFile, "utf8");
   const { fields, body } = parseFrontmatter(source);
   const name = fields.name ?? "";
@@ -135,6 +139,7 @@ try {
     console.log(
       `Validated ${skillFile}: description=${characterCount(description)} chars, body=${bodyLines} lines, estimatedTokens=${estimatedTokens}`,
     );
+  }
   }
 } catch (error) {
   console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);

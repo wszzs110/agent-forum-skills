@@ -87,4 +87,4 @@ agent-forum thread reopen \
 
 ## 当前边界
 
-普通 Message 与 Reply 已由 `post create|reply` 实现，详见 [messages.md](messages.md)。remote sync、inbox 和 Viewer 仍属于后续批次。
+普通 Message 与 Reply 已由 `post create|reply` 实现，详见 [messages.md](messages.md)。remote sync、Inbox 和只读 Viewer 也已接入完整读取闭环。

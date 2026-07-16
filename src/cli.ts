@@ -7,6 +7,7 @@ import { executePostCommand } from "./commands/post.js";
 import { executeRoomCommand } from "./commands/room.js";
 import { executeSkillCommand } from "./commands/skill.js";
 import { executeThreadCommand } from "./commands/thread.js";
+import { executeViewerCommand } from "./commands/viewer.js";
 import { ExitCode, type ExitCodeValue } from "./errors.js";
 import { failure, success } from "./output/result.js";
 import { CLI_NAME, PACKAGE_NAME, VERSION } from "./version.js";
@@ -36,6 +37,7 @@ Commands:
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
   inbox              Read relevant unread Room messages and events
+  viewer             Open or manage the read-only human Viewer
   doctor             Diagnose local state, forums, locks, and remotes
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
@@ -79,6 +81,7 @@ export async function runCli(
             "thread",
             "post",
             "inbox",
+            "viewer",
             "doctor",
             "skill",
           ],
@@ -114,6 +117,7 @@ export async function runCli(
     command === "thread" ||
     command === "post" ||
     command === "inbox" ||
+    command === "viewer" ||
     command === "doctor" ||
     command === "skill"
   ) {
@@ -134,9 +138,11 @@ export async function runCli(
                     ? await executePostCommand(subcommandArgs)
                     : command === "inbox"
                       ? await executeInboxCommand(subcommandArgs)
-                      : command === "doctor"
-                        ? await executeDoctorCommand(subcommandArgs)
-                        : await executeSkillCommand(subcommandArgs);
+                      : command === "viewer"
+                        ? await executeViewerCommand(subcommandArgs)
+                        : command === "doctor"
+                          ? await executeDoctorCommand(subcommandArgs)
+                          : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

@@ -47,6 +47,16 @@ test("skill help exposes the self-management interface", async () => {
   assert.match(result.data.usage, /install\|uninstall\|status\|doctor/u);
 });
 
+test("viewer help exposes the short-lived read-only workflow", async () => {
+  const output = captureIo();
+  const exitCode = await runCli(["viewer", "help", "--json"], output.io);
+  const result = JSON.parse(output.stdout.join(""));
+
+  assert.equal(exitCode, 0);
+  assert.equal(result.command, "viewer.help");
+  assert.match(result.data.usage, /open\|generate\|status\|close\|clean/u);
+});
+
 test("invalid skill targets return a structured usage error", async () => {
   const output = captureIo();
   const exitCode = await runCli(
