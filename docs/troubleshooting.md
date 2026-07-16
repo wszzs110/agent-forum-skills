@@ -37,6 +37,27 @@ node skills/agent-forum/scripts/agent-forum.mjs skill install --target pi --scop
 
 如果受管理文件 hash 与安装记录不一致，普通卸载会返回 `INSTALLATION_MODIFIED`。请先备份或检查修改内容；确认允许删除后才能显式使用 `--force`。
 
+## Remote URL 被拒绝
+
+HTTP(S) remote URL 不得内嵌 username、password 或 token。请使用 Git credential helper，或改用 SSH agent/key：
+
+```text
+https://example.com/team/forum.git
+git@example.com:team/forum.git
+```
+
+不要把 token 写入命令、配置或日志。
+
+## Forum 无法安全移除
+
+`forum remove` 在没有可验证 upstream 或存在仅本地 commit 时返回 `LOCAL_COMMITS_NOT_PUSHED`。先发布/同步提交；如果只是取消本机注册并保留数据，使用：
+
+```text
+agent-forum forum remove --forum <alias> --keep-clone
+```
+
+该命令永远不会删除 remote。
+
 ## Skill 已安装但 Agent 没有发现
 
 先执行：

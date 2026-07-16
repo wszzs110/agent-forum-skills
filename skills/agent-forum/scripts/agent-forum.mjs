@@ -2976,7 +2976,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve11.call(this, root, ref);
+      let _sch = resolve12.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3003,7 +3003,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve11(root, ref) {
+    function resolve12(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3634,7 +3634,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve11(baseURI, relativeURI, options) {
+    function resolve12(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3892,7 +3892,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve11,
+      resolve: resolve12,
       resolveComponent,
       equal,
       serialize,
@@ -8403,6 +8403,38 @@ async function createLocalIdentity(input, paths = createAgentForumPaths()) {
     await lock.release();
   }
 }
+async function registerLocalForum(registration, paths = createAgentForumPaths()) {
+  const lock = await acquireConfigLock(paths, "forum register");
+  try {
+    const config = await loadLocalConfig(paths);
+    if (config.forums.some((forum) => forum.alias === registration.alias)) {
+      throw new ServiceError(
+        "FORUM_ALIAS_EXISTS",
+        `forum alias is already configured: ${registration.alias}`
+      );
+    }
+    await saveLocalConfig(paths, {
+      ...config,
+      forums: [...config.forums, registration]
+    });
+  } finally {
+    await lock.release();
+  }
+}
+async function unregisterLocalForum(alias, paths = createAgentForumPaths()) {
+  const lock = await acquireConfigLock(paths, "forum unregister");
+  try {
+    const config = await loadLocalConfig(paths);
+    const registration = findForum(config, alias);
+    await saveLocalConfig(paths, {
+      ...config,
+      forums: config.forums.filter((forum) => forum.alias !== alias)
+    });
+    return registration;
+  } finally {
+    await lock.release();
+  }
+}
 
 // src/context/bindings.ts
 import { readFile as readFile3, realpath } from "node:fs/promises";
@@ -10017,17 +10049,427 @@ status: ${result.targetStatus}
   }
 }
 
+// src/services/forum-remote.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { lstat as lstat2, mkdir as mkdir3, rename as rename3, rm as rm4 } from "node:fs/promises";
+import { resolve as resolve8 } from "node:path";
+
+// src/git/remote.ts
+import { isAbsolute } from "node:path";
+function validateRemoteUrl(value) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new ServiceError("REMOTE_URL_UNSAFE", "remote URL must not be empty");
+  }
+  if (trimmed.startsWith("-")) {
+    throw new ServiceError(
+      "REMOTE_URL_UNSAFE",
+      "remote URL must not begin with a command-line option prefix"
+    );
+  }
+  if (isAbsolute(trimmed) || trimmed.startsWith(".")) {
+    return { value: trimmed, display: "<local-path>", kind: "local" };
+  }
+  try {
+    const url = new URL(trimmed);
+    if (!["http:", "https:", "ssh:", "git:", "file:"].includes(url.protocol)) {
+      throw new ServiceError(
+        "REMOTE_URL_UNSAFE",
+        `unsupported remote URL protocol: ${url.protocol}`
+      );
+    }
+    if (url.search || url.hash) {
+      throw new ServiceError(
+        "REMOTE_URL_UNSAFE",
+        "remote URL must not contain query parameters or fragments; use credential configuration outside the URL"
+      );
+    }
+    if (url.password) {
+      throw new ServiceError(
+        "REMOTE_URL_UNSAFE",
+        "remote URL must not contain a password or token; use a credential helper or SSH agent"
+      );
+    }
+    if ((url.protocol === "http:" || url.protocol === "https:") && url.username) {
+      throw new ServiceError(
+        "REMOTE_URL_UNSAFE",
+        "HTTP(S) remote URL must not contain user information; use a credential helper"
+      );
+    }
+    if (url.protocol === "file:") {
+      return { value: trimmed, display: "<local-path>", kind: "local" };
+    }
+    const display = new URL(url.toString());
+    display.password = "";
+    return { value: trimmed, display: display.toString(), kind: "network" };
+  } catch (error) {
+    if (error instanceof ServiceError) throw error;
+  }
+  const scp = /^(?:([^@\s]+)@)?([^:/\s]+):(.+)$/u.exec(trimmed);
+  if (scp && !/^[a-zA-Z]:[\\/]/u.test(trimmed)) {
+    return { value: trimmed, display: trimmed, kind: "network" };
+  }
+  if (trimmed.endsWith(".git")) {
+    return { value: trimmed, display: "<local-path>", kind: "local" };
+  }
+  throw new ServiceError(
+    "REMOTE_URL_UNSAFE",
+    "remote must be a supported URL, SCP-style SSH remote, or local Git path"
+  );
+}
+function displayRemoteUrl(value) {
+  try {
+    return validateRemoteUrl(value).display;
+  } catch {
+    return "<redacted-remote>";
+  }
+}
+
+// src/services/forum-remote.ts
+async function pathExists2(path) {
+  try {
+    await lstat2(path);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+function remoteBranchFromHead(repository) {
+  const head = runGit(repository, [
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    "refs/remotes/origin/HEAD"
+  ]);
+  if (head.status !== 0) {
+    throw new ServiceError(
+      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
+      "remote default branch could not be discovered; provide --branch"
+    );
+  }
+  const value = head.stdout.trim();
+  if (!value.startsWith("origin/") || value.length <= "origin/".length) {
+    throw new ServiceError(
+      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
+      "remote HEAD does not name an origin branch"
+    );
+  }
+  return value.slice("origin/".length);
+}
+async function validateClonedForum(repository, branch) {
+  try {
+    const protocol = await readJsonDocument(
+      resolve8(repository, ".forum", "protocol.json"),
+      "protocol"
+    );
+    const forum = await readJsonDocument(
+      resolve8(repository, ".forum", "forum.json"),
+      "forum"
+    );
+    if (protocol.dataBranch !== branch || protocol.forumId !== forum.forumId) {
+      throw new ServiceError(
+        "REMOTE_PROTOCOL_INVALID",
+        "remote forum metadata does not agree on forumId and dataBranch"
+      );
+    }
+    return { forumId: String(protocol.forumId) };
+  } catch (error) {
+    if (error instanceof ServiceError) throw error;
+    throw new ServiceError(
+      "REMOTE_PROTOCOL_INVALID",
+      "remote branch does not contain a valid Agent Forum protocol",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+async function addRemoteForum(input, paths = createAgentForumPaths()) {
+  assertLocalAlias(input.alias);
+  const safeRemote = validateRemoteUrl(input.remote);
+  const config = await loadLocalConfig(paths);
+  if (config.forums.some((forum) => forum.alias === input.alias)) {
+    throw new ServiceError(
+      "FORUM_ALIAS_EXISTS",
+      `forum alias is already configured: ${input.alias}`
+    );
+  }
+  const destination = forumClonePath(paths, input.alias);
+  if (await pathExists2(destination)) {
+    throw new ServiceError(
+      "FORUM_PATH_EXISTS",
+      `managed forum path already exists: ${destination}`
+    );
+  }
+  await mkdir3(paths.forumsDirectory, { recursive: true });
+  let cloned = false;
+  try {
+    requireGit(paths.forumsDirectory, [
+      "clone",
+      "--no-checkout",
+      "--origin",
+      "origin",
+      "--",
+      safeRemote.value,
+      destination
+    ]);
+    cloned = true;
+    requireGit(destination, ["config", "core.autocrlf", "false"]);
+    const branch = input.branch ?? remoteBranchFromHead(destination);
+    assertGitBranchName(destination, branch);
+    const remoteBranch = runGit(destination, [
+      "show-ref",
+      "--verify",
+      `refs/remotes/origin/${branch}`
+    ]);
+    if (remoteBranch.status !== 0) {
+      throw new ServiceError(
+        "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
+        `remote branch does not exist: ${branch}`
+      );
+    }
+    requireGit(destination, [
+      "checkout",
+      "-B",
+      branch,
+      `origin/${branch}`
+    ]);
+    requireGit(destination, [
+      "branch",
+      "--set-upstream-to",
+      `origin/${branch}`,
+      branch
+    ]);
+    const validated = await validateClonedForum(destination, branch);
+    const registration = {
+      alias: input.alias,
+      forumId: validated.forumId,
+      path: destination,
+      dataBranch: branch,
+      createdAt: currentUtcTimestamp(input.now)
+    };
+    await registerLocalForum(registration, paths);
+    return {
+      alias: input.alias,
+      forumId: validated.forumId,
+      path: destination,
+      dataBranch: branch,
+      remote: safeRemote.display
+    };
+  } catch (error) {
+    if (cloned) await rm4(destination, { recursive: true, force: true });
+    throw error;
+  }
+}
+async function publishLocalForum(input, paths = createAgentForumPaths()) {
+  const safeRemote = validateRemoteUrl(input.remote);
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "forum publish"
+  });
+  try {
+    await openForum(input.forumAlias, paths, { requireClean: true });
+    const existing = runGit(registration.path, ["remote", "get-url", "origin"]);
+    if (existing.status === 0 && existing.stdout.trim() !== safeRemote.value) {
+      throw new ServiceError(
+        "REMOTE_ALREADY_CONFIGURED",
+        `origin is already configured as ${displayRemoteUrl(existing.stdout.trim())}`
+      );
+    }
+    if (existing.status !== 0) {
+      requireGit(registration.path, [
+        "remote",
+        "add",
+        "origin",
+        safeRemote.value
+      ]);
+    }
+    requireGit(registration.path, [
+      "push",
+      "--set-upstream",
+      "origin",
+      registration.dataBranch
+    ]);
+    return {
+      forumAlias: input.forumAlias,
+      remote: safeRemote.display,
+      branch: registration.dataBranch,
+      commit: requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim()
+    };
+  } finally {
+    await lock.release();
+  }
+}
+function parseAheadBehind(value) {
+  const parts = value.trim().split(/\s+/u).map(Number);
+  if (parts.length !== 2 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return void 0;
+  }
+  return { ahead: parts[0], behind: parts[1] };
+}
+async function getForumRemoteStatus(forumAlias, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const problems = [];
+  if (!await pathExists2(registration.path)) {
+    return {
+      alias: registration.alias,
+      forumId: registration.forumId,
+      path: registration.path,
+      expectedBranch: registration.dataBranch,
+      currentBranch: null,
+      head: null,
+      dirty: null,
+      protocolValid: false,
+      remote: {
+        configured: false,
+        displayUrl: null,
+        upstream: null,
+        ahead: null,
+        behind: null
+      },
+      health: "unavailable",
+      problems: ["managed clone path does not exist"]
+    };
+  }
+  const branchResult = runGit(registration.path, ["branch", "--show-current"]);
+  const currentBranch = branchResult.status === 0 ? branchResult.stdout.trim() || null : null;
+  if (currentBranch !== registration.dataBranch) {
+    problems.push(
+      `current branch is ${currentBranch ?? "detached"}, expected ${registration.dataBranch}`
+    );
+  }
+  const headResult = runGit(registration.path, ["rev-parse", "HEAD"]);
+  const head = headResult.status === 0 ? headResult.stdout.trim() : null;
+  const statusResult = runGit(registration.path, ["status", "--porcelain"]);
+  const dirty = statusResult.status === 0 ? statusResult.stdout.trim().length > 0 : null;
+  if (dirty) problems.push("managed clone has uncommitted changes");
+  let protocolValid = false;
+  try {
+    const protocol = await readJsonDocument(
+      resolve8(registration.path, ".forum", "protocol.json"),
+      "protocol"
+    );
+    protocolValid = protocol.forumId === registration.forumId && protocol.dataBranch === registration.dataBranch;
+    if (!protocolValid) problems.push("protocol does not match local registration");
+  } catch (error) {
+    problems.push(error instanceof Error ? error.message : String(error));
+  }
+  const remoteResult = runGit(registration.path, ["remote", "get-url", "origin"]);
+  const remoteConfigured = remoteResult.status === 0;
+  const displayUrl = remoteConfigured ? displayRemoteUrl(remoteResult.stdout.trim()) : null;
+  const upstreamResult = runGit(registration.path, [
+    "rev-parse",
+    "--abbrev-ref",
+    "--symbolic-full-name",
+    "@{upstream}"
+  ]);
+  const upstream = upstreamResult.status === 0 ? upstreamResult.stdout.trim() : null;
+  let ahead = null;
+  let behind = null;
+  if (upstream) {
+    const counts = runGit(registration.path, [
+      "rev-list",
+      "--left-right",
+      "--count",
+      `HEAD...${upstream}`
+    ]);
+    if (counts.status === 0) {
+      const parsed = parseAheadBehind(counts.stdout);
+      if (parsed) {
+        ahead = parsed.ahead;
+        behind = parsed.behind;
+      }
+    }
+  }
+  if (!remoteConfigured) problems.push("origin is not configured");
+  else if (!upstream) problems.push("current branch has no upstream");
+  const health = !protocolValid ? "protocol-error" : dirty ? "dirty" : !remoteConfigured || !upstream ? "local-only" : problems.length > 0 ? "unavailable" : "ready";
+  return {
+    alias: registration.alias,
+    forumId: registration.forumId,
+    path: registration.path,
+    expectedBranch: registration.dataBranch,
+    currentBranch,
+    head,
+    dirty,
+    protocolValid,
+    remote: {
+      configured: remoteConfigured,
+      displayUrl,
+      upstream,
+      ahead,
+      behind
+    },
+    health,
+    problems
+  };
+}
+async function listRemoteForums(paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const forums = await Promise.all(
+    config.forums.map((forum) => getForumRemoteStatus(forum.alias, paths))
+  );
+  forums.sort((left, right) => left.alias.localeCompare(right.alias));
+  return { forums };
+}
+async function removeLocalForum(input, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "forum remove"
+  });
+  try {
+    if (input.keepClone) {
+      await unregisterLocalForum(input.forumAlias, paths);
+      return { forumAlias: input.forumAlias, clone: "kept", path: registration.path };
+    }
+    const status = await getForumRemoteStatus(input.forumAlias, paths);
+    if (status.dirty) assertCleanWorktree(registration.path);
+    if (!status.remote.configured || !status.remote.upstream || status.remote.ahead === null || status.remote.ahead > 0) {
+      throw new ServiceError(
+        "LOCAL_COMMITS_NOT_PUSHED",
+        "managed clone has no verified upstream or contains local-only commits; use --keep-clone"
+      );
+    }
+    const temporary = `${registration.path}.removing-${randomUUID3()}`;
+    await rename3(registration.path, temporary);
+    try {
+      await unregisterLocalForum(input.forumAlias, paths);
+    } catch (error) {
+      await rename3(temporary, registration.path);
+      throw error;
+    }
+    try {
+      await rm4(temporary, { recursive: true, force: true });
+    } catch (error) {
+      throw new ServiceError(
+        "LOCAL_CLONE_CLEANUP_FAILED",
+        "forum was unregistered but the renamed local clone could not be deleted",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    return { forumAlias: input.forumAlias, clone: "deleted", path: registration.path };
+  } finally {
+    await lock.release();
+  }
+}
+
 // src/services/local-forum.ts
 import {
-  mkdir as mkdir3,
+  mkdir as mkdir4,
   readFile as readFile5,
-  rename as rename3,
-  rm as rm4,
+  rename as rename4,
+  rm as rm5,
   stat as stat3
 } from "node:fs/promises";
-import { randomUUID as randomUUID3 } from "node:crypto";
-import { resolve as resolve8 } from "node:path";
-async function pathExists2(path) {
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { resolve as resolve9 } from "node:path";
+async function pathExists3(path) {
   try {
     await stat3(path);
     return true;
@@ -10057,16 +10499,16 @@ function samePublishedIdentity(existing, identity) {
 async function initLocalForum(input, paths = createAgentForumPaths()) {
   assertLocalAlias(input.alias);
   const dataBranch = input.dataBranch ?? "main";
-  await mkdir3(paths.forumsDirectory, { recursive: true });
+  await mkdir4(paths.forumsDirectory, { recursive: true });
   assertGitBranchName(paths.forumsDirectory, dataBranch);
   const configLock = await acquireForumLock({
-    lockPath: resolve8(paths.locksDirectory, "config.lock"),
+    lockPath: resolve9(paths.locksDirectory, "config.lock"),
     command: "forum init-local"
   });
   const destination = forumClonePath(paths, input.alias);
-  const staging = resolve8(
+  const staging = resolve9(
     paths.forumsDirectory,
-    `.agent-forum-tmp-${randomUUID3()}`
+    `.agent-forum-tmp-${randomUUID4()}`
   );
   let destinationCreated = false;
   try {
@@ -10077,7 +10519,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
         `forum alias is already configured: ${input.alias}`
       );
     }
-    if (await pathExists2(destination)) {
+    if (await pathExists3(destination)) {
       throw new ServiceError(
         "FORUM_PATH_EXISTS",
         `forum path already exists: ${destination}`
@@ -10098,11 +10540,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       identity.memberId
     );
     await writeFileAtomic(
-      resolve8(staging, ".gitattributes"),
+      resolve9(staging, ".gitattributes"),
       "*.json text eol=lf\n*.md text eol=lf\n"
     );
     await writeValidatedJsonAtomic(
-      resolve8(staging, ".forum", "protocol.json"),
+      resolve9(staging, ".forum", "protocol.json"),
       "protocol",
       {
         protocolVersion: "1.0",
@@ -10113,7 +10555,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve8(staging, ".forum", "forum.json"),
+      resolve9(staging, ".forum", "forum.json"),
       "forum",
       {
         schemaVersion: "1.0",
@@ -10125,7 +10567,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve8(staging, "members", identity.memberId, "profile.json"),
+      resolve9(staging, "members", identity.memberId, "profile.json"),
       "member-profile",
       publicProfile(identity, timestamp)
     );
@@ -10134,7 +10576,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       [".gitattributes", ".forum", "members"],
       `Initialize forum ${input.alias}`
     );
-    await rename3(staging, destination);
+    await rename4(staging, destination);
     destinationCreated = true;
     await saveLocalConfig(paths, {
       ...config,
@@ -10158,9 +10600,9 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       commit
     };
   } catch (error) {
-    await rm4(staging, { recursive: true, force: true });
+    await rm5(staging, { recursive: true, force: true });
     if (destinationCreated) {
-      await rm4(destination, { recursive: true, force: true });
+      await rm5(destination, { recursive: true, force: true });
     }
     throw error;
   } finally {
@@ -10175,7 +10617,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     lockPath: forumLockPath(paths, registration.forumId),
     command: "identity publish"
   });
-  const profilePath = resolve8(
+  const profilePath = resolve9(
     registration.path,
     "members",
     identity.memberId,
@@ -10186,7 +10628,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       "rev-parse",
       "--show-toplevel"
     ]).stdout.trim();
-    if (resolve8(topLevel) !== resolve8(registration.path)) {
+    if (resolve9(topLevel) !== resolve9(registration.path)) {
       throw new ServiceError(
         "FORUM_PROTOCOL_MISMATCH",
         `configured forum path is not the Git root: ${registration.path}`
@@ -10205,7 +10647,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     }
     const protocol = JSON.parse(
       await readFile5(
-        resolve8(registration.path, ".forum", "protocol.json"),
+        resolve9(registration.path, ".forum", "protocol.json"),
         "utf8"
       )
     );
@@ -10296,7 +10738,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     } catch (error) {
       runGit(registration.path, ["reset", "--", profilePath]);
       if (previous === void 0) {
-        await rm4(profilePath, { force: true });
+        await rm5(profilePath, { force: true });
       } else {
         await writeFileAtomic(profilePath, previous, { overwrite: true });
       }
@@ -10313,12 +10755,17 @@ function forumHelp() {
     exitCode: ExitCode.Success,
     command: "forum.help",
     data: {
-      usage: "agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]"
+      commands: ["init-local", "add", "publish", "list", "status", "remove"]
     },
     human: `Forum management
 
 Usage:
   agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]
+  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]
+  agent-forum forum publish --forum <alias> --remote <url>
+  agent-forum forum list
+  agent-forum forum status --forum <alias>
+  agent-forum forum remove --forum <alias> [--keep-clone]
 `
   };
 }
@@ -10331,40 +10778,146 @@ async function executeForumCommand(args) {
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return forumHelp();
   }
-  if (subcommand !== "init-local") {
-    return invalidArgument(`unknown forum subcommand: ${subcommand}`);
-  }
-  const parsed = parseCommandOptions(args.slice(1), {
-    values: ["--alias", "--name", "--description", "--branch", "--identity"]
-  });
-  if ("error" in parsed) return invalidArgument(parsed.error);
-  const alias = valueOrError(parsed, "--alias");
-  if (typeof alias !== "string") return alias;
-  const name = valueOrError(parsed, "--name");
-  if (typeof name !== "string") return name;
-  const description = valueOrError(parsed, "--description");
-  if (typeof description !== "string") return description;
   try {
-    const identityId = parsed.values.get("--identity");
-    const result = await initLocalForum({
-      alias,
-      name,
-      description,
-      dataBranch: parsed.values.get("--branch") ?? "main",
-      ...identityId ? { identityId } : {}
-    });
-    return {
-      exitCode: ExitCode.Success,
-      command: "forum.init-local",
-      data: result,
-      human: `initialized: ${result.alias}
+    if (subcommand === "init-local") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--alias", "--name", "--description", "--branch", "--identity"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const alias = valueOrError(parsed, "--alias");
+      if (typeof alias !== "string") return alias;
+      const name = valueOrError(parsed, "--name");
+      if (typeof name !== "string") return name;
+      const description = valueOrError(parsed, "--description");
+      if (typeof description !== "string") return description;
+      const identityId = parsed.values.get("--identity");
+      const result = await initLocalForum({
+        alias,
+        name,
+        description,
+        dataBranch: parsed.values.get("--branch") ?? "main",
+        ...identityId ? { identityId } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.init-local",
+        data: result,
+        human: `initialized: ${result.alias}
 path: ${result.path}
 forum: ${result.forumId}
 commit: ${result.commit}
 `
-    };
+      };
+    }
+    if (subcommand === "add") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--alias", "--remote", "--branch"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const alias = valueOrError(parsed, "--alias");
+      if (typeof alias !== "string") return alias;
+      const remote = valueOrError(parsed, "--remote");
+      if (typeof remote !== "string") return remote;
+      const branch = parsed.values.get("--branch");
+      const result = await addRemoteForum({
+        alias,
+        remote,
+        ...branch ? { branch } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.add",
+        data: result,
+        human: `added: ${result.alias}
+forum: ${result.forumId}
+branch: ${result.dataBranch}
+remote: ${result.remote}
+`
+      };
+    }
+    if (subcommand === "publish") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum", "--remote"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const remote = valueOrError(parsed, "--remote");
+      if (typeof remote !== "string") return remote;
+      const result = await publishLocalForum({ forumAlias, remote });
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.publish",
+        data: result,
+        human: `published: ${result.forumAlias}
+branch: ${result.branch}
+remote: ${result.remote}
+commit: ${result.commit}
+`
+      };
+    }
+    if (subcommand === "list") {
+      const parsed = parseCommandOptions(args.slice(1), { values: [] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const result = await listRemoteForums();
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.list",
+        data: result,
+        human: result.forums.length === 0 ? "No forums.\n" : `${result.forums.map(
+          (forum) => `${forum.alias}	${forum.health}	${forum.expectedBranch}	${forum.remote.displayUrl ?? "no-remote"}`
+        ).join("\n")}
+`
+      };
+    }
+    if (subcommand === "status") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const result = await getForumRemoteStatus(forumAlias);
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.status",
+        data: result,
+        human: `forum: ${result.alias}
+health: ${result.health}
+branch: ${result.currentBranch ?? "detached"}
+remote: ${result.remote.displayUrl ?? "not configured"}
+ahead: ${result.remote.ahead ?? "unknown"}
+behind: ${result.remote.behind ?? "unknown"}
+`
+      };
+    }
+    if (subcommand === "remove") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum"],
+        flags: ["--keep-clone"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const result = await removeLocalForum({
+        forumAlias,
+        keepClone: parsed.flags.has("--keep-clone")
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.remove",
+        data: result,
+        human: `removed: ${result.forumAlias}
+local clone: ${result.clone}
+remote: unchanged
+`
+      };
+    }
+    return invalidArgument(`unknown forum subcommand: ${subcommand}`);
   } catch (error) {
-    return commandError("forum.init-local", error) ?? Promise.reject(error);
+    const handled = commandError(`forum.${subcommand}`, error);
+    if (handled) return handled;
+    throw error;
   }
 }
 
@@ -10469,8 +11022,8 @@ forum: ${result.alias}
 }
 
 // src/services/thread.ts
-import { readFile as readFile6, readdir as readdir3, rm as rm5 } from "node:fs/promises";
-import { basename as basename2, resolve as resolve9 } from "node:path";
+import { readFile as readFile6, readdir as readdir3, rm as rm6 } from "node:fs/promises";
+import { basename as basename2, resolve as resolve10 } from "node:path";
 
 // src/domain/thread-kinds.ts
 var knownThreadKinds = [
@@ -10493,7 +11046,7 @@ function structuralWarning(code, path, message) {
   return { code, path, message };
 }
 async function readThreadEvents(registration, roomId, threadId) {
-  const directory = resolve9(
+  const directory = resolve10(
     registration.path,
     "rooms",
     roomId,
@@ -10513,12 +11066,12 @@ async function readThreadEvents(registration, roomId, threadId) {
   const events = [];
   const warnings = [];
   for (const entry of entries) {
-    const eventPath = resolve9(directory, entry.name, "event.json");
+    const eventPath = resolve10(directory, entry.name, "event.json");
     if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
       warnings.push(
         structuralWarning(
           "INVALID_EVENT_PATH",
-          resolve9(directory, entry.name),
+          resolve10(directory, entry.name),
           "thread event path is not a valid event ID directory"
         )
       );
@@ -10544,7 +11097,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   return { events, warnings };
 }
 async function readMessageDirectory(directory, threadId) {
-  const metadataPath = resolve9(directory, "message.json");
+  const metadataPath = resolve10(directory, "message.json");
   if (!isEntityId(basename2(directory), "message")) {
     return {
       warnings: [
@@ -10571,11 +11124,11 @@ async function readMessageDirectory(directory, threadId) {
         `message threadId does not match its parent thread: ${metadataPath}`
       );
     }
-    const body = await readFile6(resolve9(directory, "body.md"), "utf8");
+    const body = await readFile6(resolve10(directory, "body.md"), "utf8");
     if (body.trim().length === 0 || body.includes("\0")) {
       throw new StorageError(
         "INVALID_MESSAGE_BODY",
-        `message body is empty or contains NUL: ${resolve9(directory, "body.md")}`
+        `message body is empty or contains NUL: ${resolve10(directory, "body.md")}`
       );
     }
     const message = {
@@ -10609,7 +11162,7 @@ async function readMessageDirectory(directory, threadId) {
   }
 }
 async function readThreadMessages(registration, roomId, threadId) {
-  const directory = resolve9(
+  const directory = resolve10(
     registration.path,
     "rooms",
     roomId,
@@ -10629,7 +11182,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   const messages = [];
   const warnings = [];
   for (const entry of entries) {
-    const path = resolve9(directory, entry.name);
+    const path = resolve10(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -10651,14 +11204,14 @@ async function readThreadMessages(registration, roomId, threadId) {
   return { messages, warnings };
 }
 async function readThreadDirectory(registration, roomId, threadDirectoryName) {
-  const directory = resolve9(
+  const directory = resolve10(
     registration.path,
     "rooms",
     roomId,
     "threads",
     threadDirectoryName
   );
-  const threadPath = resolve9(directory, "thread.json");
+  const threadPath = resolve10(directory, "thread.json");
   if (!isEntityId(threadDirectoryName, "thread")) {
     return {
       messages: [],
@@ -10706,7 +11259,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "MESSAGE_SELF_REPLY",
-          resolve9(directory, "messages", message.id, "message.json"),
+          resolve10(directory, "messages", message.id, "message.json"),
           "message replyTo cannot reference itself"
         )
       );
@@ -10714,7 +11267,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "REPLY_TARGET_MISSING",
-          resolve9(directory, "messages", message.id, "message.json"),
+          resolve10(directory, "messages", message.id, "message.json"),
           `reply target is missing or damaged: ${message.replyTo}`
         )
       );
@@ -10736,7 +11289,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_TYPE_MISMATCH",
-          resolve9(directory, "messages", firstMessage.id, "message.json"),
+          resolve10(directory, "messages", firstMessage.id, "message.json"),
           "first message type does not match thread kind"
         )
       );
@@ -10745,7 +11298,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_AUTHOR_MISMATCH",
-          resolve9(directory, "messages", firstMessage.id, "message.json"),
+          resolve10(directory, "messages", firstMessage.id, "message.json"),
           "first message author does not match thread creator"
         )
       );
@@ -10754,7 +11307,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_REPLY_INVALID",
-          resolve9(directory, "messages", firstMessage.id, "message.json"),
+          resolve10(directory, "messages", firstMessage.id, "message.json"),
           "first message replyTo must be null"
         )
       );
@@ -10777,7 +11330,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
   );
   warnings.push(...eventResult.warnings);
   for (const event of eventResult.events) {
-    const eventPath = resolve9(
+    const eventPath = resolve10(
       directory,
       "events",
       String(event.id),
@@ -10827,7 +11380,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
 async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const roomResult = await showRoom(forumAlias, room, paths);
   const { registration } = await openForum(forumAlias, paths);
-  const directory = resolve9(
+  const directory = resolve10(
     registration.path,
     "rooms",
     roomResult.room.id,
@@ -10849,7 +11402,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const threads = [];
   const warnings = [...roomResult.warnings];
   for (const entry of entries) {
-    const path = resolve9(directory, entry.name);
+    const path = resolve10(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -10949,7 +11502,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
         mentions: [],
         references: []
       };
-      const threadDirectory = resolve9(
+      const threadDirectory = resolve10(
         registration.path,
         "rooms",
         roomResult.room.id,
@@ -10960,12 +11513,12 @@ async function createThread(input, paths = createAgentForumPaths()) {
       try {
         await createImmutableDirectory(threadDirectory, async (temporary) => {
           await writeValidatedJsonAtomic(
-            resolve9(temporary, "thread.json"),
+            resolve10(temporary, "thread.json"),
             "thread",
             thread
           );
           await createImmutableMessage(
-            resolve9(temporary, "messages", messageId),
+            resolve10(temporary, "messages", messageId),
             metadata,
             input.body
           );
@@ -11005,7 +11558,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", threadDirectory]);
         if (directoryCreated) {
-          await rm5(threadDirectory, { recursive: true, force: true });
+          await rm6(threadDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -11081,7 +11634,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
         mentions: input.mentions ?? [],
         references: input.references ?? []
       };
-      const messageDirectory = resolve9(
+      const messageDirectory = resolve10(
         registration.path,
         "rooms",
         detail.room.id,
@@ -11126,7 +11679,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", messageDirectory]);
         if (messageCreated) {
-          await rm5(messageDirectory, { recursive: true, force: true });
+          await rm6(messageDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -11181,7 +11734,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
         },
         event
       );
-      const eventDirectory = resolve9(
+      const eventDirectory = resolve10(
         registration.path,
         "rooms",
         detail.room.id,
@@ -11212,7 +11765,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", eventDirectory]);
         if (eventCreated) {
-          await rm5(eventDirectory, { recursive: true, force: true });
+          await rm6(eventDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -11551,19 +12104,19 @@ commit: ${result.commit}
 }
 
 // src/skill/installer.ts
-import { createHash, randomUUID as randomUUID4 } from "node:crypto";
+import { createHash, randomUUID as randomUUID5 } from "node:crypto";
 import {
   cp,
-  mkdir as mkdir4,
+  mkdir as mkdir5,
   readFile as readFile7,
   readdir as readdir4,
-  rename as rename4,
-  rm as rm6,
+  rename as rename5,
+  rm as rm7,
   stat as stat4,
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve10, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative, resolve as resolve11, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -11585,18 +12138,18 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve10(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve11(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function skillDestination(target, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve10(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve11(homeDirectory, ".agents", "skills", "agent-forum");
   }
   if (target === "claude-code") {
-    return resolve10(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve11(homeDirectory, ".claude", "skills", "agent-forum");
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
 }
-async function pathExists3(path) {
+async function pathExists4(path) {
   try {
     await stat4(path);
     return true;
@@ -11626,17 +12179,17 @@ async function loadState(homeDirectory) {
 }
 async function saveState(homeDirectory, state) {
   const destination = stateFile(homeDirectory);
-  await mkdir4(dirname3(destination), { recursive: true });
-  const temporary = `${destination}.tmp-${randomUUID4()}`;
+  await mkdir5(dirname3(destination), { recursive: true });
+  const temporary = `${destination}.tmp-${randomUUID5()}`;
   try {
     await writeFile2(temporary, `${JSON.stringify(state, null, 2)}
 `, {
       encoding: "utf8",
       flag: "wx"
     });
-    await rename4(temporary, destination);
+    await rename5(temporary, destination);
   } catch (error) {
-    await rm6(temporary, { force: true });
+    await rm7(temporary, { force: true });
     throw error;
   }
 }
@@ -11645,7 +12198,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const entries = await readdir4(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve10(current, entry.name);
+    const absolute = resolve11(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -11678,11 +12231,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve10(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve10(process.cwd(), "skills", "agent-forum")
+    resolve11(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve11(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists3(resolve10(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists4(resolve11(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -11690,22 +12243,22 @@ async function resolveSkillSource(explicit) {
   );
 }
 async function replaceDirectory(source, destination) {
-  await mkdir4(dirname3(destination), { recursive: true });
-  const staging = `${destination}.staging-${randomUUID4()}`;
-  const backup = `${destination}.backup-${randomUUID4()}`;
+  await mkdir5(dirname3(destination), { recursive: true });
+  const staging = `${destination}.staging-${randomUUID5()}`;
+  const backup = `${destination}.backup-${randomUUID5()}`;
   let movedExisting = false;
   try {
     await cp(source, staging, { recursive: true, errorOnExist: true });
-    if (await pathExists3(destination)) {
-      await rename4(destination, backup);
+    if (await pathExists4(destination)) {
+      await rename5(destination, backup);
       movedExisting = true;
     }
-    await rename4(staging, destination);
-    if (movedExisting) await rm6(backup, { recursive: true, force: true });
+    await rename5(staging, destination);
+    if (movedExisting) await rm7(backup, { recursive: true, force: true });
   } catch (error) {
-    await rm6(staging, { recursive: true, force: true });
-    if (movedExisting && !await pathExists3(destination)) {
-      await rename4(backup, destination);
+    await rm7(staging, { recursive: true, force: true });
+    if (movedExisting && !await pathExists4(destination)) {
+      await rename5(backup, destination);
     }
     throw error;
   }
@@ -11715,7 +12268,7 @@ async function installSkill(options) {
   const source = await resolveSkillSource(options.sourceDirectory);
   const destination = skillDestination(options.target, homeDirectory);
   const sourceFiles = await collectFiles(source);
-  const destinationExists = await pathExists3(destination);
+  const destinationExists = await pathExists4(destination);
   const destinationFiles = destinationExists ? await collectFiles(destination, destination, true) : void 0;
   const unchanged = destinationFiles ? sameFiles(sourceFiles, destinationFiles) : false;
   if (destinationExists && !unchanged && !options.force) {
@@ -11768,7 +12321,7 @@ async function getSkillStatus(target, homeDirectory = homedir2()) {
   const record = state.installations.find(
     (installation) => installation.path === destination && installation.targets.includes(target)
   );
-  if (!await pathExists3(destination)) {
+  if (!await pathExists4(destination)) {
     return { target, destination, status: "not-installed" };
   }
   if (!record) return { target, destination, status: "unmanaged" };
@@ -11800,7 +12353,7 @@ async function uninstallSkill(options) {
     (target) => target !== options.target
   );
   const shouldRemoveFiles = remainingTargets.length === 0;
-  if (shouldRemoveFiles && await pathExists3(destination)) {
+  if (shouldRemoveFiles && await pathExists4(destination)) {
     const currentFiles = await collectFiles(destination, destination, true);
     if (!sameFiles(currentFiles, record.files) && !options.force) {
       throw new SkillInstallationError(
@@ -11818,7 +12371,7 @@ async function uninstallSkill(options) {
     };
   }
   if (shouldRemoveFiles) {
-    await rm6(destination, { recursive: true, force: true });
+    await rm7(destination, { recursive: true, force: true });
   }
   const installations = shouldRemoveFiles ? state.installations.filter((installation) => installation.path !== destination) : state.installations.map(
     (installation) => installation.path === destination ? { ...installation, targets: remainingTargets } : installation

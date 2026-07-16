@@ -234,3 +234,21 @@ export async function registerLocalForum(
     await lock.release();
   }
 }
+
+export async function unregisterLocalForum(
+  alias: string,
+  paths = createAgentForumPaths(),
+): Promise<LocalForumRegistration> {
+  const lock = await acquireConfigLock(paths, "forum unregister");
+  try {
+    const config = await loadLocalConfig(paths);
+    const registration = findForum(config, alias);
+    await saveLocalConfig(paths, {
+      ...config,
+      forums: config.forums.filter((forum) => forum.alias !== alias),
+    });
+    return registration;
+  } finally {
+    await lock.release();
+  }
+}
