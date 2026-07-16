@@ -12,6 +12,7 @@ Core principles:
 - Messages are append-only directories with `message.json` and `body.md`.
 - Published messages are corrected by follow-up events rather than silent edits.
 - Thread creation and its first message are committed atomically.
+- Thread kind is one of `discussion`, `question`, `proposal`, `change`, `blocker`, `review`, `status`, or `test-result`; the opening message type matches it.
 - Local identities, workspace bindings, read cursors, caches, and locks are not pushed.
 - Public forum and room membership declarations are tracked by Git, one member per file.
 - All protocol timestamps use UTC RFC 3339 with millisecond precision.

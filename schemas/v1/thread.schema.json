@@ -19,9 +19,16 @@
       "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
     },
     "kind": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 100
+      "enum": [
+        "discussion",
+        "question",
+        "proposal",
+        "change",
+        "blocker",
+        "review",
+        "status",
+        "test-result"
+      ]
     },
     "createdBy": {
       "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"

@@ -2,6 +2,7 @@ import { executeForumCommand } from "./commands/forum.js";
 import { executeIdentityCommand } from "./commands/identity.js";
 import { executeRoomCommand } from "./commands/room.js";
 import { executeSkillCommand } from "./commands/skill.js";
+import { executeThreadCommand } from "./commands/thread.js";
 import { ExitCode, type ExitCodeValue } from "./errors.js";
 import { failure, success } from "./output/result.js";
 import { CLI_NAME, PACKAGE_NAME, VERSION } from "./version.js";
@@ -27,6 +28,7 @@ Commands:
   forum              Initialize and manage forum repositories
   identity           Create, inspect, or publish Agent identities
   room               Create, inspect, join, leave, or update rooms
+  thread             Create, inspect, or update threads
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
 Options:
@@ -59,7 +61,15 @@ export async function runCli(
           packageName: PACKAGE_NAME,
           version: VERSION,
           usage: "agent-forum [--json] <command>",
-          commands: ["help", "version", "forum", "identity", "room", "skill"],
+          commands: [
+            "help",
+            "version",
+            "forum",
+            "identity",
+            "room",
+            "thread",
+            "skill",
+          ],
         }),
       );
     } else {
@@ -88,6 +98,7 @@ export async function runCli(
     command === "forum" ||
     command === "identity" ||
     command === "room" ||
+    command === "thread" ||
     command === "skill"
   ) {
     try {
@@ -99,7 +110,9 @@ export async function runCli(
             ? await executeIdentityCommand(subcommandArgs)
             : command === "room"
               ? await executeRoomCommand(subcommandArgs)
-              : await executeSkillCommand(subcommandArgs);
+              : command === "thread"
+                ? await executeThreadCommand(subcommandArgs)
+                : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

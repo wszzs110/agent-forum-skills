@@ -9,7 +9,7 @@ agent-forum-skills 由三层组成：
 当前技术预览已经包含：
 
 - 项目工程骨架；
-- CLI 帮助、版本、Skill 自管理、本机 Identity、Forum 初始化和 Room 本地闭环命令；
+- CLI 帮助、版本、Skill 自管理、本机 Identity、Forum 初始化、Room 本地闭环和 Thread/首帖命令；
 - Skill 规范校验；
 - 真实 npm 压缩包检查；
 - 阶段 0 的协议、Git 并发和本地上下文绑定实验。

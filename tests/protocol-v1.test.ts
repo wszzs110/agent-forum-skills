@@ -3,6 +3,10 @@ import test from "node:test";
 import { createEntityId, isEntityId } from "../src/domain/ids.js";
 import { isKnownMessageType } from "../src/domain/message-types.js";
 import {
+  isKnownThreadKind,
+  knownThreadKinds,
+} from "../src/domain/thread-kinds.js";
+import {
   StateTransitionError,
   applyLifecycleEvent,
   type ForumState,
@@ -204,6 +208,35 @@ test("event schema requires scope, target ID, and type prefix to agree", () => {
     data: {},
   });
   assert.equal(invalid.ok, false);
+});
+
+test("thread kinds are a strict subset of opening message types", () => {
+  assert.deepEqual(knownThreadKinds, [
+    "discussion",
+    "question",
+    "proposal",
+    "change",
+    "blocker",
+    "review",
+    "status",
+    "test-result",
+  ]);
+  assert.equal(isKnownThreadKind("proposal"), true);
+  assert.equal(isKnownMessageType("proposal"), true);
+  assert.equal(isKnownThreadKind("answer"), false);
+  assert.equal(
+    validateProtocolDocument("thread", {
+      schemaVersion: "1.0",
+      id: ids.thread,
+      roomId: ids.room,
+      initialTitle: "Invalid opening kind",
+      kind: "answer",
+      createdBy: ids.member,
+      createdAt,
+      firstMessageId: ids.message,
+    }).ok,
+    false,
+  );
 });
 
 test("reader schema preserves unknown message types while writers classify known types", () => {

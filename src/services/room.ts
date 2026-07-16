@@ -13,6 +13,7 @@ import {
 } from "../config/local-config.js";
 import { createEntityId, isEntityId } from "../domain/ids.js";
 import {
+  StateTransitionError,
   applyLifecycleEvent,
   isKnownLifecycleEventType,
   type LifecycleEventInput,
@@ -111,11 +112,11 @@ export interface RoomEventInput {
   now?: Date;
 }
 
-interface ForumContext {
+export interface ForumContext {
   registration: LocalForumRegistration;
 }
 
-async function readJsonDocument(
+export async function readJsonDocument(
   path: string,
   schema: ProtocolSchemaName,
 ): Promise<Record<string, unknown>> {
@@ -140,8 +141,12 @@ async function readJsonDocument(
   return value as Record<string, unknown>;
 }
 
-function warning(path: string, error: unknown): ProtocolWarning {
-  if (error instanceof StorageError || error instanceof ServiceError) {
+export function protocolWarning(path: string, error: unknown): ProtocolWarning {
+  if (
+    error instanceof StorageError ||
+    error instanceof ServiceError ||
+    error instanceof StateTransitionError
+  ) {
     return { code: error.code, path, message: error.message };
   }
   return {
@@ -151,7 +156,7 @@ function warning(path: string, error: unknown): ProtocolWarning {
   };
 }
 
-async function openForum(
+export async function openForum(
   alias: string,
   paths: AgentForumPaths,
   options: { requireClean?: boolean } = {},
@@ -279,7 +284,7 @@ async function readRoomEvents(
       }
       events.push(event);
     } catch (error) {
-      warnings.push(warning(eventPath, error));
+      warnings.push(protocolWarning(eventPath, error));
     }
   }
   events.sort((left, right) => {
@@ -321,7 +326,7 @@ async function readRoomDirectory(
       );
     }
   } catch (error) {
-    return { warnings: [warning(roomPath, error)] };
+    return { warnings: [protocolWarning(roomPath, error)] };
   }
 
   let state: RoomState = {
@@ -360,7 +365,7 @@ async function readRoomDirectory(
       });
       lastActivityAt = String(event.createdAt);
     } catch (error) {
-      warnings.push(warning(eventPath, error));
+      warnings.push(protocolWarning(eventPath, error));
     }
   }
 
@@ -433,7 +438,7 @@ export async function showRoom(
   return { room: found, warnings: result.warnings };
 }
 
-async function withForumWrite<T>(
+export async function withForumWrite<T>(
   forumAlias: string,
   identityId: string | undefined,
   paths: AgentForumPaths,
@@ -640,7 +645,7 @@ export async function joinRoom(
       const roomResult = await showRoom(input.forumAlias, input.room, paths);
       if (roomResult.room.status !== "active") {
         throw new ServiceError(
-          "NO_CHANGES",
+          "ROOM_ARCHIVED",
           `cannot join archived room: ${roomResult.room.id}`,
         );
       }
@@ -732,7 +737,7 @@ export async function leaveRoom(
   );
 }
 
-async function requireActiveRoomMember(
+export async function requireActiveRoomMember(
   registration: LocalForumRegistration,
   roomId: string,
   identity: LocalIdentity,

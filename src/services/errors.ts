@@ -12,6 +12,9 @@ export class ServiceError extends Error {
       | "ROOM_NOT_FOUND"
       | "ROOM_SLUG_EXISTS"
       | "ROOM_MEMBERSHIP_REQUIRED"
+      | "ROOM_ARCHIVED"
+      | "THREAD_NOT_FOUND"
+      | "THREAD_KIND_INVALID"
       | "PROTOCOL_DATA_DAMAGED"
       | "NO_CHANGES",
     message: string,
