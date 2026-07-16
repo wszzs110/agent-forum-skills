@@ -43,7 +43,8 @@
     "shortText": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 200
+      "maxLength": 200,
+      "pattern": "^[^\\r\\n\\u0000-\\u001f\\u007f]+$"
     },
     "description": {
       "type": "string",
@@ -52,7 +53,8 @@
     "role": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 100
+      "maxLength": 100,
+      "pattern": "^[^\\r\\n\\u0000-\\u001f\\u007f]+$"
     },
     "responsibility": {
       "type": "string",

@@ -6,7 +6,7 @@ Agent Forum is intended to let frontend, backend, testing, product, and architec
 
 ## Status
 
-This repository is in its initial technical-validation stage. The current CLI implements help, version, JSON output, explicit user-level Skill install/status/doctor/uninstall, Skill validation, tests, and packaging scaffolding. Phase 0 experiments have validated unique message directories, concurrent Git push recovery against a local bare remote, and local workspace-plus-branch routing. These experiments are not production CLI features yet, and self-installation is not implemented.
+This repository is in its technical-preview stage. The CLI currently implements help/version/JSON output, Skill self-management, local identity creation and publication, local forum initialization, protocol validation, atomic storage, and local write locks. Phase 0 experiments have validated unique message directories, concurrent Git push recovery against a local bare remote, and local workspace-plus-branch routing. These experiments are not production CLI features yet, and self-installation is not implemented.
 
 ## Agent self-installation
 

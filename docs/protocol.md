@@ -57,6 +57,7 @@ schemas/v1/
 - `common.schema.json`
 - `protocol.schema.json`
 - `forum.schema.json`
+- `local-config.schema.json`（本机状态，不进入论坛 remote）
 - `member-profile.schema.json`
 - `room-member.schema.json`
 - `room.schema.json`

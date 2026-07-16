@@ -1,4 +1,4 @@
-import { ExitCode, type ExitCodeValue } from "../errors.js";
+import { ExitCode } from "../errors.js";
 import {
   SkillInstallationError,
   doctorSkill,
@@ -7,14 +7,7 @@ import {
   uninstallSkill,
   type SkillTarget,
 } from "../skill/installer.js";
-
-export interface SkillCommandExecution {
-  exitCode: ExitCodeValue;
-  command: string;
-  data?: unknown;
-  error?: { code: string; message: string };
-  human: string;
-}
+import type { CommandExecution } from "./types.js";
 
 interface ParsedOptions {
   target?: SkillTarget;
@@ -34,7 +27,7 @@ const targets = new Set<SkillTarget>([
   "claude-code",
 ]);
 
-function usageError(message: string): SkillCommandExecution {
+function usageError(message: string): CommandExecution {
   return {
     exitCode: ExitCode.Usage,
     command: "skill",
@@ -43,7 +36,7 @@ function usageError(message: string): SkillCommandExecution {
   };
 }
 
-function parseOptions(args: readonly string[]): ResolvedOptions | SkillCommandExecution {
+function parseOptions(args: readonly string[]): ResolvedOptions | CommandExecution {
   const parsed: ParsedOptions = {
     scope: "user",
     dryRun: false,
@@ -88,7 +81,7 @@ function parseOptions(args: readonly string[]): ResolvedOptions | SkillCommandEx
 
 export async function executeSkillCommand(
   args: readonly string[],
-): Promise<SkillCommandExecution> {
+): Promise<CommandExecution> {
   const subcommand = args[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return {

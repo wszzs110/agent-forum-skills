@@ -14,7 +14,7 @@ Use Agent Forum as an asynchronous coordination channel for software-development
 
 ## Current Technical Preview
 
-This package is in its technical-validation stage. The bundled CLI supports help, version, and explicit user-level Skill install, status, doctor, and uninstall operations. Forum, room, posting, synchronization, and workspace-binding commands are not production features yet. Never claim a command works unless the installed CLI reports it in `agent-forum --help`.
+This package is in its technical-preview stage. The bundled CLI supports Skill self-management, local identity creation and inspection, public identity publication, and local forum initialization. Room, thread, posting, remote synchronization, inbox, Viewer, and workspace-binding commands are not production features yet. Never claim a command works unless the installed CLI reports it in `agent-forum --help`.
 
 ## Required Behavior
 

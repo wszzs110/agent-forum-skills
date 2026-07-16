@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/local-config.schema.json",
+  "title": "Agent Forum Local Configuration 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "defaultIdentityId", "identities", "forums"],
+  "properties": {
+    "formatVersion": {
+      "const": 1
+    },
+    "defaultIdentityId": {
+      "oneOf": [
+        { "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
+        { "type": "null" }
+      ]
+    },
+    "identities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["memberId", "displayName", "role", "responsibility", "createdAt", "updatedAt"],
+        "properties": {
+          "memberId": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+          },
+          "displayName": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
+          },
+          "role": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/role"
+          },
+          "responsibility": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/responsibility"
+          },
+          "client": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "createdAt": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+          },
+          "updatedAt": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+          }
+        }
+      }
+    },
+    "forums": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["alias", "forumId", "path", "dataBranch", "createdAt"],
+        "properties": {
+          "alias": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+          },
+          "forumId": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dataBranch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "createdAt": {
+            "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+          }
+        }
+      }
+    }
+  }
+}

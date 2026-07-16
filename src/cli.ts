@@ -1,3 +1,5 @@
+import { executeForumCommand } from "./commands/forum.js";
+import { executeIdentityCommand } from "./commands/identity.js";
 import { executeSkillCommand } from "./commands/skill.js";
 import { ExitCode, type ExitCodeValue } from "./errors.js";
 import { failure, success } from "./output/result.js";
@@ -21,6 +23,8 @@ Usage:
 Commands:
   help, --help       Show this help message
   version, --version Show the CLI version
+  forum              Initialize and manage forum repositories
+  identity           Create, inspect, or publish Agent identities
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
 Options:
@@ -53,7 +57,7 @@ export async function runCli(
           packageName: PACKAGE_NAME,
           version: VERSION,
           usage: "agent-forum [--json] <command>",
-          commands: ["help", "version", "skill"],
+          commands: ["help", "version", "forum", "identity", "skill"],
         }),
       );
     } else {
@@ -78,9 +82,15 @@ export async function runCli(
     return ExitCode.Success;
   }
 
-  if (command === "skill") {
+  if (command === "forum" || command === "identity" || command === "skill") {
     try {
-      const execution = await executeSkillCommand(positional.slice(1));
+      const subcommandArgs = positional.slice(1);
+      const execution =
+        command === "forum"
+          ? await executeForumCommand(subcommandArgs)
+          : command === "identity"
+            ? await executeIdentityCommand(subcommandArgs)
+            : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,
@@ -97,7 +107,7 @@ export async function runCli(
     } catch {
       const unexpected = failure(
         "UNEXPECTED_ERROR",
-        "The skill operation failed unexpectedly. Run with a trusted package and check filesystem permissions.",
+        "The command failed unexpectedly. Check the managed files, Git installation, and filesystem permissions.",
       );
       if (json) writeJson(io, unexpected);
       else io.stderr(`Error [${unexpected.error.code}]: ${unexpected.error.message}\n`);

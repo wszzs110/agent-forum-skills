@@ -6,6 +6,7 @@ import {
 import commonSchema from "../../schemas/v1/common.schema.json" with { type: "json" };
 import eventSchema from "../../schemas/v1/event.schema.json" with { type: "json" };
 import forumSchema from "../../schemas/v1/forum.schema.json" with { type: "json" };
+import localConfigSchema from "../../schemas/v1/local-config.schema.json" with { type: "json" };
 import memberProfileSchema from "../../schemas/v1/member-profile.schema.json" with { type: "json" };
 import messageSchema from "../../schemas/v1/message.schema.json" with { type: "json" };
 import protocolSchema from "../../schemas/v1/protocol.schema.json" with { type: "json" };
@@ -17,6 +18,7 @@ import { isCanonicalUtcTimestamp } from "../domain/timestamps.js";
 export type ProtocolSchemaName =
   | "protocol"
   | "forum"
+  | "local-config"
   | "member-profile"
   | "room-member"
   | "room"
@@ -37,6 +39,7 @@ export type ValidationResult =
 const schemaDocuments = {
   protocol: protocolSchema,
   forum: forumSchema,
+  "local-config": localConfigSchema,
   "member-profile": memberProfileSchema,
   "room-member": roomMemberSchema,
   room: roomSchema,
