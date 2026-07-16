@@ -402,11 +402,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants);
+          this.rhs = optimizeExpr(this.rhs, names, constants2);
         return this;
       }
       get names() {
@@ -423,10 +423,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants);
+        this.rhs = optimizeExpr(this.rhs, names, constants2);
         return this;
       }
       get names() {
@@ -487,8 +487,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants) {
-        this.code = optimizeExpr(this.code, names, constants);
+      optimizeNames(names, constants2) {
+        this.code = optimizeExpr(this.code, names, constants2);
         return this;
       }
       get names() {
@@ -517,12 +517,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         const { nodes } = this;
         let i = nodes.length;
         while (i--) {
           const n = nodes[i];
-          if (n.optimizeNames(names, constants))
+          if (n.optimizeNames(names, constants2))
             continue;
           subtractNames(names, n.names);
           nodes.splice(i, 1);
@@ -575,12 +575,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         var _a;
-        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants);
-        if (!(super.optimizeNames(names, constants) || this.else))
+        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants2);
+        if (!(super.optimizeNames(names, constants2) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants);
+        this.condition = optimizeExpr(this.condition, names, constants2);
         return this;
       }
       get names() {
@@ -603,10 +603,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names, constants2) {
+        if (!super.optimizeNames(names, constants2))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants);
+        this.iteration = optimizeExpr(this.iteration, names, constants2);
         return this;
       }
       get names() {
@@ -642,10 +642,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names, constants2) {
+        if (!super.optimizeNames(names, constants2))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants);
+        this.iterable = optimizeExpr(this.iterable, names, constants2);
         return this;
       }
       get names() {
@@ -687,11 +687,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         var _a, _b;
-        super.optimizeNames(names, constants);
-        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants);
+        super.optimizeNames(names, constants2);
+        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants2);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants2);
         return this;
       }
       get names() {
@@ -992,7 +992,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants) {
+    function optimizeExpr(expr, names, constants2) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -1007,14 +1007,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n) {
-        const c = constants[n.str];
+        const c = constants2[n.str];
         if (c === void 0 || names[n.str] !== 1)
           return n;
         delete names[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants2[c.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -2976,7 +2976,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve13.call(this, root, ref);
+      let _sch = resolve14.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3003,7 +3003,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve13(root, ref) {
+    function resolve14(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3634,7 +3634,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve13(baseURI, relativeURI, options) {
+    function resolve14(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3892,7 +3892,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve13,
+      resolve: resolve14,
       resolveComponent,
       equal,
       serialize,
@@ -7414,6 +7414,40 @@ async function acquireForumLock(options) {
     `forum write lock could not be acquired: ${options.lockPath}`
   );
 }
+async function clearStaleForumLock(options) {
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
+  const currentHostname = options.hostname ?? hostname();
+  const isProcessAlive = options.isProcessAlive ?? defaultProcessAlive;
+  let owner;
+  try {
+    owner = await readOwner(options.lockPath);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+  let age;
+  try {
+    age = await lockAgeMs(options.lockPath, owner, now);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+  const sameHost = !owner || owner.hostname === currentHostname;
+  const alive = owner && sameHost ? isProcessAlive(owner.pid) : false;
+  if (age < staleAfterMs || !sameHost || alive) {
+    throw new StorageError(
+      "LOCK_NOT_STALE",
+      `lock is not safe to clear: ${options.lockPath}`
+    );
+  }
+  await removeStaleLock(options.lockPath);
+  return true;
+}
 
 // src/storage/paths.ts
 import { homedir } from "node:os";
@@ -10059,6 +10093,11 @@ status: ${result.targetStatus}
   }
 }
 
+// src/services/doctor.ts
+import { access, lstat as lstat3, readdir as readdir4 } from "node:fs/promises";
+import { constants } from "node:fs";
+import { resolve as resolve10 } from "node:path";
+
 // src/services/conflicts.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { readdir as readdir3, readFile as readFile5, rm as rm4 } from "node:fs/promises";
@@ -10603,9 +10642,167 @@ async function removeLocalForum(input, paths = createAgentForumPaths()) {
   }
 }
 
+// src/services/doctor.ts
+async function exists(path) {
+  try {
+    await lstat3(path);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+async function diagnoseAgentForum(input = {}, paths = createAgentForumPaths()) {
+  const checks = [];
+  const repaired = [];
+  const nodeMajor = Number(process.versions.node.split(".")[0]);
+  checks.push({
+    id: "node.version",
+    status: nodeMajor >= 20 ? "ok" : "error",
+    message: `Node.js ${process.versions.node}`
+  });
+  const git = runGit(process.cwd(), ["--version"]);
+  checks.push({
+    id: "git.version",
+    status: git.status === 0 ? "ok" : "error",
+    message: git.status === 0 ? git.stdout.trim() : "Git is unavailable"
+  });
+  let config;
+  try {
+    config = await loadLocalConfig(paths);
+    checks.push({ id: "config", status: "ok", message: `${config.forums.length} forum(s) configured` });
+  } catch (error) {
+    checks.push({ id: "config", status: "error", message: error instanceof Error ? error.message : String(error) });
+    return { healthy: false, checks, repaired };
+  }
+  try {
+    const bindings = await loadContextBindingState(paths);
+    checks.push({ id: "context.bindings", status: "ok", message: `${bindings.bindings.length} binding(s)` });
+  } catch (error) {
+    checks.push({ id: "context.bindings", status: "error", message: error instanceof Error ? error.message : String(error) });
+  }
+  if (await exists(paths.root)) {
+    try {
+      await access(paths.root, constants.R_OK | constants.W_OK);
+      checks.push({ id: "storage.permissions", status: "ok", message: "Agent Forum root is readable and writable" });
+    } catch {
+      checks.push({ id: "storage.permissions", status: "error", message: "Agent Forum root is not readable and writable" });
+    }
+  } else {
+    checks.push({ id: "storage.permissions", status: "warning", message: "Agent Forum root does not exist yet" });
+  }
+  const registrations = input.forumAlias ? config.forums.filter((forum) => forum.alias === input.forumAlias) : config.forums;
+  if (input.forumAlias && registrations.length === 0) {
+    checks.push({ id: "forum.selection", status: "error", message: `forum is not configured: ${input.forumAlias}` });
+  }
+  for (const forum of registrations) {
+    const prefix = `forum.${forum.alias}`;
+    try {
+      const status = await getForumRemoteStatus(forum.alias, paths);
+      checks.push({
+        id: `${prefix}.status`,
+        status: status.health === "ready" ? "ok" : status.health === "local-only" ? "warning" : "error",
+        message: `forum health: ${status.health}`,
+        details: status
+      });
+      const gitPath = runGit(forum.path, ["rev-parse", "--git-path", "rebase-merge"]);
+      const applyPath = runGit(forum.path, ["rev-parse", "--git-path", "rebase-apply"]);
+      const rebasePresent = gitPath.status === 0 && await exists(resolve10(forum.path, gitPath.stdout.trim())) || applyPath.status === 0 && await exists(resolve10(forum.path, applyPath.stdout.trim()));
+      checks.push({
+        id: `${prefix}.rebase`,
+        status: rebasePresent ? "error" : "ok",
+        message: rebasePresent ? "an interrupted rebase is present" : "no interrupted rebase"
+      });
+      try {
+        const journals = await listConflicts(forum.alias, paths);
+        let missingRefs = 0;
+        for (const journal of journals.conflicts) {
+          if (runGit(forum.path, ["rev-parse", "--verify", journal.recoveryRef]).status !== 0) missingRefs += 1;
+        }
+        checks.push({
+          id: `${prefix}.conflicts`,
+          status: missingRefs > 0 ? "error" : journals.conflicts.length > 0 ? "warning" : "ok",
+          message: `${journals.conflicts.length} conflict journal(s), ${missingRefs} missing recovery ref(s)`
+        });
+      } catch (error) {
+        checks.push({ id: `${prefix}.conflicts`, status: "error", message: error instanceof Error ? error.message : String(error) });
+      }
+      if (input.network && status.remote.configured) {
+        const remote = runGit(forum.path, ["ls-remote", "--exit-code", "origin", forum.dataBranch]);
+        checks.push({
+          id: `${prefix}.network`,
+          status: remote.status === 0 ? "ok" : "error",
+          message: remote.status === 0 ? "remote branch is reachable" : "remote branch is not reachable"
+        });
+      }
+    } catch (error) {
+      checks.push({ id: `${prefix}.status`, status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+    const lockPath = forumLockPath(paths, forum.forumId);
+    if (await exists(lockPath)) {
+      if (input.repairStaleLocks) {
+        try {
+          if (await clearStaleForumLock({ lockPath })) {
+            repaired.push(lockPath);
+            checks.push({ id: `${prefix}.lock`, status: "ok", message: "stale lock was removed" });
+          }
+        } catch (error) {
+          checks.push({ id: `${prefix}.lock`, status: "warning", message: error instanceof Error ? error.message : String(error) });
+        }
+      } else {
+        checks.push({ id: `${prefix}.lock`, status: "warning", message: "forum lock exists; use --repair-stale-locks only after review" });
+      }
+    } else {
+      checks.push({ id: `${prefix}.lock`, status: "ok", message: "no forum lock" });
+    }
+  }
+  if (await exists(paths.locksDirectory)) {
+    const known = new Set(config.forums.map((forum) => `${forum.forumId}.lock`));
+    const entries = await readdir4(paths.locksDirectory, { withFileTypes: true });
+    const orphaned = entries.filter((entry) => entry.isDirectory() && entry.name.endsWith(".lock") && !known.has(entry.name));
+    if (orphaned.length > 0) {
+      checks.push({ id: "locks.orphaned", status: "warning", message: `${orphaned.length} orphaned lock(s) require review` });
+    }
+  }
+  return {
+    healthy: !checks.some((check) => check.status === "error"),
+    checks,
+    repaired
+  };
+}
+
+// src/commands/doctor.ts
+async function executeDoctorCommand(args) {
+  const parsed = parseCommandOptions(args, {
+    values: ["--forum"],
+    flags: ["--network", "--repair-stale-locks"]
+  });
+  if ("error" in parsed) return invalidArgument(parsed.error);
+  try {
+    const forumAlias = parsed.values.get("--forum");
+    const result = await diagnoseAgentForum({
+      ...forumAlias ? { forumAlias } : {},
+      network: parsed.flags.has("--network"),
+      repairStaleLocks: parsed.flags.has("--repair-stale-locks")
+    });
+    return {
+      exitCode: result.healthy ? ExitCode.Success : ExitCode.Unexpected,
+      command: "doctor",
+      data: result,
+      human: `${result.healthy ? "healthy" : "unhealthy"}
+${result.checks.map((check) => `${check.status}	${check.id}	${check.message}`).join("\n")}
+`
+    };
+  } catch (error) {
+    const handled = commandError("doctor", error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
 // src/services/thread.ts
-import { readFile as readFile6, readdir as readdir4, rm as rm6 } from "node:fs/promises";
-import { basename as basename2, resolve as resolve10 } from "node:path";
+import { readFile as readFile6, readdir as readdir5, rm as rm6 } from "node:fs/promises";
+import { basename as basename2, resolve as resolve11 } from "node:path";
 
 // src/domain/thread-kinds.ts
 var knownThreadKinds = [
@@ -10628,7 +10825,7 @@ function structuralWarning(code, path, message) {
   return { code, path, message };
 }
 async function readThreadEvents(registration, roomId, threadId) {
-  const directory = resolve10(
+  const directory = resolve11(
     registration.path,
     "rooms",
     roomId,
@@ -10638,7 +10835,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   );
   let entries;
   try {
-    entries = await readdir4(directory, { withFileTypes: true });
+    entries = await readdir5(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { events: [], warnings: [] };
@@ -10648,12 +10845,12 @@ async function readThreadEvents(registration, roomId, threadId) {
   const events = [];
   const warnings = [];
   for (const entry of entries) {
-    const eventPath = resolve10(directory, entry.name, "event.json");
+    const eventPath = resolve11(directory, entry.name, "event.json");
     if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
       warnings.push(
         structuralWarning(
           "INVALID_EVENT_PATH",
-          resolve10(directory, entry.name),
+          resolve11(directory, entry.name),
           "thread event path is not a valid event ID directory"
         )
       );
@@ -10679,7 +10876,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   return { events, warnings };
 }
 async function readMessageDirectory(directory, threadId) {
-  const metadataPath = resolve10(directory, "message.json");
+  const metadataPath = resolve11(directory, "message.json");
   if (!isEntityId(basename2(directory), "message")) {
     return {
       warnings: [
@@ -10706,11 +10903,11 @@ async function readMessageDirectory(directory, threadId) {
         `message threadId does not match its parent thread: ${metadataPath}`
       );
     }
-    const body = await readFile6(resolve10(directory, "body.md"), "utf8");
+    const body = await readFile6(resolve11(directory, "body.md"), "utf8");
     if (body.trim().length === 0 || body.includes("\0")) {
       throw new StorageError(
         "INVALID_MESSAGE_BODY",
-        `message body is empty or contains NUL: ${resolve10(directory, "body.md")}`
+        `message body is empty or contains NUL: ${resolve11(directory, "body.md")}`
       );
     }
     const message = {
@@ -10744,7 +10941,7 @@ async function readMessageDirectory(directory, threadId) {
   }
 }
 async function readThreadMessages(registration, roomId, threadId) {
-  const directory = resolve10(
+  const directory = resolve11(
     registration.path,
     "rooms",
     roomId,
@@ -10754,7 +10951,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   );
   let entries;
   try {
-    entries = await readdir4(directory, { withFileTypes: true });
+    entries = await readdir5(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { messages: [], warnings: [] };
@@ -10764,7 +10961,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   const messages = [];
   const warnings = [];
   for (const entry of entries) {
-    const path = resolve10(directory, entry.name);
+    const path = resolve11(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -10786,14 +10983,14 @@ async function readThreadMessages(registration, roomId, threadId) {
   return { messages, warnings };
 }
 async function readThreadDirectory(registration, roomId, threadDirectoryName) {
-  const directory = resolve10(
+  const directory = resolve11(
     registration.path,
     "rooms",
     roomId,
     "threads",
     threadDirectoryName
   );
-  const threadPath = resolve10(directory, "thread.json");
+  const threadPath = resolve11(directory, "thread.json");
   if (!isEntityId(threadDirectoryName, "thread")) {
     return {
       messages: [],
@@ -10841,7 +11038,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "MESSAGE_SELF_REPLY",
-          resolve10(directory, "messages", message.id, "message.json"),
+          resolve11(directory, "messages", message.id, "message.json"),
           "message replyTo cannot reference itself"
         )
       );
@@ -10849,7 +11046,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "REPLY_TARGET_MISSING",
-          resolve10(directory, "messages", message.id, "message.json"),
+          resolve11(directory, "messages", message.id, "message.json"),
           `reply target is missing or damaged: ${message.replyTo}`
         )
       );
@@ -10871,7 +11068,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_TYPE_MISMATCH",
-          resolve10(directory, "messages", firstMessage.id, "message.json"),
+          resolve11(directory, "messages", firstMessage.id, "message.json"),
           "first message type does not match thread kind"
         )
       );
@@ -10880,7 +11077,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_AUTHOR_MISMATCH",
-          resolve10(directory, "messages", firstMessage.id, "message.json"),
+          resolve11(directory, "messages", firstMessage.id, "message.json"),
           "first message author does not match thread creator"
         )
       );
@@ -10889,7 +11086,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_REPLY_INVALID",
-          resolve10(directory, "messages", firstMessage.id, "message.json"),
+          resolve11(directory, "messages", firstMessage.id, "message.json"),
           "first message replyTo must be null"
         )
       );
@@ -10912,7 +11109,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
   );
   warnings.push(...eventResult.warnings);
   for (const event of eventResult.events) {
-    const eventPath = resolve10(
+    const eventPath = resolve11(
       directory,
       "events",
       String(event.id),
@@ -10962,7 +11159,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
 async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const roomResult = await showRoom(forumAlias, room, paths);
   const { registration } = await openForum(forumAlias, paths);
-  const directory = resolve10(
+  const directory = resolve11(
     registration.path,
     "rooms",
     roomResult.room.id,
@@ -10970,7 +11167,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   );
   let entries;
   try {
-    entries = await readdir4(directory, { withFileTypes: true });
+    entries = await readdir5(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return {
@@ -10984,7 +11181,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const threads = [];
   const warnings = [...roomResult.warnings];
   for (const entry of entries) {
-    const path = resolve10(directory, entry.name);
+    const path = resolve11(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -11084,7 +11281,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
         mentions: [],
         references: []
       };
-      const threadDirectory = resolve10(
+      const threadDirectory = resolve11(
         registration.path,
         "rooms",
         roomResult.room.id,
@@ -11095,12 +11292,12 @@ async function createThread(input, paths = createAgentForumPaths()) {
       try {
         await createImmutableDirectory(threadDirectory, async (temporary) => {
           await writeValidatedJsonAtomic(
-            resolve10(temporary, "thread.json"),
+            resolve11(temporary, "thread.json"),
             "thread",
             thread
           );
           await createImmutableMessage(
-            resolve10(temporary, "messages", messageId),
+            resolve11(temporary, "messages", messageId),
             metadata,
             input.body
           );
@@ -11216,7 +11413,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
         mentions: input.mentions ?? [],
         references: input.references ?? []
       };
-      const messageDirectory = resolve10(
+      const messageDirectory = resolve11(
         registration.path,
         "rooms",
         detail.room.id,
@@ -11316,7 +11513,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
         },
         event
       );
-      const eventDirectory = resolve10(
+      const eventDirectory = resolve11(
         registration.path,
         "rooms",
         detail.room.id,
@@ -11742,7 +11939,7 @@ import {
   stat as stat3
 } from "node:fs/promises";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { resolve as resolve11 } from "node:path";
+import { resolve as resolve12 } from "node:path";
 async function pathExists3(path) {
   try {
     await stat3(path);
@@ -11776,11 +11973,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
   await mkdir4(paths.forumsDirectory, { recursive: true });
   assertGitBranchName(paths.forumsDirectory, dataBranch);
   const configLock = await acquireForumLock({
-    lockPath: resolve11(paths.locksDirectory, "config.lock"),
+    lockPath: resolve12(paths.locksDirectory, "config.lock"),
     command: "forum init-local"
   });
   const destination = forumClonePath(paths, input.alias);
-  const staging = resolve11(
+  const staging = resolve12(
     paths.forumsDirectory,
     `.agent-forum-tmp-${randomUUID5()}`
   );
@@ -11814,11 +12011,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       identity.memberId
     );
     await writeFileAtomic(
-      resolve11(staging, ".gitattributes"),
+      resolve12(staging, ".gitattributes"),
       "*.json text eol=lf\n*.md text eol=lf\n"
     );
     await writeValidatedJsonAtomic(
-      resolve11(staging, ".forum", "protocol.json"),
+      resolve12(staging, ".forum", "protocol.json"),
       "protocol",
       {
         protocolVersion: "1.0",
@@ -11829,7 +12026,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve11(staging, ".forum", "forum.json"),
+      resolve12(staging, ".forum", "forum.json"),
       "forum",
       {
         schemaVersion: "1.0",
@@ -11841,7 +12038,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve11(staging, "members", identity.memberId, "profile.json"),
+      resolve12(staging, "members", identity.memberId, "profile.json"),
       "member-profile",
       publicProfile(identity, timestamp)
     );
@@ -11891,7 +12088,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     lockPath: forumLockPath(paths, registration.forumId),
     command: "identity publish"
   });
-  const profilePath = resolve11(
+  const profilePath = resolve12(
     registration.path,
     "members",
     identity.memberId,
@@ -11902,7 +12099,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       "rev-parse",
       "--show-toplevel"
     ]).stdout.trim();
-    if (resolve11(topLevel) !== resolve11(registration.path)) {
+    if (resolve12(topLevel) !== resolve12(registration.path)) {
       throw new ServiceError(
         "FORUM_PROTOCOL_MISMATCH",
         `configured forum path is not the Git root: ${registration.path}`
@@ -11921,7 +12118,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     }
     const protocol = JSON.parse(
       await readFile7(
-        resolve11(registration.path, ".forum", "protocol.json"),
+        resolve12(registration.path, ".forum", "protocol.json"),
         "utf8"
       )
     );
@@ -12723,14 +12920,14 @@ import {
   cp,
   mkdir as mkdir5,
   readFile as readFile8,
-  readdir as readdir5,
+  readdir as readdir6,
   rename as rename5,
   rm as rm8,
   stat as stat4,
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve12, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative, resolve as resolve13, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -12752,14 +12949,14 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve12(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve13(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function skillDestination(target, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve12(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve13(homeDirectory, ".agents", "skills", "agent-forum");
   }
   if (target === "claude-code") {
-    return resolve12(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve13(homeDirectory, ".claude", "skills", "agent-forum");
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
 }
@@ -12809,10 +13006,10 @@ async function saveState(homeDirectory, state) {
 }
 async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const files = {};
-  const entries = await readdir5(current, { withFileTypes: true });
+  const entries = await readdir6(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve12(current, entry.name);
+    const absolute = resolve13(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -12845,11 +13042,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve12(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve12(process.cwd(), "skills", "agent-forum")
+    resolve13(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve13(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists4(resolve12(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists4(resolve13(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -13361,6 +13558,7 @@ Commands:
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
+  doctor             Diagnose local state, forums, locks, and remotes
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
 Options:
@@ -13392,6 +13590,7 @@ async function runCli(args, io = defaultIo) {
             "room",
             "thread",
             "post",
+            "doctor",
             "skill"
           ]
         })
@@ -13417,10 +13616,10 @@ async function runCli(args, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "skill") {
+  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "doctor" || command === "skill") {
     try {
       const subcommandArgs = positional.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

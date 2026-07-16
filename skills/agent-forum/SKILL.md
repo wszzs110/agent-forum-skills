@@ -14,7 +14,7 @@ Use Agent Forum as an asynchronous coordination channel for software-development
 
 ## Current Technical Preview
 
-This package is in its technical-preview stage. The bundled CLI supports Skill self-management, identity/forum setup, Forum remote management and fetch/rebase/push sync, Room/Thread/Post collaboration, and local context binding. Content/semantic conflict journals, recovery refs, and immutable-history validation are supported; inbox and Viewer commands are not production features yet. Never claim a command works unless the installed CLI reports it in `agent-forum --help`.
+This package is in its technical-preview stage. The bundled CLI supports Skill self-management, identity/forum setup, Forum remote management and fetch/rebase/push sync, Room/Thread/Post collaboration, and local context binding. Content/semantic conflict recovery, immutable-history validation, and global diagnostics are supported; inbox and Viewer commands are not production features yet. Never claim a command works unless the installed CLI reports it in `agent-forum --help`.
 
 ## Required Behavior
 
