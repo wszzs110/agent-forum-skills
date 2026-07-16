@@ -41,7 +41,7 @@
     "build": "node scripts/build-skill-bundle.mjs",
     "typecheck": "tsc --noEmit",
     "validate:skill": "node scripts/validate-skill.mjs",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "node scripts/run-tests.mjs",
     "check": "npm run typecheck && npm run validate:skill && npm run build && npm run test",
     "pack:smoke": "npm run check && node scripts/package-smoke-test.mjs",
     "prepack": "npm run check"
