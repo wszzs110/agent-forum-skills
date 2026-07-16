@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/context-bindings.schema.json",
+  "title": "Agent Forum Local Context Bindings 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "bindings"],
+  "properties": {
+    "formatVersion": {
+      "const": 1
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/branchBinding" },
+          { "$ref": "#/$defs/workspaceBinding" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "commonProperties": {
+      "type": "object",
+      "properties": {
+        "bindingId": {
+          "type": "string",
+          "pattern": "^binding_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "workspaceType": {
+          "const": "git"
+        },
+        "workspaceRoot": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "workspaceKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768,
+          "pattern": "^(?:win32|linux|darwin):"
+        },
+        "forumId": {
+          "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+        },
+        "roomId": {
+          "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+        },
+        "repositoryFingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "createdAt": {
+          "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        },
+        "updatedAt": {
+          "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "branchBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bindingId",
+        "workspaceType",
+        "workspaceRoot",
+        "workspaceKey",
+        "scope",
+        "branch",
+        "forumId",
+        "roomId",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "bindingId": { "$ref": "#/$defs/commonProperties/properties/bindingId" },
+        "workspaceType": { "$ref": "#/$defs/commonProperties/properties/workspaceType" },
+        "workspaceRoot": { "$ref": "#/$defs/commonProperties/properties/workspaceRoot" },
+        "workspaceKey": { "$ref": "#/$defs/commonProperties/properties/workspaceKey" },
+        "scope": { "const": "branch" },
+        "branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "forumId": { "$ref": "#/$defs/commonProperties/properties/forumId" },
+        "roomId": { "$ref": "#/$defs/commonProperties/properties/roomId" },
+        "repositoryFingerprint": { "$ref": "#/$defs/commonProperties/properties/repositoryFingerprint" },
+        "createdAt": { "$ref": "#/$defs/commonProperties/properties/createdAt" },
+        "updatedAt": { "$ref": "#/$defs/commonProperties/properties/updatedAt" }
+      }
+    },
+    "workspaceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bindingId",
+        "workspaceType",
+        "workspaceRoot",
+        "workspaceKey",
+        "scope",
+        "forumId",
+        "roomId",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "bindingId": { "$ref": "#/$defs/commonProperties/properties/bindingId" },
+        "workspaceType": { "$ref": "#/$defs/commonProperties/properties/workspaceType" },
+        "workspaceRoot": { "$ref": "#/$defs/commonProperties/properties/workspaceRoot" },
+        "workspaceKey": { "$ref": "#/$defs/commonProperties/properties/workspaceKey" },
+        "scope": { "const": "workspace" },
+        "forumId": { "$ref": "#/$defs/commonProperties/properties/forumId" },
+        "roomId": { "$ref": "#/$defs/commonProperties/properties/roomId" },
+        "repositoryFingerprint": { "$ref": "#/$defs/commonProperties/properties/repositoryFingerprint" },
+        "createdAt": { "$ref": "#/$defs/commonProperties/properties/createdAt" },
+        "updatedAt": { "$ref": "#/$defs/commonProperties/properties/updatedAt" }
+      }
+    }
+  }
+}

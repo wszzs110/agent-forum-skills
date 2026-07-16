@@ -14,6 +14,7 @@ Core principles:
 - Thread creation and its first message are committed atomically.
 - Thread kind is one of `discussion`, `question`, `proposal`, `change`, `blocker`, `review`, `status`, or `test-result`; the opening message type matches it.
 - Local identities, workspace bindings, read cursors, caches, and locks are not pushed.
+- Explicit forum/room arguments override exact branch bindings, which override workspace-default bindings.
 - Public forum and room membership declarations are tracked by Git, one member per file.
 - All protocol timestamps use UTC RFC 3339 with millisecond precision.
 

@@ -2976,7 +2976,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve10.call(this, root, ref);
+      let _sch = resolve11.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3003,7 +3003,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve10(root, ref) {
+    function resolve11(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3634,7 +3634,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve10(baseURI, relativeURI, options) {
+    function resolve11(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3892,7 +3892,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve10,
+      resolve: resolve11,
       resolveComponent,
       equal,
       serialize,
@@ -7146,16 +7146,8 @@ var ExitCode = {
   Usage: 2
 };
 
-// src/services/local-forum.ts
-import {
-  mkdir as mkdir3,
-  readFile as readFile3,
-  rename as rename3,
-  rm as rm3,
-  stat as stat3
-} from "node:fs/promises";
-import { randomUUID as randomUUID3 } from "node:crypto";
-import { resolve as resolve5 } from "node:path";
+// src/services/context.ts
+import { resolve as resolve7 } from "node:path";
 
 // src/config/local-config.ts
 import { readFile as readFile2 } from "node:fs/promises";
@@ -7554,6 +7546,132 @@ var common_schema_default = {
           minLength: 1,
           maxLength: 2048
         }
+      }
+    }
+  }
+};
+
+// schemas/v1/context-bindings.schema.json
+var context_bindings_schema_default = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://agent-forum.dev/schemas/v1/context-bindings.schema.json",
+  title: "Agent Forum Local Context Bindings 1.0",
+  type: "object",
+  additionalProperties: false,
+  required: ["formatVersion", "bindings"],
+  properties: {
+    formatVersion: {
+      const: 1
+    },
+    bindings: {
+      type: "array",
+      items: {
+        oneOf: [
+          { $ref: "#/$defs/branchBinding" },
+          { $ref: "#/$defs/workspaceBinding" }
+        ]
+      }
+    }
+  },
+  $defs: {
+    commonProperties: {
+      type: "object",
+      properties: {
+        bindingId: {
+          type: "string",
+          pattern: "^binding_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        workspaceType: {
+          const: "git"
+        },
+        workspaceRoot: {
+          type: "string",
+          minLength: 1,
+          maxLength: 32768
+        },
+        workspaceKey: {
+          type: "string",
+          minLength: 1,
+          maxLength: 32768,
+          pattern: "^(?:win32|linux|darwin):"
+        },
+        forumId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+        },
+        roomId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+        },
+        repositoryFingerprint: {
+          type: "string",
+          minLength: 1,
+          maxLength: 2048
+        },
+        createdAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        },
+        updatedAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    branchBinding: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "bindingId",
+        "workspaceType",
+        "workspaceRoot",
+        "workspaceKey",
+        "scope",
+        "branch",
+        "forumId",
+        "roomId",
+        "createdAt",
+        "updatedAt"
+      ],
+      properties: {
+        bindingId: { $ref: "#/$defs/commonProperties/properties/bindingId" },
+        workspaceType: { $ref: "#/$defs/commonProperties/properties/workspaceType" },
+        workspaceRoot: { $ref: "#/$defs/commonProperties/properties/workspaceRoot" },
+        workspaceKey: { $ref: "#/$defs/commonProperties/properties/workspaceKey" },
+        scope: { const: "branch" },
+        branch: {
+          type: "string",
+          minLength: 1,
+          maxLength: 255
+        },
+        forumId: { $ref: "#/$defs/commonProperties/properties/forumId" },
+        roomId: { $ref: "#/$defs/commonProperties/properties/roomId" },
+        repositoryFingerprint: { $ref: "#/$defs/commonProperties/properties/repositoryFingerprint" },
+        createdAt: { $ref: "#/$defs/commonProperties/properties/createdAt" },
+        updatedAt: { $ref: "#/$defs/commonProperties/properties/updatedAt" }
+      }
+    },
+    workspaceBinding: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "bindingId",
+        "workspaceType",
+        "workspaceRoot",
+        "workspaceKey",
+        "scope",
+        "forumId",
+        "roomId",
+        "createdAt",
+        "updatedAt"
+      ],
+      properties: {
+        bindingId: { $ref: "#/$defs/commonProperties/properties/bindingId" },
+        workspaceType: { $ref: "#/$defs/commonProperties/properties/workspaceType" },
+        workspaceRoot: { $ref: "#/$defs/commonProperties/properties/workspaceRoot" },
+        workspaceKey: { $ref: "#/$defs/commonProperties/properties/workspaceKey" },
+        scope: { const: "workspace" },
+        forumId: { $ref: "#/$defs/commonProperties/properties/forumId" },
+        roomId: { $ref: "#/$defs/commonProperties/properties/roomId" },
+        repositoryFingerprint: { $ref: "#/$defs/commonProperties/properties/repositoryFingerprint" },
+        createdAt: { $ref: "#/$defs/commonProperties/properties/createdAt" },
+        updatedAt: { $ref: "#/$defs/commonProperties/properties/updatedAt" }
       }
     }
   }
@@ -7988,6 +8106,7 @@ var thread_schema_default = {
 // src/protocol/validator.ts
 var schemaDocuments = {
   protocol: protocol_schema_default,
+  "context-bindings": context_bindings_schema_default,
   forum: forum_schema_default,
   "local-config": local_config_schema_default,
   "member-profile": member_profile_schema_default,
@@ -8285,6 +8404,10 @@ async function createLocalIdentity(input, paths = createAgentForumPaths()) {
   }
 }
 
+// src/context/bindings.ts
+import { readFile as readFile3, realpath } from "node:fs/promises";
+import { posix, win32 } from "node:path";
+
 // src/git/runner.ts
 import { spawnSync } from "node:child_process";
 var GitCommandError = class extends Error {
@@ -8367,286 +8490,274 @@ function commitPaths(repository, paths, message) {
   return requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
 }
 
-// src/services/local-forum.ts
-async function pathExists2(path) {
+// src/context/bindings.ts
+var ContextError = class extends Error {
+  constructor(code, message, details) {
+    super(message);
+    this.code = code;
+    this.details = details;
+    this.name = "ContextError";
+  }
+};
+function pathApi(platform) {
+  return platform === "win32" ? win32 : posix;
+}
+function supportedPlatform(value) {
+  if (value === "win32" || value === "linux" || value === "darwin") {
+    return value;
+  }
+  throw new ContextError(
+    "UNSUPPORTED_PLATFORM",
+    `context binding is not supported on platform: ${value}`
+  );
+}
+function normalizeWorkspaceKey(workspaceRoot, platform) {
+  const api = pathApi(platform);
+  let normalized = api.normalize(workspaceRoot);
+  const parsed = api.parse(normalized);
+  while (normalized.length > parsed.root.length && normalized.endsWith(api.sep)) {
+    normalized = normalized.slice(0, -1);
+  }
+  if (platform === "win32") {
+    normalized = normalized.replaceAll("\\", "/").toLowerCase();
+  }
+  return `${platform}:${normalized}`;
+}
+function normalizeRepositoryFingerprint(remote) {
+  const trimmed = remote.trim();
+  const scp = /^(?:[^@\s]+@)?([^:/\s]+):(.+)$/u.exec(trimmed);
+  if (scp && !trimmed.includes("://") && !/^[a-zA-Z]:[\\/]/u.test(trimmed)) {
+    const host = scp[1]?.toLowerCase();
+    const repositoryPath = scp[2]?.replace(/^\/+|\/+$/gu, "").replace(/\.git$/u, "");
+    return host && repositoryPath ? `${host}/${repositoryPath}` : void 0;
+  }
   try {
-    await stat3(path);
-    return true;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return false;
+    const url = new URL(trimmed);
+    if (!url.hostname || !["http:", "https:", "ssh:", "git:"].includes(url.protocol)) {
+      return void 0;
     }
-    throw error;
+    const repositoryPath = url.pathname.replace(/^\/+|\/+$/gu, "").replace(/\.git$/u, "");
+    return repositoryPath ? `${url.hostname.toLowerCase()}/${repositoryPath}` : void 0;
+  } catch {
+    return void 0;
   }
 }
-function publicProfile(identity, updatedAt) {
+async function discoverGitWorkspace(cwd, platform = supportedPlatform(process.platform)) {
+  const rootResult = runGit(cwd, ["rev-parse", "--show-toplevel"]);
+  if (rootResult.status !== 0) {
+    throw new ContextError(
+      "GIT_WORKSPACE_REQUIRED",
+      "the selected directory is not inside a Git workspace"
+    );
+  }
+  const workspaceRoot = await realpath(rootResult.stdout.trim());
+  const branchResult = runGit(cwd, [
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    "HEAD"
+  ]);
+  const remoteResult = runGit(cwd, [
+    "config",
+    "--get",
+    "remote.origin.url"
+  ]);
+  const repositoryFingerprint = remoteResult.status === 0 ? normalizeRepositoryFingerprint(remoteResult.stdout) : void 0;
   return {
-    schemaVersion: "1.0",
-    memberId: identity.memberId,
-    displayName: identity.displayName,
-    role: identity.role,
-    responsibility: identity.responsibility,
-    status: "active",
-    ...identity.client ? { client: identity.client } : {},
-    createdAt: identity.createdAt,
-    updatedAt
+    workspaceRoot,
+    workspaceKey: normalizeWorkspaceKey(workspaceRoot, platform),
+    branch: branchResult.status === 0 ? branchResult.stdout.trim() : null,
+    ...repositoryFingerprint ? { repositoryFingerprint } : {}
   };
 }
-function samePublishedIdentity(existing, identity) {
-  return existing.memberId === identity.memberId && existing.displayName === identity.displayName && existing.role === identity.role && existing.responsibility === identity.responsibility && existing.status === "active" && existing.client === identity.client;
+function emptyContextBindingState() {
+  return { formatVersion: 1, bindings: [] };
 }
-async function initLocalForum(input, paths = createAgentForumPaths()) {
-  assertLocalAlias(input.alias);
-  const dataBranch = input.dataBranch ?? "main";
-  await mkdir3(paths.forumsDirectory, { recursive: true });
-  assertGitBranchName(paths.forumsDirectory, dataBranch);
-  const configLock = await acquireForumLock({
-    lockPath: resolve5(paths.locksDirectory, "config.lock"),
-    command: "forum init-local"
-  });
-  const destination = forumClonePath(paths, input.alias);
-  const staging = resolve5(
-    paths.forumsDirectory,
-    `.agent-forum-tmp-${randomUUID3()}`
+function bindingIdentity(binding) {
+  return binding.scope === "branch" ? `${binding.workspaceKey}\0branch\0${binding.branch ?? ""}` : `${binding.workspaceKey}\0workspace`;
+}
+function platformFromWorkspaceKey(workspaceKey) {
+  const prefix = workspaceKey.slice(0, workspaceKey.indexOf(":"));
+  if (prefix === "win32" || prefix === "linux" || prefix === "darwin") {
+    return prefix;
+  }
+  throw new StorageError(
+    "SCHEMA_VALIDATION_FAILED",
+    `binding has unsupported workspace key: ${workspaceKey}`
   );
-  let destinationCreated = false;
+}
+function validateBindingSemantics(state) {
+  const bindingIds = /* @__PURE__ */ new Set();
+  const identities = /* @__PURE__ */ new Set();
+  for (const binding of state.bindings) {
+    if (bindingIds.has(binding.bindingId)) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `context bindings contain duplicate binding ID: ${binding.bindingId}`
+      );
+    }
+    bindingIds.add(binding.bindingId);
+    const identity = bindingIdentity(binding);
+    if (identities.has(identity)) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        "context bindings contain duplicate workspace scope"
+      );
+    }
+    identities.add(identity);
+    const platform = platformFromWorkspaceKey(binding.workspaceKey);
+    if (normalizeWorkspaceKey(binding.workspaceRoot, platform) !== binding.workspaceKey) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `binding workspaceKey does not match workspaceRoot: ${binding.bindingId}`
+      );
+    }
+    if (binding.repositoryFingerprint && (binding.repositoryFingerprint.includes("@") || binding.repositoryFingerprint.includes("://") || binding.repositoryFingerprint.includes("\\"))) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `binding repository fingerprint is not credential-safe: ${binding.bindingId}`
+      );
+    }
+    if (binding.updatedAt < binding.createdAt) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `binding updatedAt precedes createdAt: ${binding.bindingId}`
+      );
+    }
+  }
+}
+async function loadContextBindingState(paths) {
+  let text;
   try {
-    const config = await loadLocalConfig(paths);
-    if (config.forums.some((forum) => forum.alias === input.alias)) {
-      throw new ServiceError(
-        "FORUM_ALIAS_EXISTS",
-        `forum alias is already configured: ${input.alias}`
-      );
-    }
-    if (await pathExists2(destination)) {
-      throw new ServiceError(
-        "FORUM_PATH_EXISTS",
-        `forum path already exists: ${destination}`
-      );
-    }
-    const identity = findIdentity(config, input.identityId);
-    const forumId = input.forumId ?? createEntityId("forum");
-    const timestamp = currentUtcTimestamp(input.now);
-    requireGit(paths.forumsDirectory, [
-      "init",
-      "--initial-branch",
-      dataBranch,
-      staging
-    ]);
-    configureForumCommitIdentity(
-      staging,
-      identity.displayName,
-      identity.memberId
-    );
-    await writeFileAtomic(
-      resolve5(staging, ".gitattributes"),
-      "*.json text eol=lf\n*.md text eol=lf\n"
-    );
-    await writeValidatedJsonAtomic(
-      resolve5(staging, ".forum", "protocol.json"),
-      "protocol",
-      {
-        protocolVersion: "1.0",
-        stability: "draft",
-        forumId,
-        dataBranch,
-        createdAt: timestamp
-      }
-    );
-    await writeValidatedJsonAtomic(
-      resolve5(staging, ".forum", "forum.json"),
-      "forum",
-      {
-        schemaVersion: "1.0",
-        forumId,
-        initialName: input.name,
-        initialDescription: input.description,
-        createdBy: identity.memberId,
-        createdAt: timestamp
-      }
-    );
-    await writeValidatedJsonAtomic(
-      resolve5(staging, "members", identity.memberId, "profile.json"),
-      "member-profile",
-      publicProfile(identity, timestamp)
-    );
-    const commit = commitPaths(
-      staging,
-      [".gitattributes", ".forum", "members"],
-      `Initialize forum ${input.alias}`
-    );
-    await rename3(staging, destination);
-    destinationCreated = true;
-    await saveLocalConfig(paths, {
-      ...config,
-      forums: [
-        ...config.forums,
-        {
-          alias: input.alias,
-          forumId,
-          path: destination,
-          dataBranch,
-          createdAt: timestamp
-        }
-      ]
-    });
-    return {
-      alias: input.alias,
-      forumId,
-      path: destination,
-      dataBranch,
-      identityId: identity.memberId,
-      commit
-    };
+    text = await readFile3(paths.bindingsFile, "utf8");
   } catch (error) {
-    await rm3(staging, { recursive: true, force: true });
-    if (destinationCreated) {
-      await rm3(destination, { recursive: true, force: true });
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return emptyContextBindingState();
     }
     throw error;
-  } finally {
-    await configLock.release();
   }
-}
-async function publishIdentity(alias, identityId, paths = createAgentForumPaths(), now = /* @__PURE__ */ new Date()) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, alias);
-  const identity = findIdentity(config, identityId);
-  const lock = await acquireForumLock({
-    lockPath: forumLockPath(paths, registration.forumId),
-    command: "identity publish"
-  });
-  const profilePath = resolve5(
-    registration.path,
-    "members",
-    identity.memberId,
-    "profile.json"
-  );
+  let value;
   try {
-    const topLevel = requireGit(registration.path, [
-      "rev-parse",
-      "--show-toplevel"
-    ]).stdout.trim();
-    if (resolve5(topLevel) !== resolve5(registration.path)) {
-      throw new ServiceError(
-        "FORUM_PROTOCOL_MISMATCH",
-        `configured forum path is not the Git root: ${registration.path}`
-      );
-    }
-    assertCleanWorktree(registration.path);
-    const currentBranch = requireGit(registration.path, [
-      "branch",
-      "--show-current"
-    ]).stdout.trim();
-    if (currentBranch !== registration.dataBranch) {
-      throw new ServiceError(
-        "FORUM_PROTOCOL_MISMATCH",
-        `managed forum is on '${currentBranch}', expected '${registration.dataBranch}'`
-      );
-    }
-    const protocol = JSON.parse(
-      await readFile3(
-        resolve5(registration.path, ".forum", "protocol.json"),
-        "utf8"
-      )
+    value = JSON.parse(text);
+  } catch (error) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `context bindings contain invalid JSON: ${paths.bindingsFile}`,
+      error instanceof Error ? error.message : String(error)
     );
-    const protocolValidation = validateProtocolDocument("protocol", protocol, {
-      mode: "read"
-    });
-    if (!protocolValidation.ok || protocol.forumId !== registration.forumId || protocol.dataBranch !== registration.dataBranch) {
-      throw new ServiceError(
-        "FORUM_PROTOCOL_MISMATCH",
-        `forum protocol does not match local registration: ${alias}`,
-        protocolValidation.ok ? void 0 : protocolValidation.issues
-      );
-    }
-    let previous;
-    let existing;
-    try {
-      previous = await readFile3(profilePath, "utf8");
-      existing = JSON.parse(previous);
-      const validation = validateProtocolDocument("member-profile", existing, {
-        mode: "read"
-      });
-      if (!validation.ok) {
-        throw new StorageError(
-          "SCHEMA_VALIDATION_FAILED",
-          `existing public member profile is invalid: ${profilePath}`,
-          validation.issues
-        );
-      }
-    } catch (error) {
-      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
-        throw error;
-      }
-    }
-    if (existing && samePublishedIdentity(existing, identity)) {
-      return {
-        alias,
-        forumId: registration.forumId,
-        identityId: identity.memberId,
-        path: profilePath,
-        action: "unchanged"
-      };
-    }
-    const createdAt = existing && typeof existing.createdAt === "string" ? existing.createdAt : identity.createdAt;
-    const profile = {
-      ...publicProfile(identity, currentUtcTimestamp(now)),
-      createdAt
-    };
-    try {
-      await writeValidatedJsonAtomic(
-        profilePath,
-        "member-profile",
-        profile,
-        { overwrite: true }
-      );
-      configureForumCommitIdentity(
-        registration.path,
-        identity.displayName,
-        identity.memberId
-      );
-      const status = requireGit(registration.path, [
-        "status",
-        "--porcelain",
-        "--",
-        profilePath
-      ]).stdout;
-      if (status.trim().length === 0) {
-        return {
-          alias,
-          forumId: registration.forumId,
-          identityId: identity.memberId,
-          path: profilePath,
-          action: "unchanged"
-        };
-      }
-      const commit = commitPaths(
-        registration.path,
-        [profilePath],
-        `Publish identity ${identity.memberId}`
-      );
-      return {
-        alias,
-        forumId: registration.forumId,
-        identityId: identity.memberId,
-        path: profilePath,
-        action: "published",
-        commit
-      };
-    } catch (error) {
-      runGit(registration.path, ["reset", "--", profilePath]);
-      if (previous === void 0) {
-        await rm3(profilePath, { force: true });
-      } else {
-        await writeFileAtomic(profilePath, previous, { overwrite: true });
-      }
-      throw error;
-    }
-  } finally {
-    await lock.release();
   }
+  const validation = validateProtocolDocument("context-bindings", value, {
+    mode: "write"
+  });
+  if (!validation.ok) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `context bindings are invalid: ${paths.bindingsFile}`,
+      validation.issues
+    );
+  }
+  const state = value;
+  validateBindingSemantics(state);
+  return state;
 }
+async function saveContextBindingState(paths, state) {
+  validateBindingSemantics(state);
+  await writeValidatedJsonAtomic(
+    paths.bindingsFile,
+    "context-bindings",
+    state,
+    { overwrite: true, mode: 384 }
+  );
+}
+function requireBindingBranch(branch) {
+  if (!branch) {
+    throw new ContextError(
+      "GIT_BRANCH_REQUIRED",
+      "a branch binding requires a branch name"
+    );
+  }
+  return branch;
+}
+function setContextBinding(state, input, options = {}) {
+  if (input.scope === "branch") requireBindingBranch(input.branch);
+  const identity = bindingIdentity({
+    scope: input.scope,
+    workspaceKey: input.context.workspaceKey,
+    ...input.branch ? { branch: input.branch } : {}
+  });
+  const existing = state.bindings.find(
+    (binding2) => bindingIdentity(binding2) === identity
+  );
+  if (existing && !options.force) {
+    throw new ContextError(
+      "BINDING_EXISTS",
+      `a ${input.scope} binding already exists for this workspace and targets ${existing.forumId}/${existing.roomId}; use --force to replace it`,
+      existing
+    );
+  }
+  const timestamp = currentUtcTimestamp(options.now);
+  const common = {
+    bindingId: options.bindingId ?? existing?.bindingId ?? createEntityId("binding"),
+    workspaceType: "git",
+    workspaceRoot: input.context.workspaceRoot,
+    workspaceKey: input.context.workspaceKey,
+    forumId: input.forumId,
+    roomId: input.roomId,
+    ...input.context.repositoryFingerprint ? { repositoryFingerprint: input.context.repositoryFingerprint } : {},
+    createdAt: existing?.createdAt ?? timestamp,
+    updatedAt: timestamp
+  };
+  const binding = input.scope === "branch" ? {
+    ...common,
+    scope: "branch",
+    branch: requireBindingBranch(input.branch)
+  } : { ...common, scope: "workspace" };
+  const bindings = existing ? state.bindings.map(
+    (candidate) => bindingIdentity(candidate) === identity ? binding : candidate
+  ) : [...state.bindings, binding];
+  const next = { formatVersion: 1, bindings };
+  validateBindingSemantics(next);
+  return { state: next, binding, replaced: Boolean(existing) };
+}
+function removeContextBinding(state, workspaceKey, scope, branch) {
+  const identity = bindingIdentity({
+    scope,
+    workspaceKey,
+    ...branch ? { branch } : {}
+  });
+  const removed = state.bindings.filter(
+    (binding) => bindingIdentity(binding) === identity
+  );
+  return {
+    state: {
+      formatVersion: 1,
+      bindings: state.bindings.filter(
+        (binding) => bindingIdentity(binding) !== identity
+      )
+    },
+    removed
+  };
+}
+function resolveContextBinding(state, context) {
+  if (context.branch !== null) {
+    const exact = state.bindings.find(
+      (binding) => binding.scope === "branch" && binding.workspaceKey === context.workspaceKey && binding.branch === context.branch
+    );
+    if (exact) return { kind: "bound", source: "branch", binding: exact };
+  }
+  const fallback = state.bindings.find(
+    (binding) => binding.scope === "workspace" && binding.workspaceKey === context.workspaceKey
+  );
+  return fallback ? { kind: "bound", source: "workspace", binding: fallback } : { kind: "unbound", code: "CONTEXT_NOT_BOUND" };
+}
+
+// src/services/room.ts
+import {
+  readFile as readFile4,
+  readdir as readdir2,
+  rm as rm3
+} from "node:fs/promises";
+import { resolve as resolve6 } from "node:path";
 
 // src/domain/state-transitions.ts
 var knownLifecycleEventTypes = [
@@ -8778,9 +8889,922 @@ function applyLifecycleEvent(state, event) {
   );
 }
 
+// src/storage/protocol-store.ts
+import { basename, resolve as resolve5 } from "node:path";
+
+// src/domain/message-types.ts
+var knownMessageTypes = [
+  "discussion",
+  "question",
+  "answer",
+  "proposal",
+  "decision",
+  "change",
+  "blocker",
+  "review",
+  "status",
+  "test-result",
+  "acknowledgement",
+  "objection",
+  "correction"
+];
+var knownMessageTypeSet = new Set(knownMessageTypes);
+function isKnownMessageType(value) {
+  return knownMessageTypeSet.has(value);
+}
+
+// src/storage/protocol-store.ts
+async function createImmutableMessage(destination, metadata, body) {
+  if (body.trim().length === 0 || body.includes("\0")) {
+    throw new StorageError(
+      "INVALID_MESSAGE_BODY",
+      "message body must be non-empty and must not contain NUL"
+    );
+  }
+  if (metadata && typeof metadata === "object" && "id" in metadata && typeof metadata.id === "string" && basename(destination) !== metadata.id) {
+    throw new StorageError(
+      "PATH_ID_MISMATCH",
+      `message path does not match metadata ID: ${destination}`
+    );
+  }
+  if (metadata && typeof metadata === "object" && "type" in metadata && typeof metadata.type === "string" && !isKnownMessageType(metadata.type)) {
+    throw new StorageError(
+      "UNKNOWN_MESSAGE_TYPE",
+      `current writer cannot publish message type: ${metadata.type}`
+    );
+  }
+  await createImmutableDirectory(destination, async (temporaryDirectory) => {
+    await writeValidatedJsonAtomic(
+      resolve5(temporaryDirectory, "message.json"),
+      "message",
+      metadata
+    );
+    await writeFileAtomic(resolve5(temporaryDirectory, "body.md"), body);
+  });
+}
+async function createImmutableEvent(destination, event) {
+  if (event && typeof event === "object" && "id" in event && typeof event.id === "string" && basename(destination) !== event.id) {
+    throw new StorageError(
+      "PATH_ID_MISMATCH",
+      `event path does not match event ID: ${destination}`
+    );
+  }
+  if (event && typeof event === "object" && "type" in event && typeof event.type === "string" && !isKnownLifecycleEventType(event.type)) {
+    throw new StorageError(
+      "UNKNOWN_EVENT_TYPE",
+      `current writer cannot publish lifecycle event type: ${event.type}`
+    );
+  }
+  await createImmutableDirectory(destination, async (temporaryDirectory) => {
+    await writeValidatedJsonAtomic(
+      resolve5(temporaryDirectory, "event.json"),
+      "event",
+      event
+    );
+  });
+}
+
+// src/services/room.ts
+async function readJsonDocument(path, schema) {
+  let value;
+  try {
+    value = JSON.parse(await readFile4(path, "utf8"));
+  } catch (error) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `failed to read JSON document: ${path}`,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+  const validation = validateProtocolDocument(schema, value, { mode: "read" });
+  if (!validation.ok) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `document does not satisfy the ${schema} schema: ${path}`,
+      validation.issues
+    );
+  }
+  return value;
+}
+function protocolWarning(path, error) {
+  if (error instanceof StorageError || error instanceof ServiceError || error instanceof StateTransitionError) {
+    return { code: error.code, path, message: error.message };
+  }
+  return {
+    code: "PROTOCOL_DATA_DAMAGED",
+    path,
+    message: error instanceof Error ? error.message : String(error)
+  };
+}
+async function openForum(alias, paths, options = {}) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, alias);
+  const topLevel = requireGit(registration.path, [
+    "rev-parse",
+    "--show-toplevel"
+  ]).stdout.trim();
+  if (resolve6(topLevel) !== resolve6(registration.path)) {
+    throw new ServiceError(
+      "FORUM_PROTOCOL_MISMATCH",
+      `configured forum path is not the Git root: ${registration.path}`
+    );
+  }
+  const branch = requireGit(registration.path, [
+    "branch",
+    "--show-current"
+  ]).stdout.trim();
+  if (branch !== registration.dataBranch) {
+    throw new ServiceError(
+      "FORUM_PROTOCOL_MISMATCH",
+      `managed forum is on '${branch}', expected '${registration.dataBranch}'`
+    );
+  }
+  if (options.requireClean) assertCleanWorktree(registration.path);
+  const protocolPath = resolve6(
+    registration.path,
+    ".forum",
+    "protocol.json"
+  );
+  const protocol = await readJsonDocument(protocolPath, "protocol");
+  if (protocol.forumId !== registration.forumId || protocol.dataBranch !== registration.dataBranch) {
+    throw new ServiceError(
+      "FORUM_PROTOCOL_MISMATCH",
+      `forum protocol does not match local registration: ${alias}`
+    );
+  }
+  return { registration };
+}
+async function readForumMember(registration, identity) {
+  const path = resolve6(
+    registration.path,
+    "members",
+    identity.memberId,
+    "profile.json"
+  );
+  let profile;
+  try {
+    profile = await readJsonDocument(path, "member-profile");
+  } catch (error) {
+    if (error instanceof StorageError && error.details && typeof error.details === "string" && error.details.includes("ENOENT")) {
+      throw new ServiceError(
+        "FORUM_MEMBERSHIP_REQUIRED",
+        `identity is not published in forum: ${identity.memberId}`
+      );
+    }
+    throw error;
+  }
+  if (profile.memberId !== identity.memberId || profile.status !== "active") {
+    throw new ServiceError(
+      "FORUM_MEMBERSHIP_REQUIRED",
+      `identity is not an active forum member: ${identity.memberId}`
+    );
+  }
+  return profile;
+}
+async function readRoomEvents(registration, roomId) {
+  const eventsDirectory = resolve6(
+    registration.path,
+    "rooms",
+    roomId,
+    "events"
+  );
+  let entries;
+  try {
+    entries = await readdir2(eventsDirectory, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { events: [], warnings: [] };
+    }
+    throw error;
+  }
+  const events = [];
+  const warnings = [];
+  for (const entry of entries) {
+    const eventPath = resolve6(eventsDirectory, entry.name, "event.json");
+    if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
+      warnings.push({
+        code: "INVALID_EVENT_PATH",
+        path: resolve6(eventsDirectory, entry.name),
+        message: "room event path is not a valid event ID directory"
+      });
+      continue;
+    }
+    try {
+      const event = await readJsonDocument(eventPath, "event");
+      if (event.id !== entry.name) {
+        throw new StorageError(
+          "PATH_ID_MISMATCH",
+          `event ID does not match its directory: ${eventPath}`
+        );
+      }
+      events.push(event);
+    } catch (error) {
+      warnings.push(protocolWarning(eventPath, error));
+    }
+  }
+  events.sort((left, right) => {
+    const byTime = String(left.createdAt).localeCompare(String(right.createdAt));
+    return byTime || String(left.id).localeCompare(String(right.id));
+  });
+  return { events, warnings };
+}
+async function readRoomDirectory(registration, roomDirectoryName) {
+  const roomPath = resolve6(
+    registration.path,
+    "rooms",
+    roomDirectoryName,
+    "room.json"
+  );
+  if (!isEntityId(roomDirectoryName, "room")) {
+    return {
+      warnings: [
+        {
+          code: "INVALID_ROOM_PATH",
+          path: resolve6(registration.path, "rooms", roomDirectoryName),
+          message: "room path is not a valid room ID directory"
+        }
+      ]
+    };
+  }
+  let base;
+  try {
+    base = await readJsonDocument(roomPath, "room");
+    if (base.id !== roomDirectoryName) {
+      throw new StorageError(
+        "PATH_ID_MISMATCH",
+        `room ID does not match its directory: ${roomPath}`
+      );
+    }
+  } catch (error) {
+    return { warnings: [protocolWarning(roomPath, error)] };
+  }
+  let state = {
+    scope: "room",
+    id: String(base.id),
+    title: String(base.initialTitle),
+    description: String(base.initialDescription),
+    status: "active"
+  };
+  let lastActivityAt = String(base.createdAt);
+  const eventResult = await readRoomEvents(registration, roomDirectoryName);
+  const warnings = [...eventResult.warnings];
+  for (const event of eventResult.events) {
+    const eventPath = resolve6(
+      registration.path,
+      "rooms",
+      roomDirectoryName,
+      "events",
+      String(event.id),
+      "event.json"
+    );
+    if (!isKnownLifecycleEventType(String(event.type))) {
+      warnings.push({
+        code: "UNKNOWN_EVENT_TYPE",
+        path: eventPath,
+        message: `unknown room event type: ${String(event.type)}`
+      });
+      continue;
+    }
+    try {
+      state = applyLifecycleEvent(state, {
+        scope: "room",
+        targetId: String(event.targetId),
+        type: String(event.type),
+        data: event.data
+      });
+      lastActivityAt = String(event.createdAt);
+    } catch (error) {
+      warnings.push(protocolWarning(eventPath, error));
+    }
+  }
+  return {
+    room: {
+      id: String(base.id),
+      slug: String(base.slug),
+      title: state.title,
+      description: state.description,
+      status: state.status,
+      createdBy: String(base.createdBy),
+      createdAt: String(base.createdAt),
+      lastActivityAt
+    },
+    warnings
+  };
+}
+async function listRooms(forumAlias, paths = createAgentForumPaths()) {
+  const { registration } = await openForum(forumAlias, paths);
+  const roomsDirectory = resolve6(registration.path, "rooms");
+  let entries;
+  try {
+    entries = await readdir2(roomsDirectory, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { rooms: [], warnings: [] };
+    }
+    throw error;
+  }
+  const rooms = [];
+  const warnings = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      warnings.push({
+        code: "INVALID_ROOM_PATH",
+        path: resolve6(roomsDirectory, entry.name),
+        message: "rooms directory contains a non-directory entry"
+      });
+      continue;
+    }
+    const result = await readRoomDirectory(registration, entry.name);
+    if (result.room) rooms.push(result.room);
+    warnings.push(...result.warnings);
+  }
+  rooms.sort((left, right) => left.slug.localeCompare(right.slug));
+  return { rooms, warnings };
+}
+async function showRoom(forumAlias, room, paths = createAgentForumPaths()) {
+  const result = await listRooms(forumAlias, paths);
+  const found = result.rooms.find(
+    (candidate) => candidate.id === room || candidate.slug === room
+  );
+  if (!found) {
+    throw new ServiceError(
+      "ROOM_NOT_FOUND",
+      `room was not found: ${room}`,
+      result.warnings
+    );
+  }
+  return { room: found, warnings: result.warnings };
+}
+async function withForumWrite(forumAlias, identityId, paths, command, operation) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const identity = findIdentity(config, identityId);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command
+  });
+  try {
+    await openForum(forumAlias, paths, { requireClean: true });
+    await readForumMember(registration, identity);
+    configureForumCommitIdentity(
+      registration.path,
+      identity.displayName,
+      identity.memberId
+    );
+    return await operation(registration, identity);
+  } finally {
+    await lock.release();
+  }
+}
+function roomMemberDocument(roomId, identity, role, responsibility, status, joinedAt, updatedAt) {
+  return {
+    schemaVersion: "1.0",
+    roomId,
+    memberId: identity.memberId,
+    role,
+    responsibility,
+    status,
+    joinedAt,
+    updatedAt
+  };
+}
+async function readRoomMember(path) {
+  try {
+    return await readJsonDocument(path, "room-member");
+  } catch (error) {
+    if (error instanceof StorageError && typeof error.details === "string" && error.details.includes("ENOENT")) {
+      return void 0;
+    }
+    throw error;
+  }
+}
+async function commitMutableDocument(repository, path, schema, value, commitMessage) {
+  let previous;
+  try {
+    previous = await readFile4(path, "utf8");
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+  try {
+    await writeValidatedJsonAtomic(path, schema, value, { overwrite: true });
+    return commitPaths(repository, [path], commitMessage);
+  } catch (error) {
+    runGit(repository, ["reset", "--", path]);
+    if (previous === void 0) await rm3(path, { force: true });
+    else await writeFileAtomic(path, previous, { overwrite: true });
+    throw error;
+  }
+}
+async function createRoom(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    "room create",
+    async (registration, identity) => {
+      const existing = await listRooms(input.forumAlias, paths);
+      if (existing.warnings.some((item) => item.code === "SCHEMA_VALIDATION_FAILED")) {
+        throw new ServiceError(
+          "PROTOCOL_DATA_DAMAGED",
+          "cannot safely check room slug uniqueness while room data is damaged",
+          existing.warnings
+        );
+      }
+      if (existing.rooms.some((room2) => room2.slug === input.slug)) {
+        throw new ServiceError(
+          "ROOM_SLUG_EXISTS",
+          `room slug already exists: ${input.slug}`
+        );
+      }
+      const id = input.roomId ?? createEntityId("room");
+      const timestamp = currentUtcTimestamp(input.now);
+      const roomDirectory = resolve6(registration.path, "rooms", id);
+      const room = {
+        schemaVersion: "1.0",
+        id,
+        slug: input.slug,
+        initialTitle: input.title,
+        initialDescription: input.description,
+        createdBy: identity.memberId,
+        createdAt: timestamp
+      };
+      const member = roomMemberDocument(
+        id,
+        identity,
+        identity.role,
+        identity.responsibility,
+        "active",
+        timestamp,
+        timestamp
+      );
+      let directoryCreated = false;
+      try {
+        await createImmutableDirectory(roomDirectory, async (temporary) => {
+          await writeValidatedJsonAtomic(
+            resolve6(temporary, "room.json"),
+            "room",
+            room
+          );
+          await writeValidatedJsonAtomic(
+            resolve6(temporary, "members", `${identity.memberId}.json`),
+            "room-member",
+            member
+          );
+        });
+        directoryCreated = true;
+        const commit = commitPaths(
+          registration.path,
+          [roomDirectory],
+          `Create room ${input.slug}`
+        );
+        return {
+          room: {
+            id,
+            slug: input.slug,
+            title: input.title,
+            description: input.description,
+            status: "active",
+            createdBy: identity.memberId,
+            createdAt: timestamp,
+            lastActivityAt: timestamp
+          },
+          identityId: identity.memberId,
+          commit
+        };
+      } catch (error) {
+        runGit(registration.path, ["reset", "--", roomDirectory]);
+        if (directoryCreated) {
+          await rm3(roomDirectory, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    }
+  );
+}
+async function joinRoom(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    "room join",
+    async (registration, identity) => {
+      const roomResult = await showRoom(input.forumAlias, input.room, paths);
+      if (roomResult.room.status !== "active") {
+        throw new ServiceError(
+          "ROOM_ARCHIVED",
+          `cannot join archived room: ${roomResult.room.id}`
+        );
+      }
+      const memberPath = resolve6(
+        registration.path,
+        "rooms",
+        roomResult.room.id,
+        "members",
+        `${identity.memberId}.json`
+      );
+      const existing = await readRoomMember(memberPath);
+      const role = input.role ?? identity.role;
+      const responsibility = input.responsibility ?? identity.responsibility;
+      if (existing?.status === "active" && existing.role === role && existing.responsibility === responsibility) {
+        return { action: "unchanged", member: existing };
+      }
+      const timestamp = currentUtcTimestamp(input.now);
+      const member = roomMemberDocument(
+        roomResult.room.id,
+        identity,
+        role,
+        responsibility,
+        "active",
+        existing?.joinedAt ?? timestamp,
+        timestamp
+      );
+      const commit = await commitMutableDocument(
+        registration.path,
+        memberPath,
+        "room-member",
+        member,
+        `Join room ${roomResult.room.slug}`
+      );
+      return {
+        action: existing ? "updated" : "joined",
+        member,
+        commit
+      };
+    }
+  );
+}
+async function leaveRoom(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    "room leave",
+    async (registration, identity) => {
+      const roomResult = await showRoom(input.forumAlias, input.room, paths);
+      const memberPath = resolve6(
+        registration.path,
+        "rooms",
+        roomResult.room.id,
+        "members",
+        `${identity.memberId}.json`
+      );
+      const existing = await readRoomMember(memberPath);
+      if (!existing) {
+        throw new ServiceError(
+          "ROOM_MEMBERSHIP_REQUIRED",
+          `identity is not a room member: ${identity.memberId}`
+        );
+      }
+      if (existing.status === "left") {
+        return { action: "unchanged", member: existing };
+      }
+      const member = {
+        ...existing,
+        status: "left",
+        updatedAt: currentUtcTimestamp(input.now)
+      };
+      const commit = await commitMutableDocument(
+        registration.path,
+        memberPath,
+        "room-member",
+        member,
+        `Leave room ${roomResult.room.slug}`
+      );
+      return { action: "left", member, commit };
+    }
+  );
+}
+async function requireActiveRoomMember(registration, roomId, identity) {
+  const memberPath = resolve6(
+    registration.path,
+    "rooms",
+    roomId,
+    "members",
+    `${identity.memberId}.json`
+  );
+  const member = await readRoomMember(memberPath);
+  if (!member || member.status !== "active") {
+    throw new ServiceError(
+      "ROOM_MEMBERSHIP_REQUIRED",
+      `identity is not an active room member: ${identity.memberId}`
+    );
+  }
+  return member;
+}
+async function createRoomEvent(input, paths = createAgentForumPaths()) {
+  return withForumWrite(
+    input.forumAlias,
+    input.identityId,
+    paths,
+    input.type,
+    async (registration, identity) => {
+      const roomResult = await showRoom(input.forumAlias, input.room, paths);
+      await requireActiveRoomMember(registration, roomResult.room.id, identity);
+      const eventId = input.eventId ?? createEntityId("event");
+      const timestamp = currentUtcTimestamp(input.now);
+      const event = {
+        schemaVersion: "1.0",
+        id: eventId,
+        scope: "room",
+        targetId: roomResult.room.id,
+        type: input.type,
+        actorId: identity.memberId,
+        createdAt: timestamp,
+        reason: input.reason,
+        data: input.data
+      };
+      const currentState = {
+        scope: "room",
+        id: roomResult.room.id,
+        title: roomResult.room.title,
+        description: roomResult.room.description,
+        status: roomResult.room.status
+      };
+      const nextState = applyLifecycleEvent(
+        currentState,
+        event
+      );
+      const eventDirectory = resolve6(
+        registration.path,
+        "rooms",
+        roomResult.room.id,
+        "events",
+        eventId
+      );
+      let eventCreated = false;
+      try {
+        await createImmutableEvent(eventDirectory, event);
+        eventCreated = true;
+        const commit = commitPaths(
+          registration.path,
+          [eventDirectory],
+          `${input.type} ${roomResult.room.slug}`
+        );
+        return {
+          eventId,
+          room: {
+            ...roomResult.room,
+            title: nextState.title,
+            description: nextState.description,
+            status: nextState.status,
+            lastActivityAt: timestamp
+          },
+          commit
+        };
+      } catch (error) {
+        runGit(registration.path, ["reset", "--", eventDirectory]);
+        if (eventCreated) {
+          await rm3(eventDirectory, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    }
+  );
+}
+
+// src/services/context.ts
+function selectedCwd(cwd) {
+  return resolve7(cwd ?? process.cwd());
+}
+function findForumById(config, forumId) {
+  return config.forums.find((forum) => forum.forumId === forumId);
+}
+async function targetFromRegistration(registration, roomIdOrSlug, paths) {
+  try {
+    const result = await showRoom(registration.alias, roomIdOrSlug, paths);
+    return {
+      forumId: registration.forumId,
+      forumAlias: registration.alias,
+      roomId: result.room.id,
+      roomSlug: result.room.slug,
+      roomTitle: result.room.title,
+      targetStatus: result.room.status
+    };
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "ROOM_NOT_FOUND") {
+      return {
+        forumId: registration.forumId,
+        forumAlias: registration.alias,
+        roomId: roomIdOrSlug,
+        roomSlug: null,
+        roomTitle: null,
+        targetStatus: "missing",
+        problem: error.message
+      };
+    }
+    return {
+      forumId: registration.forumId,
+      forumAlias: registration.alias,
+      roomId: roomIdOrSlug,
+      roomSlug: null,
+      roomTitle: null,
+      targetStatus: "unavailable",
+      problem: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+async function targetForBinding(config, binding, paths) {
+  const registration = findForumById(config, binding.forumId);
+  if (!registration) {
+    return {
+      binding,
+      forumId: binding.forumId,
+      forumAlias: null,
+      roomId: binding.roomId,
+      roomSlug: null,
+      roomTitle: null,
+      targetStatus: "missing",
+      problem: "forum is no longer registered locally"
+    };
+  }
+  const target = await targetFromRegistration(registration, binding.roomId, paths);
+  return { binding, ...target };
+}
+async function requireTarget(forumAlias, room, paths, options = {}) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const target = await targetFromRegistration(registration, room, paths);
+  if (target.targetStatus === "missing" || target.targetStatus === "unavailable") {
+    throw new ContextError(
+      "BINDING_TARGET_UNAVAILABLE",
+      `context target is unavailable: ${forumAlias}/${room}`,
+      target
+    );
+  }
+  if (options.active && target.targetStatus === "archived") {
+    throw new ServiceError(
+      "ROOM_ARCHIVED",
+      `cannot bind an archived room: ${target.roomId}`
+    );
+  }
+  return target;
+}
+function requireBranch(context, requestedBranch, cwd) {
+  const branch = requestedBranch ?? context.branch;
+  if (!branch) {
+    throw new ContextError(
+      "GIT_BRANCH_REQUIRED",
+      "a branch binding requires an attached HEAD or explicit --branch"
+    );
+  }
+  assertGitBranchName(cwd, branch);
+  return branch;
+}
+async function bindContext(input, paths = createAgentForumPaths()) {
+  if (input.workspace && input.branch) {
+    throw new ContextError(
+      "GIT_BRANCH_REQUIRED",
+      "--branch cannot be combined with a workspace-default binding"
+    );
+  }
+  const cwd = selectedCwd(input.cwd);
+  const context = await discoverGitWorkspace(cwd);
+  const target = await requireTarget(input.forumAlias, input.room, paths, {
+    active: true
+  });
+  const scope = input.workspace ? "workspace" : "branch";
+  const branch = scope === "branch" ? requireBranch(context, input.branch, cwd) : void 0;
+  const lock = await acquireForumLock({
+    lockPath: resolve7(paths.locksDirectory, "context.lock"),
+    command: "context bind"
+  });
+  try {
+    const state = await loadContextBindingState(paths);
+    const result = setContextBinding(
+      state,
+      {
+        context,
+        scope,
+        ...branch ? { branch } : {},
+        forumId: target.forumId,
+        roomId: target.roomId
+      },
+      {
+        ...input.force !== void 0 ? { force: input.force } : {},
+        ...input.now ? { now: input.now } : {},
+        ...input.bindingId ? { bindingId: input.bindingId } : {}
+      }
+    );
+    await saveContextBindingState(paths, result.state);
+    return {
+      action: result.replaced ? "replaced" : "created",
+      binding: result.binding,
+      target
+    };
+  } finally {
+    await lock.release();
+  }
+}
+async function unbindContext(input, paths = createAgentForumPaths()) {
+  if (input.workspace && input.branch) {
+    throw new ContextError(
+      "GIT_BRANCH_REQUIRED",
+      "--branch cannot be combined with a workspace-default binding"
+    );
+  }
+  const cwd = selectedCwd(input.cwd);
+  const context = await discoverGitWorkspace(cwd);
+  const scope = input.workspace ? "workspace" : "branch";
+  const branch = scope === "branch" ? requireBranch(context, input.branch, cwd) : void 0;
+  const lock = await acquireForumLock({
+    lockPath: resolve7(paths.locksDirectory, "context.lock"),
+    command: "context unbind"
+  });
+  try {
+    const state = await loadContextBindingState(paths);
+    const result = removeContextBinding(
+      state,
+      context.workspaceKey,
+      scope,
+      branch
+    );
+    if (result.removed.length > 0) {
+      await saveContextBindingState(paths, result.state);
+    }
+    return { removed: result.removed, context };
+  } finally {
+    await lock.release();
+  }
+}
+async function listContextBindings(paths = createAgentForumPaths()) {
+  const [state, config] = await Promise.all([
+    loadContextBindingState(paths),
+    loadLocalConfig(paths)
+  ]);
+  const bindings = await Promise.all(
+    state.bindings.map((binding) => targetForBinding(config, binding, paths))
+  );
+  bindings.sort((left, right) => {
+    const byWorkspace = left.binding.workspaceKey.localeCompare(
+      right.binding.workspaceKey
+    );
+    if (byWorkspace) return byWorkspace;
+    if (left.binding.scope !== right.binding.scope) {
+      return left.binding.scope === "branch" ? -1 : 1;
+    }
+    const leftBranch = left.binding.scope === "branch" ? left.binding.branch : "";
+    const rightBranch = right.binding.scope === "branch" ? right.binding.branch : "";
+    return leftBranch.localeCompare(rightBranch);
+  });
+  return { bindings };
+}
+async function resolveContext(input = {}, paths = createAgentForumPaths()) {
+  if (Boolean(input.forumAlias) !== Boolean(input.room)) {
+    throw new ContextError(
+      "BINDING_TARGET_UNAVAILABLE",
+      "explicit context requires both forum alias and room"
+    );
+  }
+  if (input.forumAlias && input.room) {
+    const target2 = await requireTarget(input.forumAlias, input.room, paths);
+    return {
+      ...target2,
+      source: "explicit",
+      context: null,
+      binding: null
+    };
+  }
+  const cwd = selectedCwd(input.cwd);
+  const context = await discoverGitWorkspace(cwd);
+  const state = await loadContextBindingState(paths);
+  const resolution = resolveContextBinding(state, context);
+  if (resolution.kind === "unbound") {
+    throw new ContextError(
+      "CONTEXT_NOT_BOUND",
+      "no branch or workspace-default binding matches the current context",
+      context
+    );
+  }
+  const config = await loadLocalConfig(paths);
+  const target = await targetForBinding(config, resolution.binding, paths);
+  if (target.targetStatus === "missing" || target.targetStatus === "unavailable") {
+    throw new ContextError(
+      "BINDING_TARGET_UNAVAILABLE",
+      `bound context target is ${target.targetStatus}`,
+      target
+    );
+  }
+  return {
+    forumId: target.forumId,
+    forumAlias: target.forumAlias,
+    roomId: target.roomId,
+    roomSlug: target.roomSlug,
+    roomTitle: target.roomTitle,
+    targetStatus: target.targetStatus,
+    source: resolution.source,
+    context,
+    binding: resolution.binding
+  };
+}
+async function showContext(cwd, paths = createAgentForumPaths()) {
+  return resolveContext({ ...cwd ? { cwd } : {} }, paths);
+}
+
 // src/commands/error-result.ts
 function commandError(command, error) {
-  if (error instanceof ServiceError || error instanceof StorageError || error instanceof GitCommandError || error instanceof StateTransitionError) {
+  if (error instanceof ContextError || error instanceof ServiceError || error instanceof StorageError || error instanceof GitCommandError || error instanceof StateTransitionError) {
     return {
       exitCode: ExitCode.Unexpected,
       command,
@@ -8843,6 +9867,444 @@ function parseCommandOptions(args, definitions) {
 function requireOption(parsed, name) {
   const value = parsed.values.get(name);
   return value === void 0 ? { error: `${name} is required` } : value;
+}
+
+// src/commands/context.ts
+function contextHelp() {
+  return {
+    exitCode: ExitCode.Success,
+    command: "context.help",
+    data: {
+      commands: ["bind", "unbind", "show", "list", "resolve"]
+    },
+    human: `Context binding
+
+Usage:
+  agent-forum context bind --forum <alias> --room <id-or-slug> [--cwd <path>] [--branch <name> | --workspace] [--force]
+  agent-forum context unbind [--cwd <path>] [--branch <name> | --workspace]
+  agent-forum context show [--cwd <path>]
+  agent-forum context list
+  agent-forum context resolve [--cwd <path>] [--forum <alias> --room <id-or-slug>]
+`
+  };
+}
+async function executeContextCommand(args) {
+  const subcommand = args[0];
+  if (!subcommand || subcommand === "help" || subcommand === "--help") {
+    return contextHelp();
+  }
+  try {
+    if (subcommand === "bind") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum", "--room", "--cwd", "--branch"],
+        flags: ["--workspace", "--force"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      if (parsed.flags.has("--workspace") && parsed.values.has("--branch")) {
+        return invalidArgument("--workspace and --branch cannot be combined");
+      }
+      const forumAlias = requireOption(parsed, "--forum");
+      if (typeof forumAlias !== "string") return invalidArgument(forumAlias.error);
+      const room = requireOption(parsed, "--room");
+      if (typeof room !== "string") return invalidArgument(room.error);
+      const cwd = parsed.values.get("--cwd");
+      const branch = parsed.values.get("--branch");
+      const result = await bindContext({
+        forumAlias,
+        room,
+        workspace: parsed.flags.has("--workspace"),
+        force: parsed.flags.has("--force"),
+        ...cwd ? { cwd } : {},
+        ...branch ? { branch } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "context.bind",
+        data: result,
+        human: `${result.action}: ${result.binding.scope} context
+forum: ${result.target.forumAlias}
+room: ${result.target.roomSlug}
+`
+      };
+    }
+    if (subcommand === "unbind") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--cwd", "--branch"],
+        flags: ["--workspace"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      if (parsed.flags.has("--workspace") && parsed.values.has("--branch")) {
+        return invalidArgument("--workspace and --branch cannot be combined");
+      }
+      const cwd = parsed.values.get("--cwd");
+      const branch = parsed.values.get("--branch");
+      const result = await unbindContext({
+        workspace: parsed.flags.has("--workspace"),
+        ...cwd ? { cwd } : {},
+        ...branch ? { branch } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "context.unbind",
+        data: result,
+        human: result.removed.length === 0 ? "No matching binding.\n" : `removed: ${result.removed.length}
+`
+      };
+    }
+    if (subcommand === "show") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--cwd"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const result = await showContext(parsed.values.get("--cwd"));
+      return {
+        exitCode: ExitCode.Success,
+        command: "context.show",
+        data: result,
+        human: `source: ${result.source}
+forum: ${result.forumAlias}
+room: ${result.roomSlug}
+status: ${result.targetStatus}
+`
+      };
+    }
+    if (subcommand === "list") {
+      const parsed = parseCommandOptions(args.slice(1), { values: [] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const result = await listContextBindings();
+      return {
+        exitCode: ExitCode.Success,
+        command: "context.list",
+        data: result,
+        human: result.bindings.length === 0 ? "No context bindings.\n" : `${result.bindings.map(
+          (item) => `${item.binding.scope}	${item.binding.workspaceRoot}	${item.forumAlias ?? item.forumId}/${item.roomSlug ?? item.roomId}	${item.targetStatus}`
+        ).join("\n")}
+`
+      };
+    }
+    if (subcommand === "resolve") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--cwd", "--forum", "--room"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = parsed.values.get("--forum");
+      const room = parsed.values.get("--room");
+      if (Boolean(forumAlias) !== Boolean(room)) {
+        return invalidArgument("--forum and --room must be provided together");
+      }
+      const cwd = parsed.values.get("--cwd");
+      const result = await resolveContext({
+        ...cwd ? { cwd } : {},
+        ...forumAlias ? { forumAlias } : {},
+        ...room ? { room } : {}
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "context.resolve",
+        data: result,
+        human: `source: ${result.source}
+forum: ${result.forumAlias}
+room: ${result.roomSlug}
+status: ${result.targetStatus}
+`
+      };
+    }
+    return invalidArgument(`unknown context subcommand: ${subcommand}`);
+  } catch (error) {
+    const handled = commandError(`context.${subcommand}`, error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
+// src/services/local-forum.ts
+import {
+  mkdir as mkdir3,
+  readFile as readFile5,
+  rename as rename3,
+  rm as rm4,
+  stat as stat3
+} from "node:fs/promises";
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { resolve as resolve8 } from "node:path";
+async function pathExists2(path) {
+  try {
+    await stat3(path);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+function publicProfile(identity, updatedAt) {
+  return {
+    schemaVersion: "1.0",
+    memberId: identity.memberId,
+    displayName: identity.displayName,
+    role: identity.role,
+    responsibility: identity.responsibility,
+    status: "active",
+    ...identity.client ? { client: identity.client } : {},
+    createdAt: identity.createdAt,
+    updatedAt
+  };
+}
+function samePublishedIdentity(existing, identity) {
+  return existing.memberId === identity.memberId && existing.displayName === identity.displayName && existing.role === identity.role && existing.responsibility === identity.responsibility && existing.status === "active" && existing.client === identity.client;
+}
+async function initLocalForum(input, paths = createAgentForumPaths()) {
+  assertLocalAlias(input.alias);
+  const dataBranch = input.dataBranch ?? "main";
+  await mkdir3(paths.forumsDirectory, { recursive: true });
+  assertGitBranchName(paths.forumsDirectory, dataBranch);
+  const configLock = await acquireForumLock({
+    lockPath: resolve8(paths.locksDirectory, "config.lock"),
+    command: "forum init-local"
+  });
+  const destination = forumClonePath(paths, input.alias);
+  const staging = resolve8(
+    paths.forumsDirectory,
+    `.agent-forum-tmp-${randomUUID3()}`
+  );
+  let destinationCreated = false;
+  try {
+    const config = await loadLocalConfig(paths);
+    if (config.forums.some((forum) => forum.alias === input.alias)) {
+      throw new ServiceError(
+        "FORUM_ALIAS_EXISTS",
+        `forum alias is already configured: ${input.alias}`
+      );
+    }
+    if (await pathExists2(destination)) {
+      throw new ServiceError(
+        "FORUM_PATH_EXISTS",
+        `forum path already exists: ${destination}`
+      );
+    }
+    const identity = findIdentity(config, input.identityId);
+    const forumId = input.forumId ?? createEntityId("forum");
+    const timestamp = currentUtcTimestamp(input.now);
+    requireGit(paths.forumsDirectory, [
+      "init",
+      "--initial-branch",
+      dataBranch,
+      staging
+    ]);
+    configureForumCommitIdentity(
+      staging,
+      identity.displayName,
+      identity.memberId
+    );
+    await writeFileAtomic(
+      resolve8(staging, ".gitattributes"),
+      "*.json text eol=lf\n*.md text eol=lf\n"
+    );
+    await writeValidatedJsonAtomic(
+      resolve8(staging, ".forum", "protocol.json"),
+      "protocol",
+      {
+        protocolVersion: "1.0",
+        stability: "draft",
+        forumId,
+        dataBranch,
+        createdAt: timestamp
+      }
+    );
+    await writeValidatedJsonAtomic(
+      resolve8(staging, ".forum", "forum.json"),
+      "forum",
+      {
+        schemaVersion: "1.0",
+        forumId,
+        initialName: input.name,
+        initialDescription: input.description,
+        createdBy: identity.memberId,
+        createdAt: timestamp
+      }
+    );
+    await writeValidatedJsonAtomic(
+      resolve8(staging, "members", identity.memberId, "profile.json"),
+      "member-profile",
+      publicProfile(identity, timestamp)
+    );
+    const commit = commitPaths(
+      staging,
+      [".gitattributes", ".forum", "members"],
+      `Initialize forum ${input.alias}`
+    );
+    await rename3(staging, destination);
+    destinationCreated = true;
+    await saveLocalConfig(paths, {
+      ...config,
+      forums: [
+        ...config.forums,
+        {
+          alias: input.alias,
+          forumId,
+          path: destination,
+          dataBranch,
+          createdAt: timestamp
+        }
+      ]
+    });
+    return {
+      alias: input.alias,
+      forumId,
+      path: destination,
+      dataBranch,
+      identityId: identity.memberId,
+      commit
+    };
+  } catch (error) {
+    await rm4(staging, { recursive: true, force: true });
+    if (destinationCreated) {
+      await rm4(destination, { recursive: true, force: true });
+    }
+    throw error;
+  } finally {
+    await configLock.release();
+  }
+}
+async function publishIdentity(alias, identityId, paths = createAgentForumPaths(), now = /* @__PURE__ */ new Date()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, alias);
+  const identity = findIdentity(config, identityId);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "identity publish"
+  });
+  const profilePath = resolve8(
+    registration.path,
+    "members",
+    identity.memberId,
+    "profile.json"
+  );
+  try {
+    const topLevel = requireGit(registration.path, [
+      "rev-parse",
+      "--show-toplevel"
+    ]).stdout.trim();
+    if (resolve8(topLevel) !== resolve8(registration.path)) {
+      throw new ServiceError(
+        "FORUM_PROTOCOL_MISMATCH",
+        `configured forum path is not the Git root: ${registration.path}`
+      );
+    }
+    assertCleanWorktree(registration.path);
+    const currentBranch = requireGit(registration.path, [
+      "branch",
+      "--show-current"
+    ]).stdout.trim();
+    if (currentBranch !== registration.dataBranch) {
+      throw new ServiceError(
+        "FORUM_PROTOCOL_MISMATCH",
+        `managed forum is on '${currentBranch}', expected '${registration.dataBranch}'`
+      );
+    }
+    const protocol = JSON.parse(
+      await readFile5(
+        resolve8(registration.path, ".forum", "protocol.json"),
+        "utf8"
+      )
+    );
+    const protocolValidation = validateProtocolDocument("protocol", protocol, {
+      mode: "read"
+    });
+    if (!protocolValidation.ok || protocol.forumId !== registration.forumId || protocol.dataBranch !== registration.dataBranch) {
+      throw new ServiceError(
+        "FORUM_PROTOCOL_MISMATCH",
+        `forum protocol does not match local registration: ${alias}`,
+        protocolValidation.ok ? void 0 : protocolValidation.issues
+      );
+    }
+    let previous;
+    let existing;
+    try {
+      previous = await readFile5(profilePath, "utf8");
+      existing = JSON.parse(previous);
+      const validation = validateProtocolDocument("member-profile", existing, {
+        mode: "read"
+      });
+      if (!validation.ok) {
+        throw new StorageError(
+          "SCHEMA_VALIDATION_FAILED",
+          `existing public member profile is invalid: ${profilePath}`,
+          validation.issues
+        );
+      }
+    } catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
+        throw error;
+      }
+    }
+    if (existing && samePublishedIdentity(existing, identity)) {
+      return {
+        alias,
+        forumId: registration.forumId,
+        identityId: identity.memberId,
+        path: profilePath,
+        action: "unchanged"
+      };
+    }
+    const createdAt = existing && typeof existing.createdAt === "string" ? existing.createdAt : identity.createdAt;
+    const profile = {
+      ...publicProfile(identity, currentUtcTimestamp(now)),
+      createdAt
+    };
+    try {
+      await writeValidatedJsonAtomic(
+        profilePath,
+        "member-profile",
+        profile,
+        { overwrite: true }
+      );
+      configureForumCommitIdentity(
+        registration.path,
+        identity.displayName,
+        identity.memberId
+      );
+      const status = requireGit(registration.path, [
+        "status",
+        "--porcelain",
+        "--",
+        profilePath
+      ]).stdout;
+      if (status.trim().length === 0) {
+        return {
+          alias,
+          forumId: registration.forumId,
+          identityId: identity.memberId,
+          path: profilePath,
+          action: "unchanged"
+        };
+      }
+      const commit = commitPaths(
+        registration.path,
+        [profilePath],
+        `Publish identity ${identity.memberId}`
+      );
+      return {
+        alias,
+        forumId: registration.forumId,
+        identityId: identity.memberId,
+        path: profilePath,
+        action: "published",
+        commit
+      };
+    } catch (error) {
+      runGit(registration.path, ["reset", "--", profilePath]);
+      if (previous === void 0) {
+        await rm4(profilePath, { force: true });
+      } else {
+        await writeFileAtomic(profilePath, previous, { overwrite: true });
+      }
+      throw error;
+    }
+  } finally {
+    await lock.release();
+  }
 }
 
 // src/commands/forum.ts
@@ -9007,29 +10469,8 @@ forum: ${result.alias}
 }
 
 // src/services/thread.ts
-import { readFile as readFile5, readdir as readdir3, rm as rm5 } from "node:fs/promises";
-import { basename as basename2, resolve as resolve8 } from "node:path";
-
-// src/domain/message-types.ts
-var knownMessageTypes = [
-  "discussion",
-  "question",
-  "answer",
-  "proposal",
-  "decision",
-  "change",
-  "blocker",
-  "review",
-  "status",
-  "test-result",
-  "acknowledgement",
-  "objection",
-  "correction"
-];
-var knownMessageTypeSet = new Set(knownMessageTypes);
-function isKnownMessageType(value) {
-  return knownMessageTypeSet.has(value);
-}
+import { readFile as readFile6, readdir as readdir3, rm as rm5 } from "node:fs/promises";
+import { basename as basename2, resolve as resolve9 } from "node:path";
 
 // src/domain/thread-kinds.ts
 var knownThreadKinds = [
@@ -9047,670 +10488,12 @@ function isKnownThreadKind(value) {
   return knownThreadKindSet.has(value);
 }
 
-// src/storage/protocol-store.ts
-import { basename, resolve as resolve6 } from "node:path";
-async function createImmutableMessage(destination, metadata, body) {
-  if (body.trim().length === 0 || body.includes("\0")) {
-    throw new StorageError(
-      "INVALID_MESSAGE_BODY",
-      "message body must be non-empty and must not contain NUL"
-    );
-  }
-  if (metadata && typeof metadata === "object" && "id" in metadata && typeof metadata.id === "string" && basename(destination) !== metadata.id) {
-    throw new StorageError(
-      "PATH_ID_MISMATCH",
-      `message path does not match metadata ID: ${destination}`
-    );
-  }
-  if (metadata && typeof metadata === "object" && "type" in metadata && typeof metadata.type === "string" && !isKnownMessageType(metadata.type)) {
-    throw new StorageError(
-      "UNKNOWN_MESSAGE_TYPE",
-      `current writer cannot publish message type: ${metadata.type}`
-    );
-  }
-  await createImmutableDirectory(destination, async (temporaryDirectory) => {
-    await writeValidatedJsonAtomic(
-      resolve6(temporaryDirectory, "message.json"),
-      "message",
-      metadata
-    );
-    await writeFileAtomic(resolve6(temporaryDirectory, "body.md"), body);
-  });
-}
-async function createImmutableEvent(destination, event) {
-  if (event && typeof event === "object" && "id" in event && typeof event.id === "string" && basename(destination) !== event.id) {
-    throw new StorageError(
-      "PATH_ID_MISMATCH",
-      `event path does not match event ID: ${destination}`
-    );
-  }
-  if (event && typeof event === "object" && "type" in event && typeof event.type === "string" && !isKnownLifecycleEventType(event.type)) {
-    throw new StorageError(
-      "UNKNOWN_EVENT_TYPE",
-      `current writer cannot publish lifecycle event type: ${event.type}`
-    );
-  }
-  await createImmutableDirectory(destination, async (temporaryDirectory) => {
-    await writeValidatedJsonAtomic(
-      resolve6(temporaryDirectory, "event.json"),
-      "event",
-      event
-    );
-  });
-}
-
-// src/services/room.ts
-import {
-  readFile as readFile4,
-  readdir as readdir2,
-  rm as rm4
-} from "node:fs/promises";
-import { resolve as resolve7 } from "node:path";
-async function readJsonDocument(path, schema) {
-  let value;
-  try {
-    value = JSON.parse(await readFile4(path, "utf8"));
-  } catch (error) {
-    throw new StorageError(
-      "SCHEMA_VALIDATION_FAILED",
-      `failed to read JSON document: ${path}`,
-      error instanceof Error ? error.message : String(error)
-    );
-  }
-  const validation = validateProtocolDocument(schema, value, { mode: "read" });
-  if (!validation.ok) {
-    throw new StorageError(
-      "SCHEMA_VALIDATION_FAILED",
-      `document does not satisfy the ${schema} schema: ${path}`,
-      validation.issues
-    );
-  }
-  return value;
-}
-function protocolWarning(path, error) {
-  if (error instanceof StorageError || error instanceof ServiceError || error instanceof StateTransitionError) {
-    return { code: error.code, path, message: error.message };
-  }
-  return {
-    code: "PROTOCOL_DATA_DAMAGED",
-    path,
-    message: error instanceof Error ? error.message : String(error)
-  };
-}
-async function openForum(alias, paths, options = {}) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, alias);
-  const topLevel = requireGit(registration.path, [
-    "rev-parse",
-    "--show-toplevel"
-  ]).stdout.trim();
-  if (resolve7(topLevel) !== resolve7(registration.path)) {
-    throw new ServiceError(
-      "FORUM_PROTOCOL_MISMATCH",
-      `configured forum path is not the Git root: ${registration.path}`
-    );
-  }
-  const branch = requireGit(registration.path, [
-    "branch",
-    "--show-current"
-  ]).stdout.trim();
-  if (branch !== registration.dataBranch) {
-    throw new ServiceError(
-      "FORUM_PROTOCOL_MISMATCH",
-      `managed forum is on '${branch}', expected '${registration.dataBranch}'`
-    );
-  }
-  if (options.requireClean) assertCleanWorktree(registration.path);
-  const protocolPath = resolve7(
-    registration.path,
-    ".forum",
-    "protocol.json"
-  );
-  const protocol = await readJsonDocument(protocolPath, "protocol");
-  if (protocol.forumId !== registration.forumId || protocol.dataBranch !== registration.dataBranch) {
-    throw new ServiceError(
-      "FORUM_PROTOCOL_MISMATCH",
-      `forum protocol does not match local registration: ${alias}`
-    );
-  }
-  return { registration };
-}
-async function readForumMember(registration, identity) {
-  const path = resolve7(
-    registration.path,
-    "members",
-    identity.memberId,
-    "profile.json"
-  );
-  let profile;
-  try {
-    profile = await readJsonDocument(path, "member-profile");
-  } catch (error) {
-    if (error instanceof StorageError && error.details && typeof error.details === "string" && error.details.includes("ENOENT")) {
-      throw new ServiceError(
-        "FORUM_MEMBERSHIP_REQUIRED",
-        `identity is not published in forum: ${identity.memberId}`
-      );
-    }
-    throw error;
-  }
-  if (profile.memberId !== identity.memberId || profile.status !== "active") {
-    throw new ServiceError(
-      "FORUM_MEMBERSHIP_REQUIRED",
-      `identity is not an active forum member: ${identity.memberId}`
-    );
-  }
-  return profile;
-}
-async function readRoomEvents(registration, roomId) {
-  const eventsDirectory = resolve7(
-    registration.path,
-    "rooms",
-    roomId,
-    "events"
-  );
-  let entries;
-  try {
-    entries = await readdir2(eventsDirectory, { withFileTypes: true });
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return { events: [], warnings: [] };
-    }
-    throw error;
-  }
-  const events = [];
-  const warnings = [];
-  for (const entry of entries) {
-    const eventPath = resolve7(eventsDirectory, entry.name, "event.json");
-    if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
-      warnings.push({
-        code: "INVALID_EVENT_PATH",
-        path: resolve7(eventsDirectory, entry.name),
-        message: "room event path is not a valid event ID directory"
-      });
-      continue;
-    }
-    try {
-      const event = await readJsonDocument(eventPath, "event");
-      if (event.id !== entry.name) {
-        throw new StorageError(
-          "PATH_ID_MISMATCH",
-          `event ID does not match its directory: ${eventPath}`
-        );
-      }
-      events.push(event);
-    } catch (error) {
-      warnings.push(protocolWarning(eventPath, error));
-    }
-  }
-  events.sort((left, right) => {
-    const byTime = String(left.createdAt).localeCompare(String(right.createdAt));
-    return byTime || String(left.id).localeCompare(String(right.id));
-  });
-  return { events, warnings };
-}
-async function readRoomDirectory(registration, roomDirectoryName) {
-  const roomPath = resolve7(
-    registration.path,
-    "rooms",
-    roomDirectoryName,
-    "room.json"
-  );
-  if (!isEntityId(roomDirectoryName, "room")) {
-    return {
-      warnings: [
-        {
-          code: "INVALID_ROOM_PATH",
-          path: resolve7(registration.path, "rooms", roomDirectoryName),
-          message: "room path is not a valid room ID directory"
-        }
-      ]
-    };
-  }
-  let base;
-  try {
-    base = await readJsonDocument(roomPath, "room");
-    if (base.id !== roomDirectoryName) {
-      throw new StorageError(
-        "PATH_ID_MISMATCH",
-        `room ID does not match its directory: ${roomPath}`
-      );
-    }
-  } catch (error) {
-    return { warnings: [protocolWarning(roomPath, error)] };
-  }
-  let state = {
-    scope: "room",
-    id: String(base.id),
-    title: String(base.initialTitle),
-    description: String(base.initialDescription),
-    status: "active"
-  };
-  let lastActivityAt = String(base.createdAt);
-  const eventResult = await readRoomEvents(registration, roomDirectoryName);
-  const warnings = [...eventResult.warnings];
-  for (const event of eventResult.events) {
-    const eventPath = resolve7(
-      registration.path,
-      "rooms",
-      roomDirectoryName,
-      "events",
-      String(event.id),
-      "event.json"
-    );
-    if (!isKnownLifecycleEventType(String(event.type))) {
-      warnings.push({
-        code: "UNKNOWN_EVENT_TYPE",
-        path: eventPath,
-        message: `unknown room event type: ${String(event.type)}`
-      });
-      continue;
-    }
-    try {
-      state = applyLifecycleEvent(state, {
-        scope: "room",
-        targetId: String(event.targetId),
-        type: String(event.type),
-        data: event.data
-      });
-      lastActivityAt = String(event.createdAt);
-    } catch (error) {
-      warnings.push(protocolWarning(eventPath, error));
-    }
-  }
-  return {
-    room: {
-      id: String(base.id),
-      slug: String(base.slug),
-      title: state.title,
-      description: state.description,
-      status: state.status,
-      createdBy: String(base.createdBy),
-      createdAt: String(base.createdAt),
-      lastActivityAt
-    },
-    warnings
-  };
-}
-async function listRooms(forumAlias, paths = createAgentForumPaths()) {
-  const { registration } = await openForum(forumAlias, paths);
-  const roomsDirectory = resolve7(registration.path, "rooms");
-  let entries;
-  try {
-    entries = await readdir2(roomsDirectory, { withFileTypes: true });
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return { rooms: [], warnings: [] };
-    }
-    throw error;
-  }
-  const rooms = [];
-  const warnings = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      warnings.push({
-        code: "INVALID_ROOM_PATH",
-        path: resolve7(roomsDirectory, entry.name),
-        message: "rooms directory contains a non-directory entry"
-      });
-      continue;
-    }
-    const result = await readRoomDirectory(registration, entry.name);
-    if (result.room) rooms.push(result.room);
-    warnings.push(...result.warnings);
-  }
-  rooms.sort((left, right) => left.slug.localeCompare(right.slug));
-  return { rooms, warnings };
-}
-async function showRoom(forumAlias, room, paths = createAgentForumPaths()) {
-  const result = await listRooms(forumAlias, paths);
-  const found = result.rooms.find(
-    (candidate) => candidate.id === room || candidate.slug === room
-  );
-  if (!found) {
-    throw new ServiceError(
-      "ROOM_NOT_FOUND",
-      `room was not found: ${room}`,
-      result.warnings
-    );
-  }
-  return { room: found, warnings: result.warnings };
-}
-async function withForumWrite(forumAlias, identityId, paths, command, operation) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, forumAlias);
-  const identity = findIdentity(config, identityId);
-  const lock = await acquireForumLock({
-    lockPath: forumLockPath(paths, registration.forumId),
-    command
-  });
-  try {
-    await openForum(forumAlias, paths, { requireClean: true });
-    await readForumMember(registration, identity);
-    configureForumCommitIdentity(
-      registration.path,
-      identity.displayName,
-      identity.memberId
-    );
-    return await operation(registration, identity);
-  } finally {
-    await lock.release();
-  }
-}
-function roomMemberDocument(roomId, identity, role, responsibility, status, joinedAt, updatedAt) {
-  return {
-    schemaVersion: "1.0",
-    roomId,
-    memberId: identity.memberId,
-    role,
-    responsibility,
-    status,
-    joinedAt,
-    updatedAt
-  };
-}
-async function readRoomMember(path) {
-  try {
-    return await readJsonDocument(path, "room-member");
-  } catch (error) {
-    if (error instanceof StorageError && typeof error.details === "string" && error.details.includes("ENOENT")) {
-      return void 0;
-    }
-    throw error;
-  }
-}
-async function commitMutableDocument(repository, path, schema, value, commitMessage) {
-  let previous;
-  try {
-    previous = await readFile4(path, "utf8");
-  } catch (error) {
-    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
-      throw error;
-    }
-  }
-  try {
-    await writeValidatedJsonAtomic(path, schema, value, { overwrite: true });
-    return commitPaths(repository, [path], commitMessage);
-  } catch (error) {
-    runGit(repository, ["reset", "--", path]);
-    if (previous === void 0) await rm4(path, { force: true });
-    else await writeFileAtomic(path, previous, { overwrite: true });
-    throw error;
-  }
-}
-async function createRoom(input, paths = createAgentForumPaths()) {
-  return withForumWrite(
-    input.forumAlias,
-    input.identityId,
-    paths,
-    "room create",
-    async (registration, identity) => {
-      const existing = await listRooms(input.forumAlias, paths);
-      if (existing.warnings.some((item) => item.code === "SCHEMA_VALIDATION_FAILED")) {
-        throw new ServiceError(
-          "PROTOCOL_DATA_DAMAGED",
-          "cannot safely check room slug uniqueness while room data is damaged",
-          existing.warnings
-        );
-      }
-      if (existing.rooms.some((room2) => room2.slug === input.slug)) {
-        throw new ServiceError(
-          "ROOM_SLUG_EXISTS",
-          `room slug already exists: ${input.slug}`
-        );
-      }
-      const id = input.roomId ?? createEntityId("room");
-      const timestamp = currentUtcTimestamp(input.now);
-      const roomDirectory = resolve7(registration.path, "rooms", id);
-      const room = {
-        schemaVersion: "1.0",
-        id,
-        slug: input.slug,
-        initialTitle: input.title,
-        initialDescription: input.description,
-        createdBy: identity.memberId,
-        createdAt: timestamp
-      };
-      const member = roomMemberDocument(
-        id,
-        identity,
-        identity.role,
-        identity.responsibility,
-        "active",
-        timestamp,
-        timestamp
-      );
-      let directoryCreated = false;
-      try {
-        await createImmutableDirectory(roomDirectory, async (temporary) => {
-          await writeValidatedJsonAtomic(
-            resolve7(temporary, "room.json"),
-            "room",
-            room
-          );
-          await writeValidatedJsonAtomic(
-            resolve7(temporary, "members", `${identity.memberId}.json`),
-            "room-member",
-            member
-          );
-        });
-        directoryCreated = true;
-        const commit = commitPaths(
-          registration.path,
-          [roomDirectory],
-          `Create room ${input.slug}`
-        );
-        return {
-          room: {
-            id,
-            slug: input.slug,
-            title: input.title,
-            description: input.description,
-            status: "active",
-            createdBy: identity.memberId,
-            createdAt: timestamp,
-            lastActivityAt: timestamp
-          },
-          identityId: identity.memberId,
-          commit
-        };
-      } catch (error) {
-        runGit(registration.path, ["reset", "--", roomDirectory]);
-        if (directoryCreated) {
-          await rm4(roomDirectory, { recursive: true, force: true });
-        }
-        throw error;
-      }
-    }
-  );
-}
-async function joinRoom(input, paths = createAgentForumPaths()) {
-  return withForumWrite(
-    input.forumAlias,
-    input.identityId,
-    paths,
-    "room join",
-    async (registration, identity) => {
-      const roomResult = await showRoom(input.forumAlias, input.room, paths);
-      if (roomResult.room.status !== "active") {
-        throw new ServiceError(
-          "ROOM_ARCHIVED",
-          `cannot join archived room: ${roomResult.room.id}`
-        );
-      }
-      const memberPath = resolve7(
-        registration.path,
-        "rooms",
-        roomResult.room.id,
-        "members",
-        `${identity.memberId}.json`
-      );
-      const existing = await readRoomMember(memberPath);
-      const role = input.role ?? identity.role;
-      const responsibility = input.responsibility ?? identity.responsibility;
-      if (existing?.status === "active" && existing.role === role && existing.responsibility === responsibility) {
-        return { action: "unchanged", member: existing };
-      }
-      const timestamp = currentUtcTimestamp(input.now);
-      const member = roomMemberDocument(
-        roomResult.room.id,
-        identity,
-        role,
-        responsibility,
-        "active",
-        existing?.joinedAt ?? timestamp,
-        timestamp
-      );
-      const commit = await commitMutableDocument(
-        registration.path,
-        memberPath,
-        "room-member",
-        member,
-        `Join room ${roomResult.room.slug}`
-      );
-      return {
-        action: existing ? "updated" : "joined",
-        member,
-        commit
-      };
-    }
-  );
-}
-async function leaveRoom(input, paths = createAgentForumPaths()) {
-  return withForumWrite(
-    input.forumAlias,
-    input.identityId,
-    paths,
-    "room leave",
-    async (registration, identity) => {
-      const roomResult = await showRoom(input.forumAlias, input.room, paths);
-      const memberPath = resolve7(
-        registration.path,
-        "rooms",
-        roomResult.room.id,
-        "members",
-        `${identity.memberId}.json`
-      );
-      const existing = await readRoomMember(memberPath);
-      if (!existing) {
-        throw new ServiceError(
-          "ROOM_MEMBERSHIP_REQUIRED",
-          `identity is not a room member: ${identity.memberId}`
-        );
-      }
-      if (existing.status === "left") {
-        return { action: "unchanged", member: existing };
-      }
-      const member = {
-        ...existing,
-        status: "left",
-        updatedAt: currentUtcTimestamp(input.now)
-      };
-      const commit = await commitMutableDocument(
-        registration.path,
-        memberPath,
-        "room-member",
-        member,
-        `Leave room ${roomResult.room.slug}`
-      );
-      return { action: "left", member, commit };
-    }
-  );
-}
-async function requireActiveRoomMember(registration, roomId, identity) {
-  const memberPath = resolve7(
-    registration.path,
-    "rooms",
-    roomId,
-    "members",
-    `${identity.memberId}.json`
-  );
-  const member = await readRoomMember(memberPath);
-  if (!member || member.status !== "active") {
-    throw new ServiceError(
-      "ROOM_MEMBERSHIP_REQUIRED",
-      `identity is not an active room member: ${identity.memberId}`
-    );
-  }
-  return member;
-}
-async function createRoomEvent(input, paths = createAgentForumPaths()) {
-  return withForumWrite(
-    input.forumAlias,
-    input.identityId,
-    paths,
-    input.type,
-    async (registration, identity) => {
-      const roomResult = await showRoom(input.forumAlias, input.room, paths);
-      await requireActiveRoomMember(registration, roomResult.room.id, identity);
-      const eventId = input.eventId ?? createEntityId("event");
-      const timestamp = currentUtcTimestamp(input.now);
-      const event = {
-        schemaVersion: "1.0",
-        id: eventId,
-        scope: "room",
-        targetId: roomResult.room.id,
-        type: input.type,
-        actorId: identity.memberId,
-        createdAt: timestamp,
-        reason: input.reason,
-        data: input.data
-      };
-      const currentState = {
-        scope: "room",
-        id: roomResult.room.id,
-        title: roomResult.room.title,
-        description: roomResult.room.description,
-        status: roomResult.room.status
-      };
-      const nextState = applyLifecycleEvent(
-        currentState,
-        event
-      );
-      const eventDirectory = resolve7(
-        registration.path,
-        "rooms",
-        roomResult.room.id,
-        "events",
-        eventId
-      );
-      let eventCreated = false;
-      try {
-        await createImmutableEvent(eventDirectory, event);
-        eventCreated = true;
-        const commit = commitPaths(
-          registration.path,
-          [eventDirectory],
-          `${input.type} ${roomResult.room.slug}`
-        );
-        return {
-          eventId,
-          room: {
-            ...roomResult.room,
-            title: nextState.title,
-            description: nextState.description,
-            status: nextState.status,
-            lastActivityAt: timestamp
-          },
-          commit
-        };
-      } catch (error) {
-        runGit(registration.path, ["reset", "--", eventDirectory]);
-        if (eventCreated) {
-          await rm4(eventDirectory, { recursive: true, force: true });
-        }
-        throw error;
-      }
-    }
-  );
-}
-
 // src/services/thread.ts
 function structuralWarning(code, path, message) {
   return { code, path, message };
 }
 async function readThreadEvents(registration, roomId, threadId) {
-  const directory = resolve8(
+  const directory = resolve9(
     registration.path,
     "rooms",
     roomId,
@@ -9730,12 +10513,12 @@ async function readThreadEvents(registration, roomId, threadId) {
   const events = [];
   const warnings = [];
   for (const entry of entries) {
-    const eventPath = resolve8(directory, entry.name, "event.json");
+    const eventPath = resolve9(directory, entry.name, "event.json");
     if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
       warnings.push(
         structuralWarning(
           "INVALID_EVENT_PATH",
-          resolve8(directory, entry.name),
+          resolve9(directory, entry.name),
           "thread event path is not a valid event ID directory"
         )
       );
@@ -9761,7 +10544,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   return { events, warnings };
 }
 async function readMessageDirectory(directory, threadId) {
-  const metadataPath = resolve8(directory, "message.json");
+  const metadataPath = resolve9(directory, "message.json");
   if (!isEntityId(basename2(directory), "message")) {
     return {
       warnings: [
@@ -9788,11 +10571,11 @@ async function readMessageDirectory(directory, threadId) {
         `message threadId does not match its parent thread: ${metadataPath}`
       );
     }
-    const body = await readFile5(resolve8(directory, "body.md"), "utf8");
+    const body = await readFile6(resolve9(directory, "body.md"), "utf8");
     if (body.trim().length === 0 || body.includes("\0")) {
       throw new StorageError(
         "INVALID_MESSAGE_BODY",
-        `message body is empty or contains NUL: ${resolve8(directory, "body.md")}`
+        `message body is empty or contains NUL: ${resolve9(directory, "body.md")}`
       );
     }
     const message = {
@@ -9826,7 +10609,7 @@ async function readMessageDirectory(directory, threadId) {
   }
 }
 async function readThreadMessages(registration, roomId, threadId) {
-  const directory = resolve8(
+  const directory = resolve9(
     registration.path,
     "rooms",
     roomId,
@@ -9846,7 +10629,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   const messages = [];
   const warnings = [];
   for (const entry of entries) {
-    const path = resolve8(directory, entry.name);
+    const path = resolve9(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -9868,14 +10651,14 @@ async function readThreadMessages(registration, roomId, threadId) {
   return { messages, warnings };
 }
 async function readThreadDirectory(registration, roomId, threadDirectoryName) {
-  const directory = resolve8(
+  const directory = resolve9(
     registration.path,
     "rooms",
     roomId,
     "threads",
     threadDirectoryName
   );
-  const threadPath = resolve8(directory, "thread.json");
+  const threadPath = resolve9(directory, "thread.json");
   if (!isEntityId(threadDirectoryName, "thread")) {
     return {
       messages: [],
@@ -9923,7 +10706,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "MESSAGE_SELF_REPLY",
-          resolve8(directory, "messages", message.id, "message.json"),
+          resolve9(directory, "messages", message.id, "message.json"),
           "message replyTo cannot reference itself"
         )
       );
@@ -9931,7 +10714,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "REPLY_TARGET_MISSING",
-          resolve8(directory, "messages", message.id, "message.json"),
+          resolve9(directory, "messages", message.id, "message.json"),
           `reply target is missing or damaged: ${message.replyTo}`
         )
       );
@@ -9953,7 +10736,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_TYPE_MISMATCH",
-          resolve8(directory, "messages", firstMessage.id, "message.json"),
+          resolve9(directory, "messages", firstMessage.id, "message.json"),
           "first message type does not match thread kind"
         )
       );
@@ -9962,7 +10745,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_AUTHOR_MISMATCH",
-          resolve8(directory, "messages", firstMessage.id, "message.json"),
+          resolve9(directory, "messages", firstMessage.id, "message.json"),
           "first message author does not match thread creator"
         )
       );
@@ -9971,7 +10754,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_REPLY_INVALID",
-          resolve8(directory, "messages", firstMessage.id, "message.json"),
+          resolve9(directory, "messages", firstMessage.id, "message.json"),
           "first message replyTo must be null"
         )
       );
@@ -9994,7 +10777,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
   );
   warnings.push(...eventResult.warnings);
   for (const event of eventResult.events) {
-    const eventPath = resolve8(
+    const eventPath = resolve9(
       directory,
       "events",
       String(event.id),
@@ -10044,7 +10827,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
 async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const roomResult = await showRoom(forumAlias, room, paths);
   const { registration } = await openForum(forumAlias, paths);
-  const directory = resolve8(
+  const directory = resolve9(
     registration.path,
     "rooms",
     roomResult.room.id,
@@ -10066,7 +10849,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const threads = [];
   const warnings = [...roomResult.warnings];
   for (const entry of entries) {
-    const path = resolve8(directory, entry.name);
+    const path = resolve9(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -10166,7 +10949,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
         mentions: [],
         references: []
       };
-      const threadDirectory = resolve8(
+      const threadDirectory = resolve9(
         registration.path,
         "rooms",
         roomResult.room.id,
@@ -10177,12 +10960,12 @@ async function createThread(input, paths = createAgentForumPaths()) {
       try {
         await createImmutableDirectory(threadDirectory, async (temporary) => {
           await writeValidatedJsonAtomic(
-            resolve8(temporary, "thread.json"),
+            resolve9(temporary, "thread.json"),
             "thread",
             thread
           );
           await createImmutableMessage(
-            resolve8(temporary, "messages", messageId),
+            resolve9(temporary, "messages", messageId),
             metadata,
             input.body
           );
@@ -10298,7 +11081,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
         mentions: input.mentions ?? [],
         references: input.references ?? []
       };
-      const messageDirectory = resolve8(
+      const messageDirectory = resolve9(
         registration.path,
         "rooms",
         detail.room.id,
@@ -10398,7 +11181,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
         },
         event
       );
-      const eventDirectory = resolve8(
+      const eventDirectory = resolve9(
         registration.path,
         "rooms",
         detail.room.id,
@@ -10772,7 +11555,7 @@ import { createHash, randomUUID as randomUUID4 } from "node:crypto";
 import {
   cp,
   mkdir as mkdir4,
-  readFile as readFile6,
+  readFile as readFile7,
   readdir as readdir4,
   rename as rename4,
   rm as rm6,
@@ -10780,7 +11563,7 @@ import {
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve9, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative, resolve as resolve10, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -10802,14 +11585,14 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve9(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve10(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function skillDestination(target, homeDirectory = homedir2()) {
   if (commonTargets.has(target)) {
-    return resolve9(homeDirectory, ".agents", "skills", "agent-forum");
+    return resolve10(homeDirectory, ".agents", "skills", "agent-forum");
   }
   if (target === "claude-code") {
-    return resolve9(homeDirectory, ".claude", "skills", "agent-forum");
+    return resolve10(homeDirectory, ".claude", "skills", "agent-forum");
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
 }
@@ -10826,7 +11609,7 @@ async function pathExists3(path) {
 }
 async function loadState(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile6(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile7(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -10862,7 +11645,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const entries = await readdir4(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve9(current, entry.name);
+    const absolute = resolve10(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -10883,7 +11666,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
     }
     if (!entry.isFile()) continue;
     const relativePath = relative(root, absolute).split(sep2).join("/");
-    files[relativePath] = createHash("sha256").update(await readFile6(absolute)).digest("hex");
+    files[relativePath] = createHash("sha256").update(await readFile7(absolute)).digest("hex");
   }
   return files;
 }
@@ -10895,11 +11678,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve9(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve9(process.cwd(), "skills", "agent-forum")
+    resolve10(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve10(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists3(resolve9(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists3(resolve10(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -11400,6 +12183,7 @@ Commands:
   version, --version Show the CLI version
   forum              Initialize and manage forum repositories
   identity           Create, inspect, or publish Agent identities
+  context            Bind Git workspaces and branches to forum rooms
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
@@ -11430,6 +12214,7 @@ async function runCli(args, io = defaultIo) {
             "version",
             "forum",
             "identity",
+            "context",
             "room",
             "thread",
             "post",
@@ -11458,10 +12243,10 @@ async function runCli(args, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "room" || command === "thread" || command === "post" || command === "skill") {
+  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "skill") {
     try {
       const subcommandArgs = positional.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

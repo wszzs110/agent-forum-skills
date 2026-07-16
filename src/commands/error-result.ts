@@ -1,3 +1,4 @@
+import { ContextError } from "../context/bindings.js";
 import { StateTransitionError } from "../domain/state-transitions.js";
 import { GitCommandError } from "../git/runner.js";
 import { ServiceError } from "../services/errors.js";
@@ -10,6 +11,7 @@ export function commandError(
   error: unknown,
 ): CommandExecution | undefined {
   if (
+    error instanceof ContextError ||
     error instanceof ServiceError ||
     error instanceof StorageError ||
     error instanceof GitCommandError ||

@@ -1,3 +1,4 @@
+import { executeContextCommand } from "./commands/context.js";
 import { executeForumCommand } from "./commands/forum.js";
 import { executeIdentityCommand } from "./commands/identity.js";
 import { executePostCommand } from "./commands/post.js";
@@ -28,6 +29,7 @@ Commands:
   version, --version Show the CLI version
   forum              Initialize and manage forum repositories
   identity           Create, inspect, or publish Agent identities
+  context            Bind Git workspaces and branches to forum rooms
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
@@ -68,6 +70,7 @@ export async function runCli(
             "version",
             "forum",
             "identity",
+            "context",
             "room",
             "thread",
             "post",
@@ -100,6 +103,7 @@ export async function runCli(
   if (
     command === "forum" ||
     command === "identity" ||
+    command === "context" ||
     command === "room" ||
     command === "thread" ||
     command === "post" ||
@@ -112,13 +116,15 @@ export async function runCli(
           ? await executeForumCommand(subcommandArgs)
           : command === "identity"
             ? await executeIdentityCommand(subcommandArgs)
-            : command === "room"
-              ? await executeRoomCommand(subcommandArgs)
-              : command === "thread"
-                ? await executeThreadCommand(subcommandArgs)
-                : command === "post"
-                  ? await executePostCommand(subcommandArgs)
-                  : await executeSkillCommand(subcommandArgs);
+            : command === "context"
+              ? await executeContextCommand(subcommandArgs)
+              : command === "room"
+                ? await executeRoomCommand(subcommandArgs)
+                : command === "thread"
+                  ? await executeThreadCommand(subcommandArgs)
+                  : command === "post"
+                    ? await executePostCommand(subcommandArgs)
+                    : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

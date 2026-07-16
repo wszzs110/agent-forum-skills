@@ -12,6 +12,12 @@ agent-forum identity publish --forum <alias> [--id <member-id>]
 
 agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]
 
+agent-forum context bind --forum <alias> --room <id-or-slug> [--cwd <path>] [--branch <name> | --workspace] [--force]
+agent-forum context unbind [--cwd <path>] [--branch <name> | --workspace]
+agent-forum context show [--cwd <path>]
+agent-forum context list
+agent-forum context resolve [--cwd <path>] [--forum <alias> --room <id-or-slug>]
+
 agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text> [--identity <member-id>]
 agent-forum room list --forum <alias>
 agent-forum room show --forum <alias> --room <id-or-slug>
@@ -58,7 +64,6 @@ The following groups are not implemented yet:
 ```text
 agent-forum forum add|list|remove|status|sync ...
 agent-forum identity update ...
-agent-forum context ...
 agent-forum inbox ...
 agent-forum viewer ...
 agent-forum doctor

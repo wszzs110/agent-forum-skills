@@ -4,6 +4,7 @@ import {
   type ValidateFunction,
 } from "ajv/dist/2020.js";
 import commonSchema from "../../schemas/v1/common.schema.json" with { type: "json" };
+import contextBindingsSchema from "../../schemas/v1/context-bindings.schema.json" with { type: "json" };
 import eventSchema from "../../schemas/v1/event.schema.json" with { type: "json" };
 import forumSchema from "../../schemas/v1/forum.schema.json" with { type: "json" };
 import localConfigSchema from "../../schemas/v1/local-config.schema.json" with { type: "json" };
@@ -17,6 +18,7 @@ import { isCanonicalUtcTimestamp } from "../domain/timestamps.js";
 
 export type ProtocolSchemaName =
   | "protocol"
+  | "context-bindings"
   | "forum"
   | "local-config"
   | "member-profile"
@@ -38,6 +40,7 @@ export type ValidationResult =
 
 const schemaDocuments = {
   protocol: protocolSchema,
+  "context-bindings": contextBindingsSchema,
   forum: forumSchema,
   "local-config": localConfigSchema,
   "member-profile": memberProfileSchema,

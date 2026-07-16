@@ -71,6 +71,24 @@ test("canonical protocol timestamps require UTC and milliseconds", () => {
 });
 
 test("all 1.0 draft protocol documents validate", () => {
+  expectValid("context-bindings", {
+    formatVersion: 1,
+    bindings: [
+      {
+        bindingId: "binding_0194f6d2-8c10-7a31-9e42-123456789ac2",
+        workspaceType: "git",
+        workspaceRoot: "/code/shop",
+        workspaceKey: "linux:/code/shop",
+        scope: "branch",
+        branch: "feature/checkout",
+        forumId: ids.forum,
+        roomId: ids.room,
+        repositoryFingerprint: "example.com/team/shop",
+        createdAt,
+        updatedAt: createdAt,
+      },
+    ],
+  });
   expectValid("protocol", {
     protocolVersion: "1.0",
     stability: "draft",
