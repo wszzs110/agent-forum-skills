@@ -3133,13 +3133,13 @@ var require_utils = __commonJS({
       buffer.length = 0;
       return true;
     }
-    function consumeHextets(buffer, address, output) {
+    function consumeHextets(buffer, address, output2) {
       if (buffer.length) {
         const hex = stringArrayToHexStripped(buffer);
         if (hex !== "") {
           address.push(hex);
         } else {
-          output.error = true;
+          output2.error = true;
           return false;
         }
         buffer.length = 0;
@@ -3148,7 +3148,7 @@ var require_utils = __commonJS({
     }
     function getIPV6(input) {
       let tokenCount = 0;
-      const output = { error: false, address: "", zone: "" };
+      const output2 = { error: false, address: "", zone: "" };
       const address = [];
       const buffer = [];
       let endipv6Encountered = false;
@@ -3163,11 +3163,11 @@ var require_utils = __commonJS({
           if (endipv6Encountered === true) {
             endIpv6 = true;
           }
-          if (!consume(buffer, address, output)) {
+          if (!consume(buffer, address, output2)) {
             break;
           }
           if (++tokenCount > 7) {
-            output.error = true;
+            output2.error = true;
             break;
           }
           if (i > 0 && input[i - 1] === ":") {
@@ -3176,7 +3176,7 @@ var require_utils = __commonJS({
           address.push(":");
           continue;
         } else if (cursor === "%") {
-          if (!consume(buffer, address, output)) {
+          if (!consume(buffer, address, output2)) {
             break;
           }
           consume = consumeIsZone;
@@ -3187,15 +3187,15 @@ var require_utils = __commonJS({
       }
       if (buffer.length) {
         if (consume === consumeIsZone) {
-          output.zone = buffer.join("");
+          output2.zone = buffer.join("");
         } else if (endIpv6) {
           address.push(buffer.join(""));
         } else {
           address.push(stringArrayToHexStripped(buffer));
         }
       }
-      output.address = address.join("");
-      return output;
+      output2.address = address.join("");
+      return output2;
     }
     function normalizeIPv6(host) {
       if (findToken(host, ":") < 2) {
@@ -3223,7 +3223,7 @@ var require_utils = __commonJS({
     }
     function removeDotSegments(path) {
       let input = path;
-      const output = [];
+      const output2 = [];
       let nextSlash = -1;
       let len = 0;
       while (len = input.length) {
@@ -3231,10 +3231,10 @@ var require_utils = __commonJS({
           if (input === ".") {
             break;
           } else if (input === "/") {
-            output.push("/");
+            output2.push("/");
             break;
           } else {
-            output.push(input);
+            output2.push(input);
             break;
           }
         } else if (len === 2) {
@@ -3247,16 +3247,16 @@ var require_utils = __commonJS({
             }
           } else if (input[0] === "/") {
             if (input[1] === "." || input[1] === "/") {
-              output.push("/");
+              output2.push("/");
               break;
             }
           }
         } else if (len === 3) {
           if (input === "/..") {
-            if (output.length !== 0) {
-              output.pop();
+            if (output2.length !== 0) {
+              output2.pop();
             }
-            output.push("/");
+            output2.push("/");
             break;
           }
         }
@@ -3278,8 +3278,8 @@ var require_utils = __commonJS({
             } else if (input[2] === ".") {
               if (input[3] === "/") {
                 input = input.slice(3);
-                if (output.length !== 0) {
-                  output.pop();
+                if (output2.length !== 0) {
+                  output2.pop();
                 }
                 continue;
               }
@@ -3287,14 +3287,14 @@ var require_utils = __commonJS({
           }
         }
         if ((nextSlash = input.indexOf("/", 1)) === -1) {
-          output.push(input);
+          output2.push(input);
           break;
         } else {
-          output.push(input.slice(0, nextSlash));
+          output2.push(input.slice(0, nextSlash));
           input = input.slice(nextSlash);
         }
       }
-      return output.join("");
+      return output2.join("");
     }
     var HOST_DELIMS = { "@": "%40", "/": "%2F", "?": "%3F", "#": "%23", ":": "%3A" };
     var HOST_DELIM_RE = /[@/?#:]/g;
@@ -3308,7 +3308,7 @@ var require_utils = __commonJS({
       if (input.indexOf("%") === -1) {
         return input;
       }
-      let output = "";
+      let output2 = "";
       for (let i = 0; i < input.length; i++) {
         if (input[i] === "%" && i + 2 < input.length) {
           const hex = input.slice(i + 1, i + 3);
@@ -3316,20 +3316,20 @@ var require_utils = __commonJS({
             const normalizedHex = hex.toUpperCase();
             const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
             if (decodeUnreserved && isUnreserved(decoded)) {
-              output += decoded;
+              output2 += decoded;
             } else {
-              output += "%" + normalizedHex;
+              output2 += "%" + normalizedHex;
             }
             i += 2;
             continue;
           }
         }
-        output += input[i];
+        output2 += input[i];
       }
-      return output;
+      return output2;
     }
     function normalizePathEncoding(input) {
-      let output = "";
+      let output2 = "";
       for (let i = 0; i < input.length; i++) {
         if (input[i] === "%" && i + 2 < input.length) {
           const hex = input.slice(i + 1, i + 3);
@@ -3337,36 +3337,36 @@ var require_utils = __commonJS({
             const normalizedHex = hex.toUpperCase();
             const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
             if (decoded !== "." && isUnreserved(decoded)) {
-              output += decoded;
+              output2 += decoded;
             } else {
-              output += "%" + normalizedHex;
+              output2 += "%" + normalizedHex;
             }
             i += 2;
             continue;
           }
         }
         if (isPathCharacter(input[i])) {
-          output += input[i];
+          output2 += input[i];
         } else {
-          output += escape(input[i]);
+          output2 += escape(input[i]);
         }
       }
-      return output;
+      return output2;
     }
     function escapePreservingEscapes(input) {
-      let output = "";
+      let output2 = "";
       for (let i = 0; i < input.length; i++) {
         if (input[i] === "%" && i + 2 < input.length) {
           const hex = input.slice(i + 1, i + 3);
           if (isHexPair(hex)) {
-            output += "%" + hex.toUpperCase();
+            output2 += "%" + hex.toUpperCase();
             i += 2;
             continue;
           }
         }
-        output += escape(input[i]);
+        output2 += escape(input[i]);
       }
-      return output;
+      return output2;
     }
     function recomposeAuthority(component) {
       const uriTokens = [];
@@ -8451,7 +8451,7 @@ var GitCommandError = class extends Error {
   }
 };
 function redactGitOutput(value) {
-  return value.replace(/(https?:\/\/)[^/@\s]+@/giu, "$1***@").replace(/(https?:\/\/[^/:\s]+:)[^@\s]+@/giu, "$1***@");
+  return value.replace(/(https?:\/\/)[^/@\s]+@/giu, "$1***@").replace(/(https?:\/\/[^/:\s]+:)[^@\s]+@/giu, "$1***@").replace(/([?&][^=&#\s]+)=([^&#\s]+)/gu, "$1=***").replace(/(https?:\/\/[^#\s]+)#[^\s]+/giu, "$1#***");
 }
 function runGit(cwd, args) {
   const result = spawnSync("git", [...args], {
@@ -10459,6 +10459,188 @@ async function removeLocalForum(input, paths = createAgentForumPaths()) {
   }
 }
 
+// src/services/forum-sync.ts
+function output(result) {
+  return `${result.stdout}
+${result.stderr}`.trim();
+}
+function isNonFastForward(result) {
+  const text = output(result).toLowerCase();
+  return text.includes("non-fast-forward") || text.includes("fetch first") || text.includes("[rejected]") && text.includes("failed to push");
+}
+function classifyTransportFailure(operation, result) {
+  const text = output(result);
+  const lower = text.toLowerCase();
+  if (lower.includes("authentication failed") || lower.includes("permission denied") || lower.includes("access denied") || lower.includes("could not read username") || lower.includes("publickey") || lower.includes("repository not found")) {
+    return new ServiceError(
+      "SYNC_AUTHENTICATION_FAILED",
+      `${operation} failed because remote authentication or authorization was rejected`
+    );
+  }
+  if (lower.includes("could not resolve host") || lower.includes("connection timed out") || lower.includes("failed to connect") || lower.includes("connection refused") || lower.includes("network is unreachable") || lower.includes("unable to access")) {
+    return new ServiceError(
+      "SYNC_NETWORK_FAILED",
+      `${operation} failed because the remote network was unavailable`
+    );
+  }
+  return new ServiceError(
+    operation === "fetch" ? "SYNC_NETWORK_FAILED" : "SYNC_PUSH_FAILED",
+    `${operation} failed: ${text || "Git returned a non-zero status"}`
+  );
+}
+function conflictPaths(repository) {
+  return runGit(repository, ["diff", "--name-only", "--diff-filter=U"]).stdout.split(/\r?\n/u).filter(Boolean);
+}
+async function validateRebasedForum(forumAlias, repository, originalHead, paths) {
+  try {
+    await openForum(forumAlias, paths, { requireClean: true });
+  } catch (error) {
+    runGit(repository, ["reset", "--hard", originalHead]);
+    throw new ServiceError(
+      "SYNC_PROTOCOL_FAILED",
+      "rebased forum failed protocol validation; the original local HEAD was restored",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+async function fetchAndRebase(forumAlias, repository, branch, originalHead, paths) {
+  const fetch = runGit(repository, ["fetch", "origin", branch]);
+  if (fetch.status !== 0) throw classifyTransportFailure("fetch", fetch);
+  const remoteHead = requireGit(repository, [
+    "rev-parse",
+    `refs/remotes/origin/${branch}`
+  ]).stdout.trim();
+  const rebase = runGit(repository, ["rebase", `origin/${branch}`]);
+  if (rebase.status !== 0) {
+    const conflicts = conflictPaths(repository);
+    runGit(repository, ["rebase", "--abort"]);
+    if (conflicts.length > 0) {
+      throw new ServiceError(
+        "SYNC_REBASE_CONFLICT",
+        "sync encountered Git content conflicts; the rebase was aborted and local commits were preserved",
+        { conflicts, originalHead, remoteHead }
+      );
+    }
+    throw new ServiceError(
+      "SYNC_REBASE_FAILED",
+      `rebase failed and was aborted: ${output(rebase) || "Git returned a non-zero status"}`,
+      { originalHead, remoteHead }
+    );
+  }
+  await validateRebasedForum(
+    forumAlias,
+    repository,
+    originalHead,
+    paths
+  );
+  return remoteHead;
+}
+function countAhead(repository, branch) {
+  const result = requireGit(repository, [
+    "rev-list",
+    "--count",
+    `origin/${branch}..HEAD`
+  ]).stdout.trim();
+  return Number(result);
+}
+function defaultDelay(milliseconds) {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+async function syncForum(forumAlias, paths = createAgentForumPaths(), options = {}) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const maxRetries = options.maxRetries ?? 3;
+  const delay = options.delay ?? defaultDelay;
+  const random = options.random ?? Math.random;
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "forum sync"
+  });
+  try {
+    await openForum(forumAlias, paths, { requireClean: true });
+    const remote = runGit(registration.path, ["remote", "get-url", "origin"]);
+    if (remote.status !== 0) {
+      throw new ServiceError(
+        "REMOTE_NOT_CONFIGURED",
+        "origin is not configured for this forum"
+      );
+    }
+    const originalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+    const originalRemote = runGit(registration.path, [
+      "rev-parse",
+      `refs/remotes/origin/${registration.dataBranch}`
+    ]);
+    const originalRemoteHead = originalRemote.status === 0 ? originalRemote.stdout.trim() : null;
+    let fetches = 0;
+    let pushAttempts = 0;
+    let retries = 0;
+    let successfulPush = false;
+    let remoteHead = await fetchAndRebase(
+      forumAlias,
+      registration.path,
+      registration.dataBranch,
+      originalHead,
+      paths
+    );
+    fetches += 1;
+    let integratedRemote = originalRemoteHead !== remoteHead;
+    while (countAhead(registration.path, registration.dataBranch) > 0) {
+      pushAttempts += 1;
+      await options.beforePush?.(pushAttempts);
+      const push = runGit(registration.path, [
+        "push",
+        "origin",
+        registration.dataBranch
+      ]);
+      if (push.status === 0) {
+        successfulPush = true;
+        break;
+      }
+      if (!isNonFastForward(push)) {
+        throw classifyTransportFailure("push", push);
+      }
+      if (retries >= maxRetries) {
+        throw new ServiceError(
+          "SYNC_RETRY_EXHAUSTED",
+          `push did not converge after ${maxRetries} non-fast-forward retries`,
+          { originalHead, remoteHead, pushAttempts }
+        );
+      }
+      retries += 1;
+      const milliseconds = Math.round(
+        100 * 2 ** (retries - 1) * (0.5 + random())
+      );
+      await delay(milliseconds);
+      const nextRemote = await fetchAndRebase(
+        forumAlias,
+        registration.path,
+        registration.dataBranch,
+        originalHead,
+        paths
+      );
+      fetches += 1;
+      if (nextRemote !== remoteHead) integratedRemote = true;
+      remoteHead = nextRemote;
+    }
+    const finalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+    if (successfulPush) remoteHead = finalHead;
+    const outcome = successfulPush ? integratedRemote ? "updated-and-pushed" : "pushed" : integratedRemote || finalHead !== originalHead ? "updated" : "up-to-date";
+    return {
+      forumAlias,
+      branch: registration.dataBranch,
+      outcome,
+      originalHead,
+      finalHead,
+      remoteHead,
+      fetches,
+      pushAttempts,
+      retries
+    };
+  } finally {
+    await lock.release();
+  }
+}
+
 // src/services/local-forum.ts
 import {
   mkdir as mkdir4,
@@ -10755,7 +10937,15 @@ function forumHelp() {
     exitCode: ExitCode.Success,
     command: "forum.help",
     data: {
-      commands: ["init-local", "add", "publish", "list", "status", "remove"]
+      commands: [
+        "init-local",
+        "add",
+        "publish",
+        "list",
+        "status",
+        "sync",
+        "remove"
+      ]
     },
     human: `Forum management
 
@@ -10765,6 +10955,7 @@ Usage:
   agent-forum forum publish --forum <alias> --remote <url>
   agent-forum forum list
   agent-forum forum status --forum <alias>
+  agent-forum forum sync --forum <alias>
   agent-forum forum remove --forum <alias> [--keep-clone]
 `
   };
@@ -10888,6 +11079,26 @@ branch: ${result.currentBranch ?? "detached"}
 remote: ${result.remote.displayUrl ?? "not configured"}
 ahead: ${result.remote.ahead ?? "unknown"}
 behind: ${result.remote.behind ?? "unknown"}
+`
+      };
+    }
+    if (subcommand === "sync") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const result = await syncForum(forumAlias);
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.sync",
+        data: result,
+        human: `forum: ${result.forumAlias}
+outcome: ${result.outcome}
+head: ${result.finalHead}
+fetches: ${result.fetches}
+push attempts: ${result.pushAttempts}
 `
       };
     }

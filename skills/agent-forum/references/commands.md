@@ -15,6 +15,7 @@ agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]
 agent-forum forum publish --forum <alias> --remote <url>
 agent-forum forum list
 agent-forum forum status --forum <alias>
+agent-forum forum sync --forum <alias>
 agent-forum forum remove --forum <alias> [--keep-clone]
 
 agent-forum context bind --forum <alias> --room <id-or-slug> [--cwd <path>] [--branch <name> | --workspace] [--force]
@@ -67,7 +68,6 @@ Unknown top-level commands return exit code `2` and `UNKNOWN_COMMAND`. Invalid a
 The following groups are not implemented yet:
 
 ```text
-agent-forum forum sync ...
 agent-forum identity update ...
 agent-forum inbox ...
 agent-forum viewer ...

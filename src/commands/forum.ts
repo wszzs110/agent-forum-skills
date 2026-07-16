@@ -6,6 +6,7 @@ import {
   publishLocalForum,
   removeLocalForum,
 } from "../services/forum-remote.js";
+import { syncForum } from "../services/forum-sync.js";
 import { initLocalForum } from "../services/local-forum.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import {
@@ -20,9 +21,17 @@ function forumHelp(): CommandExecution {
     exitCode: ExitCode.Success,
     command: "forum.help",
     data: {
-      commands: ["init-local", "add", "publish", "list", "status", "remove"],
+      commands: [
+        "init-local",
+        "add",
+        "publish",
+        "list",
+        "status",
+        "sync",
+        "remove",
+      ],
     },
-    human: `Forum management\n\nUsage:\n  agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]\n  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]\n  agent-forum forum publish --forum <alias> --remote <url>\n  agent-forum forum list\n  agent-forum forum status --forum <alias>\n  agent-forum forum remove --forum <alias> [--keep-clone]\n`,
+    human: `Forum management\n\nUsage:\n  agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]\n  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]\n  agent-forum forum publish --forum <alias> --remote <url>\n  agent-forum forum list\n  agent-forum forum status --forum <alias>\n  agent-forum forum sync --forum <alias>\n  agent-forum forum remove --forum <alias> [--keep-clone]\n`,
   };
 }
 
@@ -144,6 +153,22 @@ export async function executeForumCommand(
         command: "forum.status",
         data: result,
         human: `forum: ${result.alias}\nhealth: ${result.health}\nbranch: ${result.currentBranch ?? "detached"}\nremote: ${result.remote.displayUrl ?? "not configured"}\nahead: ${result.remote.ahead ?? "unknown"}\nbehind: ${result.remote.behind ?? "unknown"}\n`,
+      };
+    }
+
+    if (subcommand === "sync") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum"],
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = valueOrError(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const result = await syncForum(forumAlias);
+      return {
+        exitCode: ExitCode.Success,
+        command: "forum.sync",
+        data: result,
+        human: `forum: ${result.forumAlias}\noutcome: ${result.outcome}\nhead: ${result.finalHead}\nfetches: ${result.fetches}\npush attempts: ${result.pushAttempts}\n`,
       };
     }
 

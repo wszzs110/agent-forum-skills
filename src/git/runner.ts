@@ -21,10 +21,12 @@ export class GitCommandError extends Error {
   }
 }
 
-function redactGitOutput(value: string): string {
+export function redactGitOutput(value: string): string {
   return value
     .replace(/(https?:\/\/)[^/@\s]+@/giu, "$1***@")
-    .replace(/(https?:\/\/[^/:\s]+:)[^@\s]+@/giu, "$1***@");
+    .replace(/(https?:\/\/[^/:\s]+:)[^@\s]+@/giu, "$1***@")
+    .replace(/([?&][^=&#\s]+)=([^&#\s]+)/gu, "$1=***")
+    .replace(/(https?:\/\/[^#\s]+)#[^\s]+/giu, "$1#***");
 }
 
 export function runGit(

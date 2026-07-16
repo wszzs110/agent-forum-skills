@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { createLocalIdentity, loadLocalConfig } from "../src/config/local-config.js";
-import { requireGit } from "../src/git/runner.js";
+import { redactGitOutput, requireGit } from "../src/git/runner.js";
 import { validateRemoteUrl } from "../src/git/remote.js";
 import { ServiceError } from "../src/services/errors.js";
 import {
@@ -56,6 +56,12 @@ async function createBareRemote(root: string, name = "forum.git") {
 }
 
 test("remote URL validation rejects embedded HTTP credentials and redacts local paths", () => {
+  assert.equal(
+    redactGitOutput(
+      "fatal: https://user:secret@example.com/repo.git?token=abc&x=y#private",
+    ),
+    "fatal: https://***@example.com/repo.git?token=***&x=***#***",
+  );
   assert.throws(
     () => validateRemoteUrl("https://token@example.com/team/forum.git"),
     (error) =>
