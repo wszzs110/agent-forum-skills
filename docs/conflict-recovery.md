@@ -52,4 +52,4 @@ agent-forum forum conflict close \
 
 close 删除 journal 和 recovery ref。只有确认不再需要恢复原提交时才能执行。
 
-本批不提供 `ours/theirs`。Room slug、并发状态 Event、不可变历史修改等 Git 可合并但协议冲突，将由下一语义冲突批次阻止。
+本批不提供 `ours/theirs`。Git 可合并但协议冲突同样会创建 journal/ref，包括 duplicate Room slug、非法状态重放、并发同字段 Event、损坏 replyTo 和不可变历史修改/删除。

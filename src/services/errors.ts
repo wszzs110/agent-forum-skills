@@ -26,6 +26,8 @@ export class ServiceError extends Error {
       | "CONFLICT_NOT_FOUND"
       | "CONFLICT_JOURNAL_DAMAGED"
       | "CONFLICT_REMOTE_CHANGED"
+      | "SEMANTIC_CONFLICT"
+      | "IMMUTABLE_HISTORY_MODIFIED"
       | "ROOM_NOT_FOUND"
       | "ROOM_SLUG_EXISTS"
       | "ROOM_MEMBERSHIP_REQUIRED"

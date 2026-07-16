@@ -9,6 +9,7 @@ import {
 import { recordSyncConflict } from "./conflicts.js";
 import { ServiceError } from "./errors.js";
 import { openForum } from "./room.js";
+import { validateSynchronizedForum } from "./semantic-validation.js";
 
 export type SyncOutcome =
   | "up-to-date"
@@ -116,6 +117,7 @@ async function fetchAndRebase(
   repository: string,
   branch: string,
   originalHead: string,
+  originalRemoteHead: string | null,
   paths: AgentForumPaths,
 ): Promise<string> {
   const fetch = runGit(repository, ["fetch", "origin", branch]);
@@ -165,6 +167,41 @@ async function fetchAndRebase(
     originalHead,
     paths,
   );
+  const rebasedHead = requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
+  const validation = await validateSynchronizedForum({
+    forumAlias,
+    repository,
+    originalRemoteHead,
+    remoteHead,
+    localHead: rebasedHead,
+    paths,
+  });
+  const issues = validation.immutableIssues.length > 0
+    ? validation.immutableIssues
+    : validation.semanticIssues;
+  if (issues.length > 0) {
+    const journal = await recordSyncConflict({
+      repository,
+      forumId,
+      forumAlias,
+      branch,
+      originalHead,
+      localHead: rebasedHead,
+      remoteHead,
+      conflicts: issues.map((issue) => issue.path ?? issue.targetId ?? issue.code),
+      paths,
+    });
+    runGit(repository, ["reset", "--hard", originalHead]);
+    throw new ServiceError(
+      validation.immutableIssues.length > 0
+        ? "IMMUTABLE_HISTORY_MODIFIED"
+        : "SEMANTIC_CONFLICT",
+      validation.immutableIssues.length > 0
+        ? "sync detected modified or deleted immutable protocol history"
+        : "sync detected a protocol semantic conflict",
+      { operationId: journal.operationId, recoveryRef: journal.recoveryRef, issues },
+    );
+  }
   return remoteHead;
 }
 
@@ -222,6 +259,7 @@ export async function syncForum(
       registration.path,
       registration.dataBranch,
       originalHead,
+      originalRemoteHead,
       paths,
     );
     fetches += 1;
@@ -260,6 +298,7 @@ export async function syncForum(
         registration.path,
         registration.dataBranch,
         originalHead,
+        originalRemoteHead,
         paths,
       );
       fetches += 1;

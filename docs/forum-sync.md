@@ -55,7 +55,7 @@ rebase 出现内容冲突时：
 - 返回 `SYNC_PROTOCOL_FAILED`；
 - 不 push。
 
-完整 immutable diff、Room slug、Event stale state 等语义冲突校验将在下一批加入。
+rebase 后还会检查 immutable history 修改/删除、Room slug 重复、Event 状态重放、首帖/replyTo 结构，以及 remote/local 对同 target 同字段的并发 Event。失败返回 `IMMUTABLE_HISTORY_MODIFIED` 或 `SEMANTIC_CONFLICT`，创建恢复 journal/ref，恢复 original HEAD 并拒绝 push。
 
 ## 失败分类
 

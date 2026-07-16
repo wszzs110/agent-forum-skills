@@ -14,7 +14,7 @@ import { ServiceError } from "../src/services/errors.js";
 import { addRemoteForum, publishLocalForum } from "../src/services/forum-remote.js";
 import { syncForum } from "../src/services/forum-sync.js";
 import { initLocalForum } from "../src/services/local-forum.js";
-import { createRoom, listRooms } from "../src/services/room.js";
+import { createRoom, createRoomEvent, listRooms } from "../src/services/room.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
 const memberId = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
@@ -174,6 +174,132 @@ test("concurrent unique commits converge through non-fast-forward retry", async 
       (await listRooms("source", shared.sourcePaths)).rooms.map((room) => room.slug),
       ["first-room", "second-room"],
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("semantic validation blocks concurrent duplicate Room slugs", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-sync-slug-"));
+  try {
+    const shared = await setupSharedForum(root);
+    const first = await addClone(root, "first", shared.remote);
+    const second = await addClone(root, "second", shared.remote);
+    await createRoom(
+      {
+        forumAlias: "first",
+        slug: "duplicate",
+        title: "First Duplicate",
+        description: "First",
+        roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ae1",
+        now: createdAt,
+      },
+      first.paths,
+    );
+    await createRoom(
+      {
+        forumAlias: "second",
+        slug: "duplicate",
+        title: "Second Duplicate",
+        description: "Second",
+        roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ae2",
+        now: createdAt,
+      },
+      second.paths,
+    );
+    await syncForum("first", first.paths);
+    const originalHead = requireGit(second.forum.path, ["rev-parse", "HEAD"]).stdout.trim();
+    await assert.rejects(
+      syncForum("second", second.paths),
+      (error) =>
+        error instanceof ServiceError && error.code === "SEMANTIC_CONFLICT",
+    );
+    assert.equal(
+      requireGit(second.forum.path, ["rev-parse", "HEAD"]).stdout.trim(),
+      originalHead,
+    );
+    await syncForum("source", shared.sourcePaths);
+    assert.deepEqual(
+      (await listRooms("source", shared.sourcePaths)).rooms.map((room) => room.slug),
+      ["duplicate"],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("semantic validation blocks concurrent field events", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-sync-event-"));
+  try {
+    const shared = await setupSharedForum(root);
+    await createRoom(
+      {
+        forumAlias: "source",
+        slug: "shared-room",
+        title: "Shared Room",
+        description: "Shared",
+        roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ae3",
+        now: createdAt,
+      },
+      shared.sourcePaths,
+    );
+    await syncForum("source", shared.sourcePaths);
+    const first = await addClone(root, "first", shared.remote);
+    const second = await addClone(root, "second", shared.remote);
+    await createRoomEvent(
+      {
+        forumAlias: "first",
+        room: "shared-room",
+        type: "room-renamed",
+        reason: "First rename.",
+        data: { title: "First Name" },
+        now: createdAt,
+      },
+      first.paths,
+    );
+    await createRoomEvent(
+      {
+        forumAlias: "second",
+        room: "shared-room",
+        type: "room-renamed",
+        reason: "Second rename.",
+        data: { title: "Second Name" },
+        now: createdAt,
+      },
+      second.paths,
+    );
+    await syncForum("first", first.paths);
+    await assert.rejects(
+      syncForum("second", second.paths),
+      (error) =>
+        error instanceof ServiceError && error.code === "SEMANTIC_CONFLICT",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("immutable history edits never reach the remote", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-sync-immutable-"));
+  try {
+    const shared = await setupSharedForum(root);
+    const profile = resolve(shared.source.path, ".forum", "forum.json");
+    const original = await readFile(profile, "utf8");
+    await writeFile(profile, original.replace("Shared Forum", "Tampered Forum"), "utf8");
+    requireGit(shared.source.path, ["add", ".forum/forum.json"]);
+    requireGit(shared.source.path, ["commit", "-m", "Tamper immutable forum"]);
+    await assert.rejects(
+      syncForum("source", shared.sourcePaths),
+      (error) =>
+        error instanceof ServiceError &&
+        error.code === "IMMUTABLE_HISTORY_MODIFIED",
+    );
+    const remoteForum = requireGit(shared.source.path, [
+      "show",
+      "origin/forum-data:.forum/forum.json",
+    ]).stdout;
+    assert.equal(remoteForum.includes("Shared Forum"), true);
+    assert.equal(remoteForum.includes("Tampered Forum"), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
