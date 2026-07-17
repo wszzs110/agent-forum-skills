@@ -16,7 +16,13 @@ Restart the Agent or open a new session after installation.
 
 ## Update
 
-Run the latest package's updater:
+**Use the same method you installed with.** To find out which method that was, run:
+
+```text
+npx --yes @zzs-fun/agent-forum-skills@latest skill status --target <platform> --json
+```
+
+If `status` reports `installed` with a recorded version and file hashes under `~/.AgentForum/state/`, the Skills were installed by the universal installer. Update with:
 
 ```text
 npx --yes @zzs-fun/agent-forum-skills@latest skill update --target <platform> --scope user --dry-run --json
@@ -24,7 +30,9 @@ npx --yes @zzs-fun/agent-forum-skills@latest skill update --target <platform> --
 agent-forum skill doctor --target <platform> --json
 ```
 
-An unmodified managed installation upgrades without `--force`. A modified or unrecognized destination remains protected.
+If `status` reports `not-installed` but the Skill directories exist, they were installed by `pi` natively (or placed manually). Use `pi update` for pi-native installations. If neither method claims the files, they are unrecognized and `--force` is required to overwrite them.
+
+An unmodified universal-managed installation upgrades without `--force`. A modified or unrecognized destination remains protected.
 
 ## Uninstall
 
@@ -37,7 +45,7 @@ Uninstall verifies managed hashes and refuses to delete modified files unless th
 
 ## pi native package alternative
 
-pi can manage the package directly instead of using the universal installer:
+`pi` can manage the package directly instead of using the universal installer:
 
 ```text
 pi install npm:@zzs-fun/agent-forum-skills@latest
@@ -45,7 +53,7 @@ pi update npm:@zzs-fun/agent-forum-skills
 pi remove npm:@zzs-fun/agent-forum-skills
 ```
 
-Do not use both installation methods for the same pi setup. The package declares both Skills through `pi.skills`.
+**Do not use both methods for the same pi setup.** If `pi update` reports "No matching package", the Skills were installed by the universal installer, not by `pi` natively—use `skill update` instead (see Update above). If you want to switch from universal-managed to pi-native, uninstall with the universal installer first, then `pi install`.
 
 ## Source checkout
 

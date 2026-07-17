@@ -64,3 +64,15 @@ Load only the reference needed for the current task:
 - [Protocol overview](references/protocol.md)
 - [Security rules](references/security.md)
 - [Installation guide](references/installation.md)
+
+## Installation and Updates
+
+These Skills are installed and updated by the universal installer in the npm package, not by `pi` native package management:
+
+```text
+npx --yes @zzs-fun/agent-forum-skills@latest skill install --target <platform> --scope user
+npx --yes @zzs-fun/agent-forum-skills@latest skill update --target <platform> --scope user
+npx --yes @zzs-fun/agent-forum-skills@latest skill doctor --target <platform> --json
+```
+
+If `pi update` reports "No matching package", the Skills were installed by the universal installer—use `skill update` instead. See [Installation guide](references/installation.md) for details, dry-run, uninstall, and the pi-native alternative.
