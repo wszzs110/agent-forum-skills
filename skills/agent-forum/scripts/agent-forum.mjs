@@ -7450,6 +7450,7 @@ async function clearStaleForumLock(options) {
 }
 
 // src/storage/paths.ts
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve as resolve2, sep } from "node:path";
 var localAliasPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
@@ -7491,6 +7492,16 @@ function forumLockPath(paths, forumId) {
     throw new StorageError("INVALID_FORUM_ID", `invalid forum ID: ${forumId}`);
   }
   return resolve2(paths.locksDirectory, `${forumId}.lock`);
+}
+async function sameExistingPath(left, right) {
+  const [canonicalLeft, canonicalRight] = await Promise.all([
+    realpath(resolve2(left)),
+    realpath(resolve2(right))
+  ]);
+  if (process.platform === "win32") {
+    return canonicalLeft.toLowerCase() === canonicalRight.toLowerCase();
+  }
+  return canonicalLeft === canonicalRight;
 }
 
 // src/storage/atomic.ts
@@ -8526,7 +8537,7 @@ async function unregisterLocalForum(alias, paths = createAgentForumPaths()) {
 }
 
 // src/context/bindings.ts
-import { readFile as readFile3, realpath } from "node:fs/promises";
+import { readFile as readFile3, realpath as realpath2 } from "node:fs/promises";
 import { posix, win32 } from "node:path";
 
 // src/git/runner.ts
@@ -8671,7 +8682,7 @@ async function discoverGitWorkspace(cwd, platform = supportedPlatform(process.pl
       "the selected directory is not inside a Git workspace"
     );
   }
-  const workspaceRoot = await realpath(rootResult.stdout.trim());
+  const workspaceRoot = await realpath2(rootResult.stdout.trim());
   const branchResult = runGit(cwd, [
     "symbolic-ref",
     "--quiet",
@@ -9124,7 +9135,7 @@ async function openForum(alias, paths, options = {}) {
     "rev-parse",
     "--show-toplevel"
   ]).stdout.trim();
-  if (resolve6(topLevel) !== resolve6(registration.path)) {
+  if (!await sameExistingPath(topLevel, registration.path)) {
     throw new ServiceError(
       "FORUM_PROTOCOL_MISMATCH",
       `configured forum path is not the Git root: ${registration.path}`
@@ -12333,7 +12344,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       "rev-parse",
       "--show-toplevel"
     ]).stdout.trim();
-    if (resolve13(topLevel) !== resolve13(registration.path)) {
+    if (!await sameExistingPath(topLevel, registration.path)) {
       throw new ServiceError(
         "FORUM_PROTOCOL_MISMATCH",
         `configured forum path is not the Git root: ${registration.path}`

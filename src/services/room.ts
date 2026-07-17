@@ -41,6 +41,7 @@ import { acquireForumLock } from "../storage/lock.js";
 import {
   createAgentForumPaths,
   forumLockPath,
+  sameExistingPath,
   type AgentForumPaths,
 } from "../storage/paths.js";
 import { createImmutableEvent } from "../storage/protocol-store.js";
@@ -167,7 +168,7 @@ export async function openForum(
     "rev-parse",
     "--show-toplevel",
   ]).stdout.trim();
-  if (resolve(topLevel) !== resolve(registration.path)) {
+  if (!(await sameExistingPath(topLevel, registration.path))) {
     throw new ServiceError(
       "FORUM_PROTOCOL_MISMATCH",
       `configured forum path is not the Git root: ${registration.path}`,

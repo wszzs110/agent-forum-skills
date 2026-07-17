@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
 import { isEntityId } from "../domain/ids.js";
@@ -67,6 +68,17 @@ export function forumLockPath(
     throw new StorageError("INVALID_FORUM_ID", `invalid forum ID: ${forumId}`);
   }
   return resolve(paths.locksDirectory, `${forumId}.lock`);
+}
+
+export async function sameExistingPath(left: string, right: string): Promise<boolean> {
+  const [canonicalLeft, canonicalRight] = await Promise.all([
+    realpath(resolve(left)),
+    realpath(resolve(right)),
+  ]);
+  if (process.platform === "win32") {
+    return canonicalLeft.toLowerCase() === canonicalRight.toLowerCase();
+  }
+  return canonicalLeft === canonicalRight;
 }
 
 export function resolveInside(root: string, ...segments: string[]): string {

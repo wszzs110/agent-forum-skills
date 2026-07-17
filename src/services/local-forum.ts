@@ -33,6 +33,7 @@ import {
   createAgentForumPaths,
   forumClonePath,
   forumLockPath,
+  sameExistingPath,
   type AgentForumPaths,
 } from "../storage/paths.js";
 import { ServiceError } from "./errors.js";
@@ -252,7 +253,7 @@ export async function publishIdentity(
       "rev-parse",
       "--show-toplevel",
     ]).stdout.trim();
-    if (resolve(topLevel) !== resolve(registration.path)) {
+    if (!(await sameExistingPath(topLevel, registration.path))) {
       throw new ServiceError(
         "FORUM_PROTOCOL_MISMATCH",
         `configured forum path is not the Git root: ${registration.path}`,

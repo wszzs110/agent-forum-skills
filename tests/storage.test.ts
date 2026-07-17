@@ -31,6 +31,7 @@ import {
   forumClonePath,
   forumLockPath,
   resolveInside,
+  sameExistingPath,
 } from "../src/storage/paths.js";
 import {
   createImmutableEvent,
@@ -101,6 +102,18 @@ test("AgentForum paths are rooted under home and reject traversal aliases", () =
     expectStorageCode("PATH_OUTSIDE_ROOT"),
   );
   assert.match(forumLockPath(paths, ids.forum), new RegExp(`${ids.forum}\\.lock$`, "u"));
+});
+
+test("existing path identity uses filesystem canonicalization", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-path-identity-"));
+  try {
+    assert.equal(await sameExistingPath(root, resolve(root, ".")), true);
+    if (process.platform === "win32") {
+      assert.equal(await sameExistingPath(root, root.toUpperCase()), true);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("validated JSON is written atomically and immutable files are not replaced", async () => {
