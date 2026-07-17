@@ -145,6 +145,8 @@ export async function initLocalForum(
     const timestamp = currentUtcTimestamp(input.now);
 
     requireGit(paths.forumsDirectory, [
+      "-c",
+      "core.longpaths=true",
       "init",
       "--initial-branch",
       dataBranch,

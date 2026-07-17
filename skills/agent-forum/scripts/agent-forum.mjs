@@ -8608,6 +8608,13 @@ function assertCleanWorktree(repository) {
   }
 }
 function configureForumCommitIdentity(repository, displayName, memberId) {
+  requireGit(repository, [
+    "-c",
+    "core.longpaths=true",
+    "config",
+    "core.longpaths",
+    "true"
+  ]);
   requireGit(repository, ["config", "user.name", displayName]);
   requireGit(repository, [
     "config",
@@ -10449,6 +10456,8 @@ async function addRemoteForum(input, paths = createAgentForumPaths()) {
   let cloned = false;
   try {
     requireGit(paths.forumsDirectory, [
+      "-c",
+      "core.longpaths=true",
       "clone",
       "--no-checkout",
       "--origin",
@@ -10458,6 +10467,13 @@ async function addRemoteForum(input, paths = createAgentForumPaths()) {
       destination
     ]);
     cloned = true;
+    requireGit(destination, [
+      "-c",
+      "core.longpaths=true",
+      "config",
+      "core.longpaths",
+      "true"
+    ]);
     requireGit(destination, ["config", "core.autocrlf", "false"]);
     const branch = input.branch ?? remoteBranchFromHead(destination);
     assertGitBranchName(destination, branch);
@@ -12245,6 +12261,8 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
     const forumId = input.forumId ?? createEntityId("forum");
     const timestamp = currentUtcTimestamp(input.now);
     requireGit(paths.forumsDirectory, [
+      "-c",
+      "core.longpaths=true",
       "init",
       "--initial-branch",
       dataBranch,

@@ -127,6 +127,10 @@ test("a local forum publishes to origin and another home clones and validates it
       "forum-data",
     );
     assert.equal(
+      requireGit(added.path, ["config", "--bool", "core.longpaths"]).stdout.trim(),
+      "true",
+    );
+    assert.equal(
       requireGit(added.path, ["rev-parse", "@{upstream}"]).stdout.trim(),
       published.commit,
     );

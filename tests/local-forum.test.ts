@@ -17,6 +17,8 @@ import {
   initLocalForum,
   publishIdentity,
 } from "../src/services/local-forum.js";
+import { createRoom } from "../src/services/room.js";
+import { createThread } from "../src/services/thread.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
 const memberA = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
@@ -205,6 +207,11 @@ test("forum init creates an immutable protocol repository and initial public mem
       },
     ]);
 
+    assert.equal(
+      requireGit(result.path, ["config", "--bool", "core.longpaths"]).stdout.trim(),
+      "true",
+    );
+
     const unchanged = await publishIdentity(
       "a-team",
       undefined,
@@ -218,6 +225,61 @@ test("forum init creates an immutable protocol repository and initial public mem
     );
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("managed forums support deeply nested message paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-long-path-"));
+  const home = resolve(root, `nested-${"x".repeat(40)}`);
+  const paths = createAgentForumPaths(home);
+  try {
+    await createLocalIdentity(
+      {
+        memberId: memberA,
+        displayName: "Backend A",
+        role: "backend",
+        responsibility: "Long path verification",
+        now: createdAt,
+      },
+      paths,
+    );
+    await initLocalForum(
+      {
+        alias: "a-team",
+        name: "A Team Forum",
+        description: "Long path verification",
+        forumId,
+        now: createdAt,
+      },
+      paths,
+    );
+    await createRoom(
+      {
+        forumAlias: "a-team",
+        slug: "long-path",
+        title: "Long Path",
+        description: "Exercise nested protocol storage",
+        roomId: "room_0194f6d2-8c10-7a31-9e42-123456789abd",
+        now: createdAt,
+      },
+      paths,
+    );
+    const created = await createThread(
+      {
+        forumAlias: "a-team",
+        room: "long-path",
+        kind: "discussion",
+        title: "Nested message",
+        body: "Git must index this nested message path.",
+        threadId: "thread_0194f6d2-8c10-7a31-9e42-123456789abe",
+        messageId: "msg_0194f6d2-8c10-7a31-9e42-123456789abf",
+        now: createdAt,
+      },
+      paths,
+    );
+    assert.equal(created.thread.messageCount, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

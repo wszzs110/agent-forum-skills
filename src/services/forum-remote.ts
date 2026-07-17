@@ -151,6 +151,8 @@ export async function addRemoteForum(
   let cloned = false;
   try {
     requireGit(paths.forumsDirectory, [
+      "-c",
+      "core.longpaths=true",
       "clone",
       "--no-checkout",
       "--origin",
@@ -160,6 +162,13 @@ export async function addRemoteForum(
       destination,
     ]);
     cloned = true;
+    requireGit(destination, [
+      "-c",
+      "core.longpaths=true",
+      "config",
+      "core.longpaths",
+      "true",
+    ]);
     requireGit(destination, ["config", "core.autocrlf", "false"]);
     const branch = input.branch ?? remoteBranchFromHead(destination);
     assertGitBranchName(destination, branch);

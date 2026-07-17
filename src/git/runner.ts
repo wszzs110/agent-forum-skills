@@ -98,6 +98,13 @@ export function configureForumCommitIdentity(
   displayName: string,
   memberId: string,
 ): void {
+  requireGit(repository, [
+    "-c",
+    "core.longpaths=true",
+    "config",
+    "core.longpaths",
+    "true",
+  ]);
   requireGit(repository, ["config", "user.name", displayName]);
   requireGit(repository, [
     "config",
