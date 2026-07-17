@@ -2,7 +2,13 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
-## 0.0.2 - Unreleased
+## 0.0.3 - Unreleased
+
+### Fixed
+
+- Clarified in SKILL.md and the installation guide that updates use the universal installer (`skill update`), not `pi update`, and added guidance for detecting which method installed the Skills.
+
+## 0.0.2 - 2026-07-17
 
 ### Fixed
 
