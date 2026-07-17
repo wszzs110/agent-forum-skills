@@ -46,7 +46,13 @@ export interface InstallOptions {
 }
 
 export interface InstallResult {
-  action: "installed" | "unchanged" | "would-install" | "would-replace";
+  action:
+    | "installed"
+    | "updated"
+    | "unchanged"
+    | "would-install"
+    | "would-update"
+    | "would-replace";
   target: SkillTarget;
   destination: string;
   destinations: string[];
@@ -289,25 +295,43 @@ export async function installSkill(
     { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
     { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) },
   ];
+  const state = await loadState(homeDirectory);
   const inspected = await Promise.all(payloads.map(async (payload) => {
     const files = await collectFiles(payload.source);
     const exists = await pathExists(payload.destination);
     const current = exists ? await collectFiles(payload.destination, payload.destination, true) : undefined;
-    return { ...payload, files, exists, unchanged: current ? sameFiles(files, current) : false };
+    const record = state.installations.find((candidate) => candidate.path === payload.destination);
+    return {
+      ...payload,
+      files,
+      exists,
+      unchanged: current ? sameFiles(files, current) : false,
+      managedUnmodified: Boolean(record && current && sameFiles(current, record.files)),
+    };
   }));
-  const conflict = inspected.find((item) => item.exists && !item.unchanged);
+  const conflict = inspected.find(
+    (item) => item.exists && !item.unchanged && !item.managedUnmodified,
+  );
   if (conflict && !options.force) {
-    throw new SkillInstallationError("INSTALLATION_CONFLICT", `destination exists with different files: ${conflict.destination}`);
+    throw new SkillInstallationError("INSTALLATION_CONFLICT", `destination exists with unrecognized or modified files: ${conflict.destination}`);
   }
   const destinations = inspected.map((item) => item.destination);
   const files = inspected.reduce((total, item) => total + Object.keys(item.files).length, 0);
+  const hasManagedUpdate = inspected.some(
+    (item) => item.exists && !item.unchanged && item.managedUnmodified,
+  );
   if (options.dryRun) {
     const changed = inspected.some((item) => !item.unchanged);
-    const action = !changed ? "unchanged" : inspected.some((item) => item.exists && !item.unchanged) ? "would-replace" : "would-install";
+    const action = !changed
+      ? "unchanged"
+      : conflict
+        ? "would-replace"
+        : hasManagedUpdate
+          ? "would-update"
+          : "would-install";
     return { action, target: options.target, destination: destinations[0]!, destinations, version: VERSION, files, requiresReload: true };
   }
   for (const item of inspected) if (!item.unchanged) await replaceDirectory(item.source, item.destination);
-  const state = await loadState(homeDirectory);
   const now = options.now ?? new Date().toISOString();
   let installations = [...state.installations];
   for (const item of inspected) {
@@ -323,7 +347,12 @@ export async function installSkill(
     installations = existing ? installations.map((candidate) => candidate.path === item.destination ? record : candidate) : [...installations, record];
   }
   await saveState(homeDirectory, { formatVersion: 1, installations });
-  return { action: inspected.every((item) => item.unchanged) ? "unchanged" : "installed", target: options.target, destination: destinations[0]!, destinations, version: VERSION, files, requiresReload: true };
+  const action = inspected.every((item) => item.unchanged)
+    ? "unchanged"
+    : hasManagedUpdate
+      ? "updated"
+      : "installed";
+  return { action, target: options.target, destination: destinations[0]!, destinations, version: VERSION, files, requiresReload: true };
 }
 
 export async function getSkillStatus(

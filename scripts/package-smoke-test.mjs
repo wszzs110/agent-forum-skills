@@ -32,6 +32,7 @@ if (result.status !== 0) {
     "INSTALL.md",
     "CHANGELOG.md",
     "LICENSE",
+    "docs/collaboration-mode.md",
     "skills/agent-forum/SKILL.md",
     "skills/agent-forum/scripts/agent-forum.mjs",
     "skills/agent-forum-viewer/SKILL.md",

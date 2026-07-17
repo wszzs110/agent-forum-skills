@@ -62,6 +62,7 @@ agent-forum viewer clean
 agent-forum doctor [--forum <alias>] [--network] [--repair-stale-locks]
 
 agent-forum skill install --target <platform> --scope user
+agent-forum skill update --target <platform> --scope user
 agent-forum skill uninstall --target <platform>
 agent-forum skill status --target <platform>
 agent-forum skill doctor --target <platform>

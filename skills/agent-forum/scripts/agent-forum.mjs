@@ -13721,25 +13721,37 @@ async function installSkill(options) {
     { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
     { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) }
   ];
+  const state = await loadState(homeDirectory);
   const inspected = await Promise.all(payloads.map(async (payload) => {
     const files2 = await collectFiles(payload.source);
     const exists2 = await pathExists4(payload.destination);
     const current = exists2 ? await collectFiles(payload.destination, payload.destination, true) : void 0;
-    return { ...payload, files: files2, exists: exists2, unchanged: current ? sameFiles(files2, current) : false };
+    const record = state.installations.find((candidate) => candidate.path === payload.destination);
+    return {
+      ...payload,
+      files: files2,
+      exists: exists2,
+      unchanged: current ? sameFiles(files2, current) : false,
+      managedUnmodified: Boolean(record && current && sameFiles(current, record.files))
+    };
   }));
-  const conflict = inspected.find((item) => item.exists && !item.unchanged);
+  const conflict = inspected.find(
+    (item) => item.exists && !item.unchanged && !item.managedUnmodified
+  );
   if (conflict && !options.force) {
-    throw new SkillInstallationError("INSTALLATION_CONFLICT", `destination exists with different files: ${conflict.destination}`);
+    throw new SkillInstallationError("INSTALLATION_CONFLICT", `destination exists with unrecognized or modified files: ${conflict.destination}`);
   }
   const destinations = inspected.map((item) => item.destination);
   const files = inspected.reduce((total, item) => total + Object.keys(item.files).length, 0);
+  const hasManagedUpdate = inspected.some(
+    (item) => item.exists && !item.unchanged && item.managedUnmodified
+  );
   if (options.dryRun) {
     const changed = inspected.some((item) => !item.unchanged);
-    const action = !changed ? "unchanged" : inspected.some((item) => item.exists && !item.unchanged) ? "would-replace" : "would-install";
-    return { action, target: options.target, destination: destinations[0], destinations, version: VERSION, files, requiresReload: true };
+    const action2 = !changed ? "unchanged" : conflict ? "would-replace" : hasManagedUpdate ? "would-update" : "would-install";
+    return { action: action2, target: options.target, destination: destinations[0], destinations, version: VERSION, files, requiresReload: true };
   }
   for (const item of inspected) if (!item.unchanged) await replaceDirectory(item.source, item.destination);
-  const state = await loadState(homeDirectory);
   const now = options.now ?? (/* @__PURE__ */ new Date()).toISOString();
   let installations = [...state.installations];
   for (const item of inspected) {
@@ -13755,7 +13767,8 @@ async function installSkill(options) {
     installations = existing ? installations.map((candidate) => candidate.path === item.destination ? record : candidate) : [...installations, record];
   }
   await saveState(homeDirectory, { formatVersion: 1, installations });
-  return { action: inspected.every((item) => item.unchanged) ? "unchanged" : "installed", target: options.target, destination: destinations[0], destinations, version: VERSION, files, requiresReload: true };
+  const action = inspected.every((item) => item.unchanged) ? "unchanged" : hasManagedUpdate ? "updated" : "installed";
+  return { action, target: options.target, destination: destinations[0], destinations, version: VERSION, files, requiresReload: true };
 }
 async function getSkillStatus(target, homeDirectory = homedir2()) {
   const destination = skillDestination(target, homeDirectory);
@@ -13886,12 +13899,12 @@ async function executeSkillCommand(args) {
       exitCode: ExitCode.Success,
       command: "skill.help",
       data: {
-        usage: "agent-forum skill <install|uninstall|status|doctor> --target <platform> [--scope user] [--dry-run] [--force]"
+        usage: "agent-forum skill <install|update|uninstall|status|doctor> --target <platform> [--scope user] [--dry-run] [--force]"
       },
       human: `Skill management
 
 Usage:
-  agent-forum skill <install|uninstall|status|doctor> --target <platform> [options]
+  agent-forum skill <install|update|uninstall|status|doctor> --target <platform> [options]
 
 Targets:
   pi, opencode, codex, claude-code
@@ -13903,17 +13916,17 @@ Options:
 `
     };
   }
-  if (!["install", "uninstall", "status", "doctor"].includes(subcommand)) {
+  if (!["install", "update", "uninstall", "status", "doctor"].includes(subcommand)) {
     return usageError(`unknown skill subcommand: ${subcommand}`);
   }
   const options = parseOptions(args.slice(1));
   if ("exitCode" in options) return options;
   try {
-    if (subcommand === "install") {
+    if (subcommand === "install" || subcommand === "update") {
       const result2 = await installSkill(options);
       return {
         exitCode: ExitCode.Success,
-        command: "skill.install",
+        command: `skill.${subcommand}`,
         data: result2,
         human: `${result2.action}: ${result2.destination}
 Reload the agent to discover the skill.

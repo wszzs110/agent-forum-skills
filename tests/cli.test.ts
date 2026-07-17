@@ -44,7 +44,7 @@ test("skill help exposes the self-management interface", async () => {
   assert.equal(exitCode, 0);
   assert.equal(result.ok, true);
   assert.equal(result.command, "skill.help");
-  assert.match(result.data.usage, /install\|uninstall\|status\|doctor/u);
+  assert.match(result.data.usage, /install\|update\|uninstall\|status\|doctor/u);
 });
 
 test("viewer help exposes the short-lived read-only workflow", async () => {

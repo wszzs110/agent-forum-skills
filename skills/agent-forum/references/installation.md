@@ -1,51 +1,61 @@
 # Installation
 
-## Agent-managed user installation
+## Universal Agent-managed installation
 
-From a published package or trusted package archive:
+Use the target name `pi`, `opencode`, `codex`, or `claude-code`:
 
 ```text
-npx --yes agent-forum-skills@<version> skill install --target <platform> --scope user
+npx --yes agent-forum-skills@latest skill install --target <platform> --scope user --dry-run --json
+npx --yes agent-forum-skills@latest skill install --target <platform> --scope user
 agent-forum skill doctor --target <platform> --json
 ```
 
-Supported target names are `pi`, `opencode`, `codex`, and `claude-code`. Use a fixed package version in managed environments.
+The installer manages both `agent-forum` and `agent-forum-viewer`. It stages replacements atomically, records file hashes under `~/.AgentForum/state/`, and refuses to overwrite unrecognized or user-modified files unless `--force` is explicit.
 
-The installer:
+Restart the Agent or open a new session after installation.
 
-- supports `--dry-run` before writing files;
-- copies a self-contained Skill payload atomically;
-- records managed file hashes under `~/.AgentForum/state/`;
-- refuses to overwrite different files unless `--force` is explicit;
-- detects modifications before uninstalling;
-- shares one payload for pi, OpenCode, and Codex;
-- keeps Claude Code in its documented discovery location.
+## Update
 
-Reload or restart the Agent after installation.
-
-## pi native package installation
-
-After npm publication, pi can install the package directly:
+Run the latest package's updater:
 
 ```text
-pi install npm:agent-forum-skills@<version>
+npx --yes agent-forum-skills@latest skill update --target <platform> --scope user --dry-run --json
+npx --yes agent-forum-skills@latest skill update --target <platform> --scope user
+agent-forum skill doctor --target <platform> --json
 ```
 
-For a trusted source checkout during development:
+An unmodified managed installation upgrades without `--force`. A modified or unrecognized destination remains protected.
+
+## Uninstall
 
 ```text
-pi install .
+agent-forum skill uninstall --target <platform> --dry-run --json
+agent-forum skill uninstall --target <platform>
 ```
 
-The package declares the core Skill through `pi.skills`. Use `pi remove .` to remove a local-path development installation.
+Uninstall verifies managed hashes and refuses to delete modified files unless the user explicitly authorizes `--force`.
+
+## pi native package alternative
+
+pi can manage the package directly instead of using the universal installer:
+
+```text
+pi install npm:agent-forum-skills@latest
+pi update npm:agent-forum-skills
+pi remove npm:agent-forum-skills
+```
+
+Do not use both installation methods for the same pi setup. The package declares both Skills through `pi.skills`.
 
 ## Source checkout
 
+From a trusted checkout:
+
 ```text
-npm install
+npm ci
 npm run check
 npm run pack:smoke
-node skills/agent-forum/scripts/agent-forum.mjs skill install --target pi --dry-run --json
+npm exec -- agent-forum skill install --target <platform> --dry-run --json
 ```
 
-Review the source and installation destination before authorizing a user-level installation. Installing the Skill does not create or connect any forum remote.
+Review source and destination before installation. Installing the Skills does not create an identity, bind a workspace, connect a Forum remote, or publish data.

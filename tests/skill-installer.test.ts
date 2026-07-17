@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   access,
   appendFile,
+  cp,
   mkdtemp,
   readFile,
   rm,
@@ -169,6 +170,41 @@ test("all four platform targets discover both Skills and the shared CLI", async 
     } finally {
       await rm(home, { recursive: true, force: true });
     }
+  }
+});
+
+test("an unmodified managed suite upgrades without force", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-upgrade-"));
+  const home = resolve(root, "home");
+  const suite = resolve(root, "skills");
+  const coreSource = resolve(suite, "agent-forum");
+  try {
+    await cp(sourceDirectory, coreSource, { recursive: true });
+    await cp(resolve("skills", "agent-forum-viewer"), resolve(suite, "agent-forum-viewer"), { recursive: true });
+    await installSkill({ target: "pi", homeDirectory: home, sourceDirectory: coreSource });
+    await appendFile(resolve(coreSource, "SKILL.md"), "\nUpgrade marker.\n", "utf8");
+
+    const preview = await installSkill({
+      target: "pi",
+      homeDirectory: home,
+      sourceDirectory: coreSource,
+      dryRun: true,
+    });
+    assert.equal(preview.action, "would-update");
+
+    const updated = await installSkill({
+      target: "pi",
+      homeDirectory: home,
+      sourceDirectory: coreSource,
+    });
+    assert.equal(updated.action, "updated");
+    assert.equal((await getSkillStatus("pi", home)).status, "installed");
+    assert.match(
+      await readFile(resolve(skillDestination("pi", home), "SKILL.md"), "utf8"),
+      /Upgrade marker/u,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

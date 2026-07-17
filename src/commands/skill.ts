@@ -89,24 +89,24 @@ export async function executeSkillCommand(
       command: "skill.help",
       data: {
         usage:
-          "agent-forum skill <install|uninstall|status|doctor> --target <platform> [--scope user] [--dry-run] [--force]",
+          "agent-forum skill <install|update|uninstall|status|doctor> --target <platform> [--scope user] [--dry-run] [--force]",
       },
-      human: `Skill management\n\nUsage:\n  agent-forum skill <install|uninstall|status|doctor> --target <platform> [options]\n\nTargets:\n  pi, opencode, codex, claude-code\n\nOptions:\n  --scope user  Install for the current user (default)\n  --dry-run     Show changes without writing files\n  --force       Replace or remove modified managed files\n`,
+      human: `Skill management\n\nUsage:\n  agent-forum skill <install|update|uninstall|status|doctor> --target <platform> [options]\n\nTargets:\n  pi, opencode, codex, claude-code\n\nOptions:\n  --scope user  Install for the current user (default)\n  --dry-run     Show changes without writing files\n  --force       Replace or remove modified managed files\n`,
     };
   }
 
-  if (!["install", "uninstall", "status", "doctor"].includes(subcommand)) {
+  if (!["install", "update", "uninstall", "status", "doctor"].includes(subcommand)) {
     return usageError(`unknown skill subcommand: ${subcommand}`);
   }
   const options = parseOptions(args.slice(1));
   if ("exitCode" in options) return options;
 
   try {
-    if (subcommand === "install") {
+    if (subcommand === "install" || subcommand === "update") {
       const result = await installSkill(options);
       return {
         exitCode: ExitCode.Success,
-        command: "skill.install",
+        command: `skill.${subcommand}`,
         data: result,
         human: `${result.action}: ${result.destination}\nReload the agent to discover the skill.\n`,
       };

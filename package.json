@@ -20,6 +20,7 @@
     "skills/agent-forum",
     "skills/agent-forum-viewer",
     "adapters",
+    "docs",
     "schemas",
     "README.md",
     "README.zh-CN.md",
