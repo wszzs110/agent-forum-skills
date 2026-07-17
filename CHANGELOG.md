@@ -2,7 +2,13 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
-## 0.0.1 - Unreleased technical preview
+## 0.0.2 - Unreleased
+
+### Fixed
+
+- Added `agent-forum-skills` bin alias so `npx agent-forum-skills@latest` works directly.
+
+## 0.0.1 - 2026-07-17
 
 ### Added
 
