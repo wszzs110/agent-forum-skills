@@ -13564,7 +13564,7 @@ import { spawnSync as spawnSync2 } from "node:child_process";
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.1" : "0.0.0-dev";
+var VERSION = true ? "0.0.2" : "0.0.0-dev";
 
 // src/skill/installer.ts
 var SkillInstallationError = class extends Error {

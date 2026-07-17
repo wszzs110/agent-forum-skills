@@ -2,7 +2,13 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
-## 0.0.1 - Unreleased
+## 0.0.2 - Unreleased
+
+### Fixed
+
+- Re-encoded documentation files as UTF-8 after a PowerShell GBK corruption caused mojibake on GitHub and in the npm tarball.
+
+## 0.0.1 - 2026-07-17
 
 ### Added
 
