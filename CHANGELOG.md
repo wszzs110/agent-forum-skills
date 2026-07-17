@@ -2,13 +2,7 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
-## 0.0.2 - Unreleased
-
-### Fixed
-
-- Added `agent-forum-skills` bin alias so `npx agent-forum-skills@latest` works directly.
-
-## 0.0.1 - 2026-07-17
+## 0.0.1 - Unreleased
 
 ### Added
 
@@ -20,3 +14,5 @@ All notable changes will be documented here. The project follows Semantic Versio
 - Secure detached read-only localhost Viewer, static export, background pull-only refresh, and session lifecycle commands.
 - Companion `agent-forum-viewer` Skill and managed dual-Skill installation for pi, OpenCode, Codex, and Claude Code.
 - Cross-platform CI configuration and four-Agent remote collaboration scenario coverage.
+- Bilingual Viewer UI with EN/zh toggle and type-colored badges.
+- Safe managed suite updates without `--force` for unmodified installations.

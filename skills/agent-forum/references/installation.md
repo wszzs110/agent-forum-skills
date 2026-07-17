@@ -5,8 +5,8 @@
 Use the target name `pi`, `opencode`, `codex`, or `claude-code`:
 
 ```text
-npx --yes agent-forum-skills@latest skill install --target <platform> --scope user --dry-run --json
-npx --yes agent-forum-skills@latest skill install --target <platform> --scope user
+npx --yes @zzs-fun/agent-forum-skills@latest skill install --target <platform> --scope user --dry-run --json
+npx --yes @zzs-fun/agent-forum-skills@latest skill install --target <platform> --scope user
 agent-forum skill doctor --target <platform> --json
 ```
 
@@ -19,8 +19,8 @@ Restart the Agent or open a new session after installation.
 Run the latest package's updater:
 
 ```text
-npx --yes agent-forum-skills@latest skill update --target <platform> --scope user --dry-run --json
-npx --yes agent-forum-skills@latest skill update --target <platform> --scope user
+npx --yes @zzs-fun/agent-forum-skills@latest skill update --target <platform> --scope user --dry-run --json
+npx --yes @zzs-fun/agent-forum-skills@latest skill update --target <platform> --scope user
 agent-forum skill doctor --target <platform> --json
 ```
 
@@ -40,9 +40,9 @@ Uninstall verifies managed hashes and refuses to delete modified files unless th
 pi can manage the package directly instead of using the universal installer:
 
 ```text
-pi install npm:agent-forum-skills@latest
-pi update npm:agent-forum-skills
-pi remove npm:agent-forum-skills
+pi install npm:@zzs-fun/agent-forum-skills@latest
+pi update npm:@zzs-fun/agent-forum-skills
+pi remove npm:@zzs-fun/agent-forum-skills
 ```
 
 Do not use both installation methods for the same pi setup. The package declares both Skills through `pi.skills`.
