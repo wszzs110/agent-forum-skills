@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderViewerHtml, startViewerServer } from "../src/viewer/server.js";
+import { buildReplyTree, renderViewerHtml, startViewerServer } from "../src/viewer/server.js";
 import type { ForumSnapshot } from "../src/services/timeline-cache.js";
 
 function snapshot(): ForumSnapshot {
@@ -131,10 +131,47 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.match(html, /class="outline-item"/);
   assert.match(html, /id="search"/);
   assert.match(html, /data-placeholder-en="Search threads…"/);
+  assert.equal(html.includes(".lang-zh{display:none}"), false, "language switching must not leave Chinese content hidden by CSS");
 
   const script = /<script nonce="agent-forum">([\s\S]*?)<\/script>/.exec(html)?.[1];
   assert.ok(script, "Viewer should include its client-side controls script");
   assert.doesNotThrow(() => new Function(script));
+});
+
+test("Viewer derives a safe reply forest without losing malformed branches", () => {
+  const input = snapshot();
+  const opening = input.rooms[0]!.threads[0]!.timeline[0]!;
+  if (opening.kind !== "message") throw new Error("fixture must start with a message");
+  const reply = { ...opening, id: "msg_reply", replyTo: opening.id, createdAt: "2026-07-12T10:01:00.000Z" };
+  const nestedReply = { ...opening, id: "msg_nested", replyTo: reply.id, createdAt: "2026-07-12T10:02:00.000Z" };
+  const orphan = { ...opening, id: "msg_orphan", replyTo: "msg_missing", createdAt: "2026-07-12T10:03:00.000Z" };
+  const cycleA = { ...opening, id: "msg_cycle_a", replyTo: "msg_cycle_b", createdAt: "2026-07-12T10:04:00.000Z" };
+  const cycleB = { ...opening, id: "msg_cycle_b", replyTo: cycleA.id, createdAt: "2026-07-12T10:05:00.000Z" };
+  const tree = buildReplyTree([opening, reply, nestedReply, orphan, cycleA, cycleB]);
+
+  assert.deepEqual(tree.children.get(opening.id), [reply.id]);
+  assert.deepEqual(tree.children.get(reply.id), [nestedReply.id]);
+  assert.equal(tree.issues.get(orphan.id), "missing-parent");
+  assert.equal(tree.issues.get(cycleA.id), "cycle");
+  assert.equal(tree.issues.get(cycleB.id), "cycle");
+  assert.equal(tree.roots.includes(orphan.id), true);
+  assert.equal(tree.roots.includes(cycleA.id), true);
+  assert.equal(tree.roots.includes(cycleB.id), true);
+});
+
+test("Viewer exposes status markers and a timeline/tree switch", () => {
+  const input = snapshot();
+  const room = input.rooms[0]!;
+  room.threads[0]!.thread.status = "closed";
+  const html = renderViewerHtml(input, room);
+
+  assert.match(html, /id="view-timeline"/);
+  assert.match(html, /id="view-tree"/);
+  assert.match(html, /class="status-badge thread-status status-closed"/);
+  assert.match(html, /class="outline-status status-closed"/);
+  assert.match(html, /data-reply-to=""/);
+  assert.match(html, /function renderTree\(thread\)/);
+  assert.match(html, /Lifecycle events are shown separately/);
 });
 
 test("Viewer preserves dense multi-member reply networks in the outline and timeline", () => {

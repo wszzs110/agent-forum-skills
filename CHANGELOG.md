@@ -2,6 +2,22 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.5 - Unreleased
+
+### Added
+
+- Viewer `Timeline / Tree` mode switch. Tree mode renders complete per-Thread Message reply forests while keeping lifecycle Events in a separate activity area.
+- Clear Thread open/closed badges, sidebar status dots and message counts, plus an archived Room read-only notice.
+- Safe Viewer reply-forest handling for missing parents and cyclic historical reply relationships.
+
+### Changed
+
+- Opening a Viewer for the same local Forum and Room now replaces the previous Viewer session under a per-target local lock.
+
+### Fixed
+
+- Chinese Viewer controls and notices no longer render as empty status bars after language switching.
+
 ## 0.0.4 - 2026-07-18
 
 ### Added

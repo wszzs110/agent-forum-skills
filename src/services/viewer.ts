@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { writeJsonAtomic } from "../storage/atomic.js";
+import { acquireForumLock } from "../storage/lock.js";
 import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js";
 import { resolveContext } from "./context.js";
 import { refreshForumFromRemote } from "./forum-sync.js";
@@ -78,21 +79,51 @@ export async function cleanViewerSessions(paths = createAgentForumPaths()): Prom
   return { removed };
 }
 
-export async function closeViewerSession(sessionId: string | undefined, paths = createAgentForumPaths()): Promise<{ closed: string[] }> {
-  const sessions = await listViewerSessions(paths);
-  const selected = sessionId ? sessions.filter((session) => session.sessionId === sessionId) : sessions;
-  if (sessionId && selected.length === 0) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", `Viewer session not found: ${sessionId}`);
+async function stopViewerSessions(
+  sessions: ViewerSession[],
+  paths: AgentForumPaths,
+  options: { strict?: boolean } = {},
+): Promise<string[]> {
   const closed: string[] = [];
-  for (const session of selected) {
+  for (const session of sessions) {
     try {
-      await fetch(`${session.url}close`, { method: "POST", signal: AbortSignal.timeout(2_000) });
+      const response = await fetch(`${session.url}close`, {
+        method: "POST",
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (!response.ok) throw new Error(`Viewer close returned HTTP ${response.status}`);
       closed.push(session.sessionId);
-    } catch {
+    } catch (error) {
+      if (options.strict) {
+        throw new ServiceError(
+          "VIEWER_START_FAILED",
+          `existing Viewer session could not be closed: ${session.sessionId}`,
+          error instanceof Error ? { cause: error.message } : undefined,
+        );
+      }
       // 失效 session 随后作为 stale state 清理。
     }
     await rm(sessionPath(paths, session.sessionId), { force: true });
   }
-  return { closed };
+  return closed;
+}
+
+export async function closeViewerSession(sessionId: string | undefined, paths = createAgentForumPaths()): Promise<{ closed: string[] }> {
+  const sessions = await listViewerSessions(paths);
+  const selected = sessionId ? sessions.filter((session) => session.sessionId === sessionId) : sessions;
+  if (sessionId && selected.length === 0) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", `Viewer session not found: ${sessionId}`);
+  return { closed: await stopViewerSessions(selected, paths) };
+}
+
+async function replaceViewerSessions(
+  forumAlias: string,
+  roomId: string,
+  paths: AgentForumPaths,
+): Promise<string[]> {
+  const existing = (await listViewerSessions(paths)).filter(
+    (session) => session.forumAlias === forumAlias && session.roomId === roomId,
+  );
+  return stopViewerSessions(existing, paths, { strict: true });
 }
 
 async function openBrowser(url: string): Promise<boolean> {
@@ -149,35 +180,44 @@ export async function openViewer(input: {
   openBrowser?: boolean;
   idleMs?: number;
   entryPath?: string;
-}, paths = createAgentForumPaths()): Promise<ViewerSession & { browserOpened: boolean }> {
+}, paths = createAgentForumPaths()): Promise<ViewerSession & { browserOpened: boolean; replacedSessionIds: string[] }> {
   const context = await resolveContext({
     ...(input.cwd ? { cwd: input.cwd } : {}),
     ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}),
     ...(input.room ? { room: input.room } : {}),
   }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
-  const sessionId = randomUUID();
-  const token = randomBytes(16).toString("hex");
   const entryPath = input.entryPath ?? process.argv[1];
   if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
-  const args = [entryPath, "viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root)];
-  if (input.sync === false) args.push("--no-sync");
-  const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
-  let startError: Error | undefined;
-  child.once("error", (error) => { startError = error; });
-  child.unref();
-  const path = sessionPath(paths, sessionId);
-  const deadline = Date.now() + 10_000;
-  let session: ViewerSession | undefined;
-  while (Date.now() < deadline) {
-    session = await readSession(path);
-    if (session) break;
-    if (!(await isProcessAlive(child.pid ?? -1))) break;
-    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  const lock = await acquireForumLock({
+    lockPath: resolve(paths.locksDirectory, `${context.forumId}-${context.roomId}-viewer.lock`),
+    command: "viewer open",
+  });
+  try {
+    const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
+    const sessionId = randomUUID();
+    const token = randomBytes(16).toString("hex");
+    const args = [entryPath, "viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root)];
+    if (input.sync === false) args.push("--no-sync");
+    const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
+    let startError: Error | undefined;
+    child.once("error", (error) => { startError = error; });
+    child.unref();
+    const path = sessionPath(paths, sessionId);
+    const deadline = Date.now() + 10_000;
+    let session: ViewerSession | undefined;
+    while (Date.now() < deadline) {
+      session = await readSession(path);
+      if (session) break;
+      if (!(await isProcessAlive(child.pid ?? -1))) break;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    }
+    if (!session) throw new ServiceError("VIEWER_START_FAILED", startError?.message ?? "Viewer did not become ready within 10 seconds");
+    const browserOpened = input.openBrowser === false ? false : await openBrowser(session.url);
+    return { ...session, browserOpened, replacedSessionIds };
+  } finally {
+    await lock.release();
   }
-  if (!session) throw new ServiceError("VIEWER_START_FAILED", startError?.message ?? "Viewer did not become ready within 10 seconds");
-  const browserOpened = input.openBrowser === false ? false : await openBrowser(session.url);
-  return { ...session, browserOpened };
 }
 
 export async function generateViewerHtml(input: { forumAlias?: string; room?: string; cwd?: string; output?: string }, paths = createAgentForumPaths()): Promise<{ output: string }> {

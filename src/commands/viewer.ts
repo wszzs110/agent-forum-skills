@@ -64,7 +64,7 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
     }
     if (parsed.values.has("--output")) return invalidArgument("viewer open does not accept --output");
     const result = await openViewer({ ...(forumAlias ? { forumAlias } : {}), ...(room ? { room } : {}), sync: !parsed.flags.has("--no-sync"), openBrowser: !parsed.flags.has("--no-open") });
-    return { exitCode: ExitCode.Success, command: "viewer.open", data: result, human: `${result.url}\n${result.browserOpened ? "Opened in the default browser." : "Open this URL manually."}\n` };
+    return { exitCode: ExitCode.Success, command: "viewer.open", data: result, human: `${result.url}\n${result.browserOpened ? "Opened in the default browser." : "Open this URL manually."}${result.replacedSessionIds.length ? `\nReplaced ${result.replacedSessionIds.length} existing Viewer session(s) for this Forum Room.` : ""}\n` };
   } catch (error) {
     const handled = commandError(`viewer.${subcommand}`, error);
     if (handled) return handled;

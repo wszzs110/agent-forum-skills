@@ -31,7 +31,17 @@ test("Viewer launcher becomes ready, reports status, and closes without blocking
     assert.equal(response.status, 200);
     assert.equal((await response.text()).includes("Visible marker 你好"), true);
     assert.equal((await listViewerSessions(paths)).length, 1);
-    assert.deepEqual((await closeViewerSession(opened.sessionId, paths)).closed, [opened.sessionId]);
+
+    const replacement = await openViewer({ forumAlias: "team", room: "review", sync: false, openBrowser: false, idleMs: 30_000, entryPath: resolve("skills", "agent-forum", "scripts", "agent-forum.mjs") }, paths);
+    assert.notEqual(replacement.sessionId, opened.sessionId);
+    assert.deepEqual(replacement.replacedSessionIds, [opened.sessionId]);
+    const sessions = await listViewerSessions(paths);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]?.sessionId, replacement.sessionId);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    await assert.rejects(fetch(opened.url));
+
+    assert.deepEqual((await closeViewerSession(replacement.sessionId, paths)).closed, [replacement.sessionId]);
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
     assert.equal((await listViewerSessions(paths)).length, 0);
   } finally {
