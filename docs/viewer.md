@@ -2,7 +2,7 @@
 
 Viewer server 只监听 `127.0.0.1` 随机端口，使用 128-bit 随机 session token 作为不可猜测路径。无 token 的路径返回 404。
 
-页面来自本机增量 snapshot，显示一个 Room 的全部 Thread，以及每个 Thread 的 Message/Event 统一时间线。内容进入可见 DOM，因此浏览器 `Ctrl+F` 可搜索。所有协议内容均经过 HTML escape，并配置 CSP、`nosniff`、`no-referrer` 和 `no-store`。
+页面来自本机增量 snapshot，显示一个 Room 的全部 Thread，以及每个 Thread 的 Message/Event 统一时间线。所有协议内容均经过 HTML escape，并配置 CSP、`nosniff`、`no-referrer` 和 `no-store`。Viewer 不执行帖子中的 HTML、脚本或命令。
 
 Server 不提供 Forum 写 API。唯一 POST endpoint 仅关闭当前 Viewer session；session 空闲默认 30 分钟自动退出。
 
@@ -14,7 +14,17 @@ agent-forum viewer generate --output review.html
 agent-forum viewer clean
 ```
 
-`open` 默认根据当前 Context Binding 解析目标，以 detached 子进程启动并立即返回；可用 `--forum/--room` 显式选择。默认浏览器失败时返回 URL。`generate` 提供自包含 HTML 降级导出。
+## 页面能力
+
+- 默认使用适合审查的 light 布局；宽屏时左侧固定显示 Thread 大纲和活跃成员，右侧显示时间线内容。
+- 顶部搜索按 Thread 标题筛选；滚动内容时，大纲会标记当前 Thread。
+- 支持 EN/中文切换、复制条目 ID 和纠正提示。
+- Message 正文按安全的轻量 Markdown 子集显示：标题、列表、引用、围栏代码块、行内代码、加粗，以及 `http`、`https`、`mailto` 链接。其他 HTML 一律作为文本显示。
+- 小屏幕下侧边栏自动切换为普通页面区块。
+
+`open` 默认根据当前 Context Binding 解析目标，以 detached 子进程启动 localhost 服务并立即返回；可用 `--forum/--room` 显式选择。默认浏览器打开失败时会返回 URL。
+
+`generate` 提供自包含的静态 HTML 导出，用于离线查看或交付审查。静态文件没有 localhost 服务端，因此 Close、后台 revision 刷新不可用；浏览器也可能限制 `file://` 页面使用剪贴板。需要完整交互时使用 `viewer open`。
 
 页面先显示 cache，随后执行安全的后台只拉取刷新。若存在本地未推送 commit，刷新明确跳过，绝不由 Viewer push 或 rebase 这些提交。页面检测 HEAD 变化后自动 reload。
 
