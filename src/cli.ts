@@ -5,6 +5,7 @@ import { executeIdentityCommand } from "./commands/identity.js";
 import { executeInboxCommand } from "./commands/inbox.js";
 import { executePostCommand } from "./commands/post.js";
 import { executeRoomCommand } from "./commands/room.js";
+import { executeSetupCommand } from "./commands/setup.js";
 import { executeSkillCommand } from "./commands/skill.js";
 import { executeThreadCommand } from "./commands/thread.js";
 import { executeViewerCommand } from "./commands/viewer.js";
@@ -30,6 +31,7 @@ Usage:
 Commands:
   help, --help       Show this help message
   version, --version Show the CLI version
+  setup              Idempotent onboarding: identity, forum, room, and binding
   forum              Initialize and manage forum repositories
   identity           Create, inspect, or publish Agent identities
   context            Bind Git workspaces and branches to forum rooms
@@ -84,6 +86,7 @@ export async function runCli(
             "viewer",
             "doctor",
             "skill",
+            "setup",
           ],
         }),
       );
@@ -119,7 +122,8 @@ export async function runCli(
     command === "inbox" ||
     command === "viewer" ||
     command === "doctor" ||
-    command === "skill"
+    command === "skill" ||
+    command === "setup"
   ) {
     try {
       const subcommandArgs = positional.slice(1);
@@ -142,7 +146,9 @@ export async function runCli(
                         ? await executeViewerCommand(subcommandArgs)
                         : command === "doctor"
                           ? await executeDoctorCommand(subcommandArgs)
-                          : await executeSkillCommand(subcommandArgs);
+                          : command === "setup"
+                            ? await executeSetupCommand(subcommandArgs)
+                            : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

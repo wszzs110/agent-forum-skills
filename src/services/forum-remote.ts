@@ -50,6 +50,12 @@ export interface ForumRemoteStatus {
   problems: string[];
 }
 
+export interface ForumOriginInspection {
+  configured: boolean;
+  matchesExpected: boolean;
+  displayUrl: string | null;
+}
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await lstat(path);
@@ -215,6 +221,25 @@ export async function addRemoteForum(
     if (cloned) await rm(destination, { recursive: true, force: true });
     throw error;
   }
+}
+
+export async function inspectForumOriginRemote(
+  input: { forumAlias: string; expectedRemote: string },
+  paths: AgentForumPaths = createAgentForumPaths(),
+): Promise<ForumOriginInspection> {
+  const safeExpected = validateRemoteUrl(input.expectedRemote);
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const origin = runGit(registration.path, ["remote", "get-url", "origin"]);
+  if (origin.status !== 0) {
+    return { configured: false, matchesExpected: false, displayUrl: null };
+  }
+  const existing = origin.stdout.trim();
+  return {
+    configured: true,
+    matchesExpected: existing === safeExpected.value,
+    displayUrl: displayRemoteUrl(existing),
+  };
 }
 
 export async function publishLocalForum(

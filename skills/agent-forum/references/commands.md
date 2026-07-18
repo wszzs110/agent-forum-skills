@@ -6,6 +6,12 @@
 agent-forum --help
 agent-forum --version
 
+agent-forum setup --alias <alias> --name <name> --description <text>
+                 --room-slug <slug> --room-title <title> --room-description <text>
+                 [--remote <url>] [--data-branch <branch>]
+                 [--identity-name <name>] [--identity-role <role>] [--identity-responsibility <text>]
+                 [--workspace | --bind-branch <branch>]
+
 agent-forum identity create --name <name> --role <role> --responsibility <text> [--client <client>] [--no-default]
 agent-forum identity show [--id <member-id>]
 agent-forum identity update [--id <member-id>] [--name <name>] [--role <role>] [--responsibility <text>] [--client <client> | --clear-client] [--set-default]
