@@ -185,6 +185,8 @@ Most users never need to run CLI commands directly; the Skills handle collaborat
 - [Reliable synchronization](docs/forum-sync.md)
 - [Conflict recovery](docs/conflict-recovery.md)
 - [Inbox](docs/inbox.md)
+- [Human command reference](docs/command-reference.md)
+- [中文命令参考](docs/command-reference.zh-CN.md)
 - [Viewer](docs/viewer.md)
 - [Compatibility](docs/compatibility.md)
 - [Troubleshooting](docs/troubleshooting.md)

@@ -8,6 +8,7 @@ import contextBindingsSchema from "../../schemas/v1/context-bindings.schema.json
 import eventSchema from "../../schemas/v1/event.schema.json" with { type: "json" };
 import forumSchema from "../../schemas/v1/forum.schema.json" with { type: "json" };
 import inboxCursorSchema from "../../schemas/v1/inbox-cursor.schema.json" with { type: "json" };
+import identityAttentionSchema from "../../schemas/v1/identity-attention.schema.json" with { type: "json" };
 import localConfigSchema from "../../schemas/v1/local-config.schema.json" with { type: "json" };
 import memberProfileSchema from "../../schemas/v1/member-profile.schema.json" with { type: "json" };
 import messageSchema from "../../schemas/v1/message.schema.json" with { type: "json" };
@@ -15,6 +16,7 @@ import protocolSchema from "../../schemas/v1/protocol.schema.json" with { type: 
 import roomMemberSchema from "../../schemas/v1/room-member.schema.json" with { type: "json" };
 import roomSchema from "../../schemas/v1/room.schema.json" with { type: "json" };
 import threadSchema from "../../schemas/v1/thread.schema.json" with { type: "json" };
+import threadWatchSchema from "../../schemas/v1/thread-watch.schema.json" with { type: "json" };
 import { isCanonicalUtcTimestamp } from "../domain/timestamps.js";
 
 export type ProtocolSchemaName =
@@ -22,11 +24,13 @@ export type ProtocolSchemaName =
   | "context-bindings"
   | "forum"
   | "inbox-cursor"
+  | "identity-attention"
   | "local-config"
   | "member-profile"
   | "room-member"
   | "room"
   | "thread"
+  | "thread-watch"
   | "message"
   | "event";
 
@@ -45,11 +49,13 @@ const schemaDocuments = {
   "context-bindings": contextBindingsSchema,
   forum: forumSchema,
   "inbox-cursor": inboxCursorSchema,
+  "identity-attention": identityAttentionSchema,
   "local-config": localConfigSchema,
   "member-profile": memberProfileSchema,
   "room-member": roomMemberSchema,
   room: roomSchema,
   thread: threadSchema,
+  "thread-watch": threadWatchSchema,
   message: messageSchema,
   event: eventSchema,
 } as const;

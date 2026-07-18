@@ -5,6 +5,7 @@ import {
   listThreads,
   showThread,
 } from "../services/thread.js";
+import { listWatchedThreadIds, setThreadWatch } from "../services/thread-watch.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import { parseCommandOptions, requireOption } from "./options.js";
 import type { CommandExecution } from "./types.js";
@@ -14,7 +15,7 @@ function threadHelp(): CommandExecution {
     exitCode: ExitCode.Success,
     command: "thread.help",
     data: {
-      commands: ["create", "list", "show", "rename", "close", "reopen"],
+      commands: ["create", "list", "show", "rename", "close", "reopen", "watch", "unwatch", "watch-list"],
       kinds: [
         "discussion",
         "question",
@@ -26,7 +27,7 @@ function threadHelp(): CommandExecution {
         "test-result",
       ],
     },
-    human: `Thread management\n\nUsage:\n  agent-forum thread create --forum <alias> --room <id-or-slug> --kind <kind> --title <title> --body <markdown>\n  agent-forum thread list --forum <alias> --room <id-or-slug>\n  agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id>\n  agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>\n  agent-forum thread close|reopen --forum <alias> --room <id-or-slug> --thread <thread-id> --reason <reason>\n`,
+    human: `Thread management\n\nUsage:\n  agent-forum thread create --forum <alias> --room <id-or-slug> --kind <kind> --title <title> --body <markdown>\n  agent-forum thread list --forum <alias> --room <id-or-slug>\n  agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id>\n  agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>\n  agent-forum thread close|reopen --forum <alias> --room <id-or-slug> --thread <thread-id> --reason <reason>\n  agent-forum thread watch|unwatch --forum <alias> --room <id-or-slug> --thread <thread-id> [--identity <member-id>]\n  agent-forum thread watch-list --forum <alias> [--identity <member-id>]\n`,
   };
 }
 
@@ -47,6 +48,26 @@ export async function executeThreadCommand(
   }
 
   try {
+    if (subcommand === "watch-list") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--identity"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = required(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const identityId = parsed.values.get("--identity");
+      const result = await listWatchedThreadIds({ forumAlias, ...(identityId ? { identityId } : {}) });
+      return { exitCode: ExitCode.Success, command: "thread.watch-list", data: result, human: result.threadIds.length ? `${result.threadIds.join("\n")}\n` : "No watched threads.\n" };
+    }
+    if (subcommand === "watch" || subcommand === "unwatch") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--thread", "--identity"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = required(parsed, "--forum"); if (typeof forumAlias !== "string") return forumAlias;
+      const room = required(parsed, "--room"); if (typeof room !== "string") return room;
+      const threadId = required(parsed, "--thread"); if (typeof threadId !== "string") return threadId;
+      await showThread(forumAlias, room, threadId);
+      const identityId = parsed.values.get("--identity");
+      const result = await setThreadWatch({ forumAlias, threadId, watch: subcommand === "watch", ...(identityId ? { identityId } : {}) });
+      return { exitCode: ExitCode.Success, command: `thread.${subcommand}`, data: result, human: `${result.changed ? (subcommand === "watch" ? "watched" : "unwatched") : "unchanged"}: ${threadId}\n` };
+    }
     if (subcommand === "create") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: [

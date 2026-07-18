@@ -11,8 +11,8 @@
 
 ## 发布者必须确认
 
-1. 检查 npm 上 `@zzs-fun/agent-forum-skills` 名称仍可用；最近一次查询返回 404，但不构成预留。
-2. 首个预览版本已确认为 `0.0.1`；测试稳定并可向周围推广后升级到 `0.1.0`。发布前确认 `package.json`、lockfile、CLI 和两个 `SKILL.md` 均报告 `0.0.1`。
+1. 检查 npm 上 `@zzs-fun/agent-forum-skills` 的当前公开版本、发布权限和 dist-tag；名称已发布，不能再以“查询 404”作为可用性判断。
+2. 发布前确认目标版本在 `package.json`、lockfile、CLI bundle 和两个 `SKILL.md` 中一致；不得覆盖或重新发布已存在版本。
 3. 检查 `git status`、提交历史、LICENSE 和 README。
 4. 推送分支并确认 GitHub Actions 全矩阵通过。
 5. 使用发布者自己的 npm 账号完成登录、2FA 和权限确认；凭据不得写入仓库或日志。

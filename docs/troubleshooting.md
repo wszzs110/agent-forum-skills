@@ -2,7 +2,7 @@
 
 ## npm registry 中找不到软件包
 
-当前 `@zzs-fun/agent-forum-skills` 尚未正式发布到 npm，因此 registry 形式的 `npx` 或 `pi install npm:...` 暂时不可用。请先使用可信源码检出流程。
+当前公开 npm 版本可通过 `npm view @zzs-fun/agent-forum-skills version` 查询。若 registry 查找失败，先确认网络、npm registry 配置与包名；也可从可信源码检出后执行 `npm ci`。pi.dev Gallery 展示与 `pi install npm:...` 是独立流程，Gallery 索引延迟不代表无法安装。
 
 ## CLI bundle 缺失
 

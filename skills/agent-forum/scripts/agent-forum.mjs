@@ -11,9 +11,9 @@ var __esm = (fn, res) => function __init() {
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
-var __export = (target, all) => {
+var __export = (target2, all) => {
   for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+    __defProp(target2, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -23,12 +23,12 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+var __toESM = (mod, isNodeMode, target2) => (target2 = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
   // If the importer is in node compatibility mode or this is not an ESM
   // file that has been converted to a CommonJS file using a Babel-
   // compatible transform (i.e. "__esModule" has not been set), then set
   // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target2, "default", { value: mod, enumerable: true }) : target2,
   mod
 ));
 
@@ -90,19 +90,19 @@ function v7(options, buf, offset) {
   }
   return buf ?? unsafeStringify(bytes);
 }
-function updateV7State(state, now, rnds) {
-  state.msecs ??= -Infinity;
-  state.seq ??= 0;
-  if (now > state.msecs) {
-    state.seq = rnds[6] << 23 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
-    state.msecs = now;
+function updateV7State(state2, now, rnds) {
+  state2.msecs ??= -Infinity;
+  state2.seq ??= 0;
+  if (now > state2.msecs) {
+    state2.seq = rnds[6] << 23 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
+    state2.msecs = now;
   } else {
-    state.seq = state.seq + 1 | 0;
-    if (state.seq === 0) {
-      state.msecs++;
+    state2.seq = state2.seq + 1 | 0;
+    if (state2.seq === 0) {
+      state2.msecs++;
     }
   }
-  return state;
+  return state2;
 }
 function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
   if (rnds.length < 16) {
@@ -3410,7 +3410,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve18.call(this, root, ref);
+      let _sch = resolve20.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3437,7 +3437,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve18(root, ref) {
+    function resolve20(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3655,8 +3655,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path) {
-      let input = path;
+    function removeDotSegments(path2) {
+      let input = path2;
       const output2 = [];
       let nextSlash = -1;
       let len = 0;
@@ -3908,8 +3908,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path && path !== "/" ? path : void 0;
+        const [path2, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path2 && path2 !== "/" ? path2 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -4068,64 +4068,64 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve18(baseURI, relativeURI, options) {
+    function resolve20(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
     function resolveComponent(base, relative3, options, skipNormalization) {
-      const target = {};
+      const target2 = {};
       if (!skipNormalization) {
         base = parse(serialize(base, options), options);
         relative3 = parse(serialize(relative3, options), options);
       }
       options = options || {};
       if (!options.tolerant && relative3.scheme) {
-        target.scheme = relative3.scheme;
-        target.userinfo = relative3.userinfo;
-        target.host = relative3.host;
-        target.port = relative3.port;
-        target.path = removeDotSegments(relative3.path || "");
-        target.query = relative3.query;
+        target2.scheme = relative3.scheme;
+        target2.userinfo = relative3.userinfo;
+        target2.host = relative3.host;
+        target2.port = relative3.port;
+        target2.path = removeDotSegments(relative3.path || "");
+        target2.query = relative3.query;
       } else {
         if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
-          target.userinfo = relative3.userinfo;
-          target.host = relative3.host;
-          target.port = relative3.port;
-          target.path = removeDotSegments(relative3.path || "");
-          target.query = relative3.query;
+          target2.userinfo = relative3.userinfo;
+          target2.host = relative3.host;
+          target2.port = relative3.port;
+          target2.path = removeDotSegments(relative3.path || "");
+          target2.query = relative3.query;
         } else {
           if (!relative3.path) {
-            target.path = base.path;
+            target2.path = base.path;
             if (relative3.query !== void 0) {
-              target.query = relative3.query;
+              target2.query = relative3.query;
             } else {
-              target.query = base.query;
+              target2.query = base.query;
             }
           } else {
             if (relative3.path[0] === "/") {
-              target.path = removeDotSegments(relative3.path);
+              target2.path = removeDotSegments(relative3.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative3.path;
+                target2.path = "/" + relative3.path;
               } else if (!base.path) {
-                target.path = relative3.path;
+                target2.path = relative3.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
+                target2.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
               }
-              target.path = removeDotSegments(target.path);
+              target2.path = removeDotSegments(target2.path);
             }
-            target.query = relative3.query;
+            target2.query = relative3.query;
           }
-          target.userinfo = base.userinfo;
-          target.host = base.host;
-          target.port = base.port;
+          target2.userinfo = base.userinfo;
+          target2.host = base.host;
+          target2.port = base.port;
         }
-        target.scheme = base.scheme;
+        target2.scheme = base.scheme;
       }
-      target.fragment = relative3.fragment;
-      return target;
+      target2.fragment = relative3.fragment;
+      return target2;
     }
     function equal(uriA, uriB, options) {
       const normalizedA = normalizeComparableURI(uriA, options);
@@ -4326,7 +4326,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve18,
+      resolve: resolve20,
       resolveComponent,
       equal,
       serialize,
@@ -7938,6 +7938,42 @@ var init_inbox_cursor_schema = __esm({
   }
 });
 
+// schemas/v1/identity-attention.schema.json
+var identity_attention_schema_default;
+var init_identity_attention_schema = __esm({
+  "schemas/v1/identity-attention.schema.json"() {
+    identity_attention_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/identity-attention.schema.json",
+      title: "Agent Forum Local Identity Attention 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "forumId", "ownerMemberId", "links", "updatedAt"],
+      properties: {
+        schemaVersion: { const: "1.0" },
+        forumId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId" },
+        ownerMemberId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
+        links: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["subjectMemberId", "mode", "reason", "createdAt"],
+            properties: {
+              subjectMemberId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
+              mode: { enum: ["recovery", "delegation"] },
+              reason: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText" },
+              createdAt: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp" },
+              expiresAt: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp" }
+            }
+          }
+        },
+        updatedAt: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp" }
+      }
+    };
+  }
+});
+
 // schemas/v1/local-config.schema.json
 var local_config_schema_default;
 var init_local_config_schema = __esm({
@@ -8290,6 +8326,14 @@ var init_thread_schema = __esm({
   }
 });
 
+// schemas/v1/thread-watch.schema.json
+var thread_watch_schema_default;
+var init_thread_watch_schema = __esm({
+  "schemas/v1/thread-watch.schema.json"() {
+    thread_watch_schema_default = { $schema: "https://json-schema.org/draft/2020-12/schema", $id: "https://agent-forum.dev/schemas/v1/thread-watch.schema.json", type: "object", additionalProperties: false, required: ["schemaVersion", "forumId", "memberId", "threadIds", "updatedAt"], properties: { schemaVersion: { const: "1.0" }, forumId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId" }, memberId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" }, threadIds: { type: "array", uniqueItems: true, items: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId" } }, updatedAt: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp" } } };
+  }
+});
+
 // src/protocol/validator.ts
 function toIssues(errors) {
   return (errors ?? []).map((error) => ({
@@ -8338,6 +8382,7 @@ var init_validator = __esm({
     init_event_schema();
     init_forum_schema();
     init_inbox_cursor_schema();
+    init_identity_attention_schema();
     init_local_config_schema();
     init_member_profile_schema();
     init_message_schema();
@@ -8345,17 +8390,20 @@ var init_validator = __esm({
     init_room_member_schema();
     init_room_schema();
     init_thread_schema();
+    init_thread_watch_schema();
     init_timestamps();
     schemaDocuments = {
       protocol: protocol_schema_default,
       "context-bindings": context_bindings_schema_default,
       forum: forum_schema_default,
       "inbox-cursor": inbox_cursor_schema_default,
+      "identity-attention": identity_attention_schema_default,
       "local-config": local_config_schema_default,
       "member-profile": member_profile_schema_default,
       "room-member": room_member_schema_default,
       room: room_schema_default,
       thread: thread_schema_default,
+      "thread-watch": thread_watch_schema_default,
       message: message_schema_default,
       event: event_schema_default
     };
@@ -8389,9 +8437,9 @@ import {
   stat as stat2
 } from "node:fs/promises";
 import { dirname as dirname2, resolve as resolve3 } from "node:path";
-async function pathExists(path) {
+async function pathExists(path2) {
   try {
-    await stat2(path);
+    await stat2(path2);
     return true;
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
@@ -8504,6 +8552,18 @@ var init_errors2 = __esm({
 });
 
 // src/config/local-config.ts
+var local_config_exports = {};
+__export(local_config_exports, {
+  createLocalIdentity: () => createLocalIdentity,
+  emptyLocalConfig: () => emptyLocalConfig,
+  findForum: () => findForum,
+  findIdentity: () => findIdentity,
+  loadLocalConfig: () => loadLocalConfig,
+  registerLocalForum: () => registerLocalForum,
+  saveLocalConfig: () => saveLocalConfig,
+  unregisterLocalForum: () => unregisterLocalForum,
+  updateLocalIdentity: () => updateLocalIdentity
+});
 import { readFile as readFile2 } from "node:fs/promises";
 import { resolve as resolve4 } from "node:path";
 function emptyLocalConfig() {
@@ -8818,36 +8878,36 @@ function requiredText(data, field, maxLength) {
   }
   return value;
 }
-function assertTarget(state, event) {
-  if (state.scope !== event.scope || state.id !== event.targetId) {
+function assertTarget(state2, event) {
+  if (state2.scope !== event.scope || state2.id !== event.targetId) {
     throw new StateTransitionError(
       "EVENT_TARGET_MISMATCH",
-      `event target ${event.scope}:${event.targetId} does not match ${state.scope}:${state.id}`
+      `event target ${event.scope}:${event.targetId} does not match ${state2.scope}:${state2.id}`
     );
   }
 }
-function archive(state) {
-  if (state.status === "archived") {
+function archive(state2) {
+  if (state2.status === "archived") {
     throw new StateTransitionError(
       "INVALID_STATE_TRANSITION",
-      `${state.scope} is already archived`
+      `${state2.scope} is already archived`
     );
   }
-  return { ...state, status: "archived" };
+  return { ...state2, status: "archived" };
 }
-function restore(state) {
-  if (state.status === "active") {
+function restore(state2) {
+  if (state2.status === "active") {
     throw new StateTransitionError(
       "INVALID_STATE_TRANSITION",
-      `${state.scope} is already active`
+      `${state2.scope} is already active`
     );
   }
-  return { ...state, status: "active" };
+  return { ...state2, status: "active" };
 }
-function applyLifecycleEvent(state, event) {
-  assertTarget(state, event);
-  if (state.scope === "forum") {
-    const forum = state;
+function applyLifecycleEvent(state2, event) {
+  assertTarget(state2, event);
+  if (state2.scope === "forum") {
+    const forum = state2;
     switch (event.type) {
       case "forum-renamed":
         return { ...forum, name: requiredText(event.data, "name", 200) };
@@ -8864,8 +8924,8 @@ function applyLifecycleEvent(state, event) {
         break;
     }
   }
-  if (state.scope === "room") {
-    const room = state;
+  if (state2.scope === "room") {
+    const room = state2;
     switch (event.type) {
       case "room-renamed":
         return { ...room, title: requiredText(event.data, "title", 200) };
@@ -8882,8 +8942,8 @@ function applyLifecycleEvent(state, event) {
         break;
     }
   }
-  if (state.scope === "thread") {
-    const thread = state;
+  if (state2.scope === "thread") {
+    const thread = state2;
     switch (event.type) {
       case "thread-renamed":
         return { ...thread, title: requiredText(event.data, "title", 200) };
@@ -9049,14 +9109,14 @@ import {
   rm as rm3
 } from "node:fs/promises";
 import { resolve as resolve6 } from "node:path";
-async function readJsonDocument(path, schema) {
+async function readJsonDocument(path2, schema) {
   let value;
   try {
-    value = JSON.parse(await readFile4(path, "utf8"));
+    value = JSON.parse(await readFile4(path2, "utf8"));
   } catch (error) {
     throw new StorageError(
       "SCHEMA_VALIDATION_FAILED",
-      `failed to read JSON document: ${path}`,
+      `failed to read JSON document: ${path2}`,
       error instanceof Error ? error.message : String(error)
     );
   }
@@ -9064,19 +9124,19 @@ async function readJsonDocument(path, schema) {
   if (!validation.ok) {
     throw new StorageError(
       "SCHEMA_VALIDATION_FAILED",
-      `document does not satisfy the ${schema} schema: ${path}`,
+      `document does not satisfy the ${schema} schema: ${path2}`,
       validation.issues
     );
   }
   return value;
 }
-function protocolWarning(path, error) {
+function protocolWarning(path2, error) {
   if (error instanceof StorageError || error instanceof ServiceError || error instanceof StateTransitionError) {
-    return { code: error.code, path, message: error.message };
+    return { code: error.code, path: path2, message: error.message };
   }
   return {
     code: "PROTOCOL_DATA_DAMAGED",
-    path,
+    path: path2,
     message: error instanceof Error ? error.message : String(error)
   };
 }
@@ -9119,7 +9179,7 @@ async function openForum(alias, paths, options = {}) {
   return { registration };
 }
 async function readForumMember(registration, identity) {
-  const path = resolve6(
+  const path2 = resolve6(
     registration.path,
     "members",
     identity.memberId,
@@ -9127,7 +9187,7 @@ async function readForumMember(registration, identity) {
   );
   let profile;
   try {
-    profile = await readJsonDocument(path, "member-profile");
+    profile = await readJsonDocument(path2, "member-profile");
   } catch (error) {
     if (error instanceof StorageError && error.details && typeof error.details === "string" && error.details.includes("ENOENT")) {
       throw new ServiceError(
@@ -9222,7 +9282,7 @@ async function readRoomDirectory(registration, roomDirectoryName) {
   } catch (error) {
     return { warnings: [protocolWarning(roomPath, error)] };
   }
-  let state = {
+  let state2 = {
     scope: "room",
     id: String(base.id),
     title: String(base.initialTitle),
@@ -9250,7 +9310,7 @@ async function readRoomDirectory(registration, roomDirectoryName) {
       continue;
     }
     try {
-      state = applyLifecycleEvent(state, {
+      state2 = applyLifecycleEvent(state2, {
         scope: "room",
         targetId: String(event.targetId),
         type: String(event.type),
@@ -9265,9 +9325,9 @@ async function readRoomDirectory(registration, roomDirectoryName) {
     room: {
       id: String(base.id),
       slug: String(base.slug),
-      title: state.title,
-      description: state.description,
-      status: state.status,
+      title: state2.title,
+      description: state2.description,
+      status: state2.status,
       createdBy: String(base.createdBy),
       createdAt: String(base.createdAt),
       lastActivityAt
@@ -9352,9 +9412,9 @@ function roomMemberDocument(roomId, identity, role, responsibility, status, join
     updatedAt
   };
 }
-async function readRoomMember(path) {
+async function readRoomMember(path2) {
   try {
-    return await readJsonDocument(path, "room-member");
+    return await readJsonDocument(path2, "room-member");
   } catch (error) {
     if (error instanceof StorageError && typeof error.details === "string" && error.details.includes("ENOENT")) {
       return void 0;
@@ -9362,22 +9422,22 @@ async function readRoomMember(path) {
     throw error;
   }
 }
-async function commitMutableDocument(repository, path, schema, value, commitMessage) {
+async function commitMutableDocument(repository, path2, schema, value, commitMessage) {
   let previous;
   try {
-    previous = await readFile4(path, "utf8");
+    previous = await readFile4(path2, "utf8");
   } catch (error) {
     if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
       throw error;
     }
   }
   try {
-    await writeValidatedJsonAtomic(path, schema, value, { overwrite: true });
-    return commitPaths(repository, [path], commitMessage);
+    await writeValidatedJsonAtomic(path2, schema, value, { overwrite: true });
+    return commitPaths(repository, [path2], commitMessage);
   } catch (error) {
-    runGit(repository, ["reset", "--", path]);
-    if (previous === void 0) await rm3(path, { force: true });
-    else await writeFileAtomic(path, previous, { overwrite: true });
+    runGit(repository, ["reset", "--", path2]);
+    if (previous === void 0) await rm3(path2, { force: true });
+    else await writeFileAtomic(path2, previous, { overwrite: true });
     throw error;
   }
 }
@@ -9780,10 +9840,10 @@ function platformFromWorkspaceKey(workspaceKey) {
     `binding has unsupported workspace key: ${workspaceKey}`
   );
 }
-function validateBindingSemantics(state) {
+function validateBindingSemantics(state2) {
   const bindingIds = /* @__PURE__ */ new Set();
   const identities = /* @__PURE__ */ new Set();
-  for (const binding of state.bindings) {
+  for (const binding of state2.bindings) {
     if (bindingIds.has(binding.bindingId)) {
       throw new StorageError(
         "SCHEMA_VALIDATION_FAILED",
@@ -9850,16 +9910,16 @@ async function loadContextBindingState(paths) {
       validation.issues
     );
   }
-  const state = value;
-  validateBindingSemantics(state);
-  return state;
+  const state2 = value;
+  validateBindingSemantics(state2);
+  return state2;
 }
-async function saveContextBindingState(paths, state) {
-  validateBindingSemantics(state);
+async function saveContextBindingState(paths, state2) {
+  validateBindingSemantics(state2);
   await writeValidatedJsonAtomic(
     paths.bindingsFile,
     "context-bindings",
-    state,
+    state2,
     { overwrite: true, mode: 384 }
   );
 }
@@ -9872,14 +9932,14 @@ function requireBindingBranch(branch) {
   }
   return branch;
 }
-function setContextBinding(state, input, options = {}) {
+function setContextBinding(state2, input, options = {}) {
   if (input.scope === "branch") requireBindingBranch(input.branch);
   const identity = bindingIdentity({
     scope: input.scope,
     workspaceKey: input.context.workspaceKey,
     ...input.branch ? { branch: input.branch } : {}
   });
-  const existing = state.bindings.find(
+  const existing = state2.bindings.find(
     (binding2) => bindingIdentity(binding2) === identity
   );
   if (existing && !options.force) {
@@ -9906,40 +9966,40 @@ function setContextBinding(state, input, options = {}) {
     scope: "branch",
     branch: requireBindingBranch(input.branch)
   } : { ...common, scope: "workspace" };
-  const bindings = existing ? state.bindings.map(
+  const bindings = existing ? state2.bindings.map(
     (candidate) => bindingIdentity(candidate) === identity ? binding : candidate
-  ) : [...state.bindings, binding];
+  ) : [...state2.bindings, binding];
   const next = { formatVersion: 1, bindings };
   validateBindingSemantics(next);
   return { state: next, binding, replaced: Boolean(existing) };
 }
-function removeContextBinding(state, workspaceKey, scope, branch) {
+function removeContextBinding(state2, workspaceKey, scope, branch) {
   const identity = bindingIdentity({
     scope,
     workspaceKey,
     ...branch ? { branch } : {}
   });
-  const removed = state.bindings.filter(
+  const removed = state2.bindings.filter(
     (binding) => bindingIdentity(binding) === identity
   );
   return {
     state: {
       formatVersion: 1,
-      bindings: state.bindings.filter(
+      bindings: state2.bindings.filter(
         (binding) => bindingIdentity(binding) !== identity
       )
     },
     removed
   };
 }
-function resolveContextBinding(state, context) {
+function resolveContextBinding(state2, context) {
   if (context.branch !== null) {
-    const exact = state.bindings.find(
+    const exact = state2.bindings.find(
       (binding) => binding.scope === "branch" && binding.workspaceKey === context.workspaceKey && binding.branch === context.branch
     );
     if (exact) return { kind: "bound", source: "branch", binding: exact };
   }
-  const fallback = state.bindings.find(
+  const fallback = state2.bindings.find(
     (binding) => binding.scope === "workspace" && binding.workspaceKey === context.workspaceKey
   );
   return fallback ? { kind: "bound", source: "workspace", binding: fallback } : { kind: "unbound", code: "CONTEXT_NOT_BOUND" };
@@ -10005,27 +10065,27 @@ async function targetForBinding(config, binding, paths) {
       problem: "forum is no longer registered locally"
     };
   }
-  const target = await targetFromRegistration(registration, binding.roomId, paths);
-  return { binding, ...target };
+  const target2 = await targetFromRegistration(registration, binding.roomId, paths);
+  return { binding, ...target2 };
 }
 async function requireTarget(forumAlias, room, paths, options = {}) {
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, forumAlias);
-  const target = await targetFromRegistration(registration, room, paths);
-  if (target.targetStatus === "missing" || target.targetStatus === "unavailable") {
+  const target2 = await targetFromRegistration(registration, room, paths);
+  if (target2.targetStatus === "missing" || target2.targetStatus === "unavailable") {
     throw new ContextError(
       "BINDING_TARGET_UNAVAILABLE",
       `context target is unavailable: ${forumAlias}/${room}`,
-      target
+      target2
     );
   }
-  if (options.active && target.targetStatus === "archived") {
+  if (options.active && target2.targetStatus === "archived") {
     throw new ServiceError(
       "ROOM_ARCHIVED",
-      `cannot bind an archived room: ${target.roomId}`
+      `cannot bind an archived room: ${target2.roomId}`
     );
   }
-  return target;
+  return target2;
 }
 function requireBranch(context, requestedBranch, cwd) {
   const branch = requestedBranch ?? context.branch;
@@ -10047,7 +10107,7 @@ async function bindContext(input, paths = createAgentForumPaths()) {
   }
   const cwd = selectedCwd(input.cwd);
   const context = await discoverGitWorkspace(cwd);
-  const target = await requireTarget(input.forumAlias, input.room, paths, {
+  const target2 = await requireTarget(input.forumAlias, input.room, paths, {
     active: true
   });
   const scope = input.workspace ? "workspace" : "branch";
@@ -10057,15 +10117,15 @@ async function bindContext(input, paths = createAgentForumPaths()) {
     command: "context bind"
   });
   try {
-    const state = await loadContextBindingState(paths);
+    const state2 = await loadContextBindingState(paths);
     const result = setContextBinding(
-      state,
+      state2,
       {
         context,
         scope,
         ...branch ? { branch } : {},
-        forumId: target.forumId,
-        roomId: target.roomId
+        forumId: target2.forumId,
+        roomId: target2.roomId
       },
       {
         ...input.force !== void 0 ? { force: input.force } : {},
@@ -10077,7 +10137,7 @@ async function bindContext(input, paths = createAgentForumPaths()) {
     return {
       action: result.replaced ? "replaced" : "created",
       binding: result.binding,
-      target
+      target: target2
     };
   } finally {
     await lock.release();
@@ -10099,9 +10159,9 @@ async function unbindContext(input, paths = createAgentForumPaths()) {
     command: "context unbind"
   });
   try {
-    const state = await loadContextBindingState(paths);
+    const state2 = await loadContextBindingState(paths);
     const result = removeContextBinding(
-      state,
+      state2,
       context.workspaceKey,
       scope,
       branch
@@ -10115,12 +10175,12 @@ async function unbindContext(input, paths = createAgentForumPaths()) {
   }
 }
 async function listContextBindings(paths = createAgentForumPaths()) {
-  const [state, config] = await Promise.all([
+  const [state2, config] = await Promise.all([
     loadContextBindingState(paths),
     loadLocalConfig(paths)
   ]);
   const bindings = await Promise.all(
-    state.bindings.map((binding) => targetForBinding(config, binding, paths))
+    state2.bindings.map((binding) => targetForBinding(config, binding, paths))
   );
   bindings.sort((left, right) => {
     const byWorkspace = left.binding.workspaceKey.localeCompare(
@@ -10144,9 +10204,9 @@ async function resolveContext(input = {}, paths = createAgentForumPaths()) {
     );
   }
   if (input.forumAlias && input.room) {
-    const target2 = await requireTarget(input.forumAlias, input.room, paths);
+    const target3 = await requireTarget(input.forumAlias, input.room, paths);
     return {
-      ...target2,
+      ...target3,
       source: "explicit",
       context: null,
       binding: null
@@ -10154,8 +10214,8 @@ async function resolveContext(input = {}, paths = createAgentForumPaths()) {
   }
   const cwd = selectedCwd(input.cwd);
   const context = await discoverGitWorkspace(cwd);
-  const state = await loadContextBindingState(paths);
-  const resolution = resolveContextBinding(state, context);
+  const state2 = await loadContextBindingState(paths);
+  const resolution = resolveContextBinding(state2, context);
   if (resolution.kind === "unbound") {
     throw new ContextError(
       "CONTEXT_NOT_BOUND",
@@ -10164,21 +10224,21 @@ async function resolveContext(input = {}, paths = createAgentForumPaths()) {
     );
   }
   const config = await loadLocalConfig(paths);
-  const target = await targetForBinding(config, resolution.binding, paths);
-  if (target.targetStatus === "missing" || target.targetStatus === "unavailable") {
+  const target2 = await targetForBinding(config, resolution.binding, paths);
+  if (target2.targetStatus === "missing" || target2.targetStatus === "unavailable") {
     throw new ContextError(
       "BINDING_TARGET_UNAVAILABLE",
-      `bound context target is ${target.targetStatus}`,
-      target
+      `bound context target is ${target2.targetStatus}`,
+      target2
     );
   }
   return {
-    forumId: target.forumId,
-    forumAlias: target.forumAlias,
-    roomId: target.roomId,
-    roomSlug: target.roomSlug,
-    roomTitle: target.roomTitle,
-    targetStatus: target.targetStatus,
+    forumId: target2.forumId,
+    forumAlias: target2.forumAlias,
+    roomId: target2.roomId,
+    roomSlug: target2.roomSlug,
+    roomTitle: target2.roomTitle,
+    targetStatus: target2.targetStatus,
     source: resolution.source,
     context,
     binding: resolution.binding
@@ -10443,7 +10503,7 @@ function journalPath(paths, forumId, operationId) {
 function validateJournal(value) {
   if (!value || typeof value !== "object") throw new Error("journal is not an object");
   const item = value;
-  if (item.formatVersion !== 1 || typeof item.operationId !== "string" || typeof item.forumId !== "string" || typeof item.forumAlias !== "string" || typeof item.branch !== "string" || !["conflict", "reissue-prepared"].includes(String(item.status)) || typeof item.originalHead !== "string" || typeof item.localHead !== "string" || typeof item.remoteHead !== "string" || typeof item.recoveryRef !== "string" || !Array.isArray(item.conflicts) || !item.conflicts.every((path) => typeof path === "string") || typeof item.createdAt !== "string" || typeof item.updatedAt !== "string") {
+  if (item.formatVersion !== 1 || typeof item.operationId !== "string" || typeof item.forumId !== "string" || typeof item.forumAlias !== "string" || typeof item.branch !== "string" || !["conflict", "reissue-prepared"].includes(String(item.status)) || typeof item.originalHead !== "string" || typeof item.localHead !== "string" || typeof item.remoteHead !== "string" || typeof item.recoveryRef !== "string" || !Array.isArray(item.conflicts) || !item.conflicts.every((path2) => typeof path2 === "string") || typeof item.createdAt !== "string" || typeof item.updatedAt !== "string") {
     throw new Error("journal fields are invalid");
   }
   return item;
@@ -10646,9 +10706,9 @@ init_lock();
 init_paths();
 init_errors2();
 init_room();
-async function pathExists2(path) {
+async function pathExists2(path2) {
   try {
-    await lstat2(path);
+    await lstat2(path2);
     return true;
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
@@ -11004,9 +11064,9 @@ async function removeLocalForum(input, paths = createAgentForumPaths()) {
 }
 
 // src/services/doctor.ts
-async function exists(path) {
+async function exists(path2) {
   try {
-    await lstat3(path);
+    await lstat3(path2);
     return true;
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return false;
@@ -11181,7 +11241,7 @@ async function readForumView(forumAlias, paths) {
   if (base.forumId !== registration.forumId) {
     throw new ServiceError("FORUM_PROTOCOL_MISMATCH", "forum metadata ID does not match registration");
   }
-  let state = {
+  let state2 = {
     scope: "forum",
     id: String(base.forumId),
     name: String(base.initialName),
@@ -11222,7 +11282,7 @@ async function readForumView(forumAlias, paths) {
       continue;
     }
     try {
-      state = applyLifecycleEvent(state, {
+      state2 = applyLifecycleEvent(state2, {
         scope: "forum",
         targetId: String(event.targetId),
         type: String(event.type),
@@ -11235,10 +11295,10 @@ async function readForumView(forumAlias, paths) {
   }
   return {
     forum: {
-      forumId: state.id,
-      name: state.name,
-      description: state.description,
-      status: state.status,
+      forumId: state2.id,
+      name: state2.name,
+      description: state2.description,
+      status: state2.status,
       createdBy: String(base.createdBy),
       createdAt: String(base.createdAt),
       lastActivityAt
@@ -11355,8 +11415,8 @@ init_paths();
 init_protocol_store();
 init_errors2();
 init_room();
-function structuralWarning(code, path, message) {
-  return { code, path, message };
+function structuralWarning(code, path2, message) {
+  return { code, path: path2, message };
 }
 async function readThreadEvents(registration, roomId, threadId) {
   const directory = resolve12(
@@ -11495,18 +11555,18 @@ async function readThreadMessages(registration, roomId, threadId) {
   const messages = [];
   const warnings = [];
   for (const entry of entries) {
-    const path = resolve12(directory, entry.name);
+    const path2 = resolve12(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
           "INVALID_MESSAGE_PATH",
-          path,
+          path2,
           "messages directory contains a non-directory entry"
         )
       );
       continue;
     }
-    const result = await readMessageDirectory(path, threadId);
+    const result = await readMessageDirectory(path2, threadId);
     if (result.message) messages.push(result.message);
     warnings.push(...result.warnings);
   }
@@ -11626,7 +11686,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       );
     }
   }
-  let state = {
+  let state2 = {
     scope: "thread",
     id: String(base.id),
     title: String(base.initialTitle),
@@ -11660,7 +11720,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       continue;
     }
     try {
-      state = applyLifecycleEvent(state, {
+      state2 = applyLifecycleEvent(state2, {
         scope: "thread",
         targetId: String(event.targetId),
         type: String(event.type),
@@ -11677,9 +11737,9 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
     thread: {
       id: String(base.id),
       roomId: String(base.roomId),
-      title: state.title,
+      title: state2.title,
       kind: base.kind,
-      status: state.status,
+      status: state2.status,
       createdBy: String(base.createdBy),
       createdAt: String(base.createdAt),
       firstMessageId: String(base.firstMessageId),
@@ -11715,12 +11775,12 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const threads = [];
   const warnings = [...roomResult.warnings];
   for (const entry of entries) {
-    const path = resolve12(directory, entry.name);
+    const path2 = resolve12(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
           "INVALID_THREAD_PATH",
-          path,
+          path2,
           "threads directory contains a non-directory entry"
         )
       );
@@ -12090,8 +12150,8 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
 function lines(value) {
   return value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
 }
-function isImmutableProtocolPath(path) {
-  const normalized = path.replaceAll("\\", "/");
+function isImmutableProtocolPath(path2) {
+  const normalized = path2.replaceAll("\\", "/");
   if (normalized === ".gitattributes" || normalized === ".forum/protocol.json" || normalized === ".forum/forum.json") {
     return true;
   }
@@ -12116,10 +12176,10 @@ function modifiedImmutablePaths(repository, from, to) {
     return [{ code: "HISTORY_INSPECTION_FAILED", message: "could not inspect changed history" }];
   }
   return [...new Set(lines(result.stdout).filter(isImmutableProtocolPath))].map(
-    (path) => ({
+    (path2) => ({
       code: "IMMUTABLE_PATH_MODIFIED",
-      path,
-      message: `immutable protocol history modified or deleted: ${path}`
+      path: path2,
+      message: `immutable protocol history modified or deleted: ${path2}`
     })
   );
 }
@@ -12183,14 +12243,14 @@ function addedEvents(repository, from, to) {
   const diff = runGit(repository, ["diff", "--name-only", "--diff-filter=A", `${from}..${to}`]);
   if (diff.status !== 0) return [];
   const events = [];
-  for (const path of lines(diff.stdout).filter((item) => item.endsWith("/event.json"))) {
-    const shown = runGit(repository, ["show", `${to}:${path}`]);
+  for (const path2 of lines(diff.stdout).filter((item) => item.endsWith("/event.json"))) {
+    const shown = runGit(repository, ["show", `${to}:${path2}`]);
     if (shown.status !== 0) continue;
     try {
       const event = JSON.parse(shown.stdout);
       const category = eventCategory(String(event.type));
       if (category) {
-        events.push({ path, targetId: String(event.targetId), category });
+        events.push({ path: path2, targetId: String(event.targetId), category });
       }
     } catch {
     }
@@ -12529,9 +12589,9 @@ import {
 } from "node:fs/promises";
 import { randomUUID as randomUUID5 } from "node:crypto";
 import { resolve as resolve13 } from "node:path";
-async function pathExists3(path) {
+async function pathExists3(path2) {
   try {
-    await stat3(path);
+    await stat3(path2);
     return true;
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
@@ -13134,12 +13194,173 @@ remote: unchanged
 
 // src/commands/identity.ts
 init_local_config();
+
+// src/services/identity-attention.ts
+init_local_config();
+init_timestamps();
+init_validator();
+init_atomic();
+init_errors();
+init_lock();
+init_paths();
+init_room();
+init_errors2();
+import { readFile as readFile9 } from "node:fs/promises";
+import { resolve as resolve14 } from "node:path";
+function attentionPath(paths, forumId, ownerMemberId) {
+  return resolve14(forumStatePath(paths, forumId), "attention", `${ownerMemberId}.json`);
+}
+function isActiveLink(link2, now) {
+  return link2.expiresAt === void 0 || new Date(link2.expiresAt).valueOf() > now.valueOf();
+}
+async function loadState(forumId, ownerMemberId, paths) {
+  const path2 = attentionPath(paths, forumId, ownerMemberId);
+  try {
+    const value = JSON.parse(await readFile9(path2, "utf8"));
+    const validation = validateProtocolDocument("identity-attention", value);
+    if (!validation.ok || value.forumId !== forumId || value.ownerMemberId !== ownerMemberId) {
+      throw new StorageError("SCHEMA_VALIDATION_FAILED", `identity attention state is invalid: ${path2}`);
+    }
+    const state2 = value;
+    if (new Set(state2.links.map((link2) => link2.subjectMemberId)).size !== state2.links.length) {
+      throw new StorageError("SCHEMA_VALIDATION_FAILED", `identity attention state has duplicate subjects: ${path2}`);
+    }
+    return state2;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return {
+        schemaVersion: "1.0",
+        forumId,
+        ownerMemberId,
+        links: [],
+        updatedAt: currentUtcTimestamp()
+      };
+    }
+    throw error;
+  }
+}
+async function resolveOwner(forumAlias, ownerMemberId, paths) {
+  const config = await loadLocalConfig(paths);
+  const forum = findForum(config, forumAlias);
+  return {
+    forumId: forum.forumId,
+    forumPath: forum.path,
+    owner: findIdentity(config, ownerMemberId)
+  };
+}
+async function recoverIdentity(input, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const forum = findForum(config, input.forumAlias);
+  const profile = await readJsonDocument(
+    resolve14(forum.path, "members", input.memberId, "profile.json"),
+    "member-profile"
+  );
+  if (profile.memberId !== input.memberId) {
+    throw new ServiceError("IDENTITY_RECOVERY_FAILED", "remote profile memberId does not match requested memberId");
+  }
+  const existing = config.identities.find((identity) => identity.memberId === input.memberId);
+  if (existing) {
+    if (input.setDefault && config.defaultIdentityId !== existing.memberId) {
+      const { updateLocalIdentity: updateLocalIdentity2 } = await Promise.resolve().then(() => (init_local_config(), local_config_exports));
+      const result2 = await updateLocalIdentity2({ memberId: existing.memberId, setDefault: true }, paths);
+      return { action: "unchanged", identity: result2.identity, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
+    }
+    return { action: "unchanged", identity: existing, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
+  }
+  const result = await createLocalIdentity({
+    memberId: input.memberId,
+    displayName: String(profile.displayName),
+    role: String(profile.role),
+    responsibility: String(profile.responsibility),
+    ...typeof profile.client === "string" ? { client: profile.client } : {},
+    setDefault: input.setDefault ?? true
+  }, paths);
+  return { action: "recovered", identity: result.identity, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
+}
+async function listIdentityAttention(input, paths = createAgentForumPaths()) {
+  const { forumId, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
+  const state2 = await loadState(forumId, owner.memberId, paths);
+  const now = /* @__PURE__ */ new Date();
+  const links = state2.links.map((link2) => ({ ...link2, active: isActiveLink(link2, now) })).filter((link2) => input.includeExpired || link2.active);
+  return { ownerMemberId: owner.memberId, links };
+}
+async function addIdentityAttention(input, paths = createAgentForumPaths()) {
+  if (input.mode === "delegation" && !input.expiresAt) {
+    throw new ServiceError("ATTENTION_EXPIRY_REQUIRED", "delegation attention requires --until UTC timestamp");
+  }
+  if (input.expiresAt && !isCanonicalUtcTimestamp(input.expiresAt)) {
+    throw new ServiceError("ATTENTION_EXPIRY_INVALID", "attention expiry must use canonical UTC milliseconds timestamp");
+  }
+  if (input.expiresAt && new Date(input.expiresAt).valueOf() <= Date.now()) {
+    throw new ServiceError("ATTENTION_EXPIRY_INVALID", "attention expiry must be in the future");
+  }
+  const { forumId, forumPath, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
+  if (owner.memberId === input.subjectMemberId) {
+    throw new ServiceError("ATTENTION_SELF_REFERENCE", "identity attention subject must differ from owner");
+  }
+  const profile = await readJsonDocument(
+    resolve14(forumPath, "members", input.subjectMemberId, "profile.json"),
+    "member-profile"
+  );
+  if (profile.memberId !== input.subjectMemberId) {
+    throw new ServiceError("ATTENTION_SUBJECT_NOT_FOUND", "attention subject profile does not match requested memberId");
+  }
+  const lock = await acquireForumLock({
+    lockPath: resolve14(paths.locksDirectory, `attention-${forumId}-${owner.memberId}.lock`),
+    command: "identity attention add"
+  });
+  try {
+    const state2 = await loadState(forumId, owner.memberId, paths);
+    const timestamp = currentUtcTimestamp();
+    const link2 = {
+      subjectMemberId: input.subjectMemberId,
+      mode: input.mode,
+      reason: input.reason,
+      createdAt: state2.links.find((item) => item.subjectMemberId === input.subjectMemberId)?.createdAt ?? timestamp,
+      ...input.expiresAt ? { expiresAt: input.expiresAt } : {}
+    };
+    const existing = state2.links.find((item) => item.subjectMemberId === input.subjectMemberId);
+    const links = existing ? state2.links.map((item) => item.subjectMemberId === input.subjectMemberId ? link2 : item) : [...state2.links, link2];
+    await writeValidatedJsonAtomic(attentionPath(paths, forumId, owner.memberId), "identity-attention", {
+      ...state2,
+      links,
+      updatedAt: timestamp
+    }, { overwrite: true, mode: 384 });
+    return { action: existing ? "updated" : "added", ownerMemberId: owner.memberId, link: link2 };
+  } finally {
+    await lock.release();
+  }
+}
+async function removeIdentityAttention(input, paths = createAgentForumPaths()) {
+  const { forumId, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
+  const lock = await acquireForumLock({
+    lockPath: resolve14(paths.locksDirectory, `attention-${forumId}-${owner.memberId}.lock`),
+    command: "identity attention remove"
+  });
+  try {
+    const state2 = await loadState(forumId, owner.memberId, paths);
+    const links = state2.links.filter((link2) => link2.subjectMemberId !== input.subjectMemberId);
+    const removed = links.length !== state2.links.length;
+    if (removed) {
+      await writeValidatedJsonAtomic(attentionPath(paths, forumId, owner.memberId), "identity-attention", {
+        ...state2,
+        links,
+        updatedAt: currentUtcTimestamp()
+      }, { overwrite: true, mode: 384 });
+    }
+    return { removed, ownerMemberId: owner.memberId };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/commands/identity.ts
 function identityHelp() {
   return {
     exitCode: ExitCode.Success,
     command: "identity.help",
     data: {
-      commands: ["create", "show", "update", "publish", "leave"]
+      commands: ["create", "show", "update", "publish", "leave", "recover", "attention"]
     },
     human: `Identity management
 
@@ -13149,6 +13370,10 @@ Usage:
   agent-forum identity update [--id <member-id>] [--name <name>] [--role <role>] [--responsibility <text>] [--client <client> | --clear-client] [--set-default]
   agent-forum identity publish --forum <alias> [--id <member-id>]
   agent-forum identity leave --forum <alias> [--id <member-id>]
+  agent-forum identity recover --forum <alias> --member-id <member-id> [--set-default]
+  agent-forum identity attention add --forum <alias> --subject <member-id> --mode <recovery|delegation> --reason <text> [--identity <member-id>] [--until <UTC-ms>]
+  agent-forum identity attention list --forum <alias> [--identity <member-id>] [--include-expired]
+  agent-forum identity attention remove --forum <alias> --subject <member-id> [--identity <member-id>]
 `
   };
 }
@@ -13162,6 +13387,112 @@ async function executeIdentityCommand(args) {
     return identityHelp();
   }
   try {
+    if (subcommand === "recover") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum", "--member-id"],
+        flags: ["--set-default"]
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forum = valueOrError2(parsed, "--forum");
+      if (typeof forum !== "string") return forum;
+      const memberId = valueOrError2(parsed, "--member-id");
+      if (typeof memberId !== "string") return memberId;
+      const result = await recoverIdentity({
+        forumAlias: forum,
+        memberId,
+        setDefault: parsed.flags.has("--set-default")
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "identity.recover",
+        data: result,
+        human: `${result.action}: ${result.identity.memberId}
+forum: ${result.forumAlias}
+profile status: ${result.profileStatus}
+`
+      };
+    }
+    if (subcommand === "attention") {
+      const action = args[1];
+      if (!action || action === "help" || action === "--help") return identityHelp();
+      if (action === "list") {
+        const parsed = parseCommandOptions(args.slice(2), {
+          values: ["--forum", "--identity"],
+          flags: ["--include-expired"]
+        });
+        if ("error" in parsed) return invalidArgument(parsed.error);
+        const forum = valueOrError2(parsed, "--forum");
+        if (typeof forum !== "string") return forum;
+        const ownerMemberId = parsed.values.get("--identity");
+        const result = await listIdentityAttention({
+          forumAlias: forum,
+          ...ownerMemberId ? { ownerMemberId } : {},
+          includeExpired: parsed.flags.has("--include-expired")
+        });
+        return {
+          exitCode: ExitCode.Success,
+          command: "identity.attention.list",
+          data: result,
+          human: result.links.length === 0 ? "No identity attention links.\n" : `${result.links.map((link2) => `${link2.mode}	${link2.subjectMemberId}	${link2.active ? "active" : "expired"}`).join("\n")}
+`
+        };
+      }
+      if (action === "add") {
+        const parsed = parseCommandOptions(args.slice(2), {
+          values: ["--forum", "--identity", "--subject", "--mode", "--reason", "--until"]
+        });
+        if ("error" in parsed) return invalidArgument(parsed.error);
+        const forum = valueOrError2(parsed, "--forum");
+        if (typeof forum !== "string") return forum;
+        const subject = valueOrError2(parsed, "--subject");
+        if (typeof subject !== "string") return subject;
+        const mode = valueOrError2(parsed, "--mode");
+        if (typeof mode !== "string") return mode;
+        if (mode !== "recovery" && mode !== "delegation") return invalidArgument("--mode must be recovery or delegation");
+        const reason = valueOrError2(parsed, "--reason");
+        if (typeof reason !== "string") return reason;
+        const ownerMemberId = parsed.values.get("--identity");
+        const expiresAt = parsed.values.get("--until");
+        const result = await addIdentityAttention({
+          forumAlias: forum,
+          subjectMemberId: subject,
+          mode,
+          reason,
+          ...ownerMemberId ? { ownerMemberId } : {},
+          ...expiresAt ? { expiresAt } : {}
+        });
+        return {
+          exitCode: ExitCode.Success,
+          command: "identity.attention.add",
+          data: result,
+          human: `${result.action}: ${result.link.mode} attention for ${result.link.subjectMemberId}
+`
+        };
+      }
+      if (action === "remove") {
+        const parsed = parseCommandOptions(args.slice(2), { values: ["--forum", "--identity", "--subject"] });
+        if ("error" in parsed) return invalidArgument(parsed.error);
+        const forum = valueOrError2(parsed, "--forum");
+        if (typeof forum !== "string") return forum;
+        const subject = valueOrError2(parsed, "--subject");
+        if (typeof subject !== "string") return subject;
+        const ownerMemberId = parsed.values.get("--identity");
+        const result = await removeIdentityAttention({
+          forumAlias: forum,
+          subjectMemberId: subject,
+          ...ownerMemberId ? { ownerMemberId } : {}
+        });
+        return {
+          exitCode: ExitCode.Success,
+          command: "identity.attention.remove",
+          data: result,
+          human: result.removed ? `removed: ${subject}
+` : `not found: ${subject}
+`
+        };
+      }
+      return invalidArgument(`unknown identity attention action: ${action}`);
+    }
     if (subcommand === "create") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--name", "--role", "--responsibility", "--client"],
@@ -13293,21 +13624,263 @@ init_errors();
 init_lock();
 init_paths();
 init_errors2();
-import { readFile as readFile9, readdir as readdir7 } from "node:fs/promises";
-import { resolve as resolve14 } from "node:path";
+import { readFile as readFile12, readdir as readdir8 } from "node:fs/promises";
+import { resolve as resolve17 } from "node:path";
+
+// src/services/thread-watch.ts
+init_local_config();
+init_timestamps();
+init_validator();
+init_atomic();
+init_errors();
+init_lock();
+init_paths();
+import { readFile as readFile10 } from "node:fs/promises";
+import { resolve as resolve15 } from "node:path";
+function path(paths, forumId, memberId) {
+  return resolve15(forumStatePath(paths, forumId), "watches", `${memberId}.json`);
+}
+async function state(paths, forumId, memberId) {
+  try {
+    const value = JSON.parse(await readFile10(path(paths, forumId, memberId), "utf8"));
+    const valid = validateProtocolDocument("thread-watch", value);
+    if (!valid.ok || value.forumId !== forumId || value.memberId !== memberId) throw new StorageError("SCHEMA_VALIDATION_FAILED", "thread watch state is invalid");
+    return value;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { schemaVersion: "1.0", forumId, memberId, threadIds: [], updatedAt: currentUtcTimestamp() };
+    throw error;
+  }
+}
+async function target(forumAlias, identityId, paths) {
+  const config = await loadLocalConfig(paths);
+  const forum = findForum(config, forumAlias);
+  const identity = findIdentity(config, identityId);
+  return { forumId: forum.forumId, memberId: identity.memberId };
+}
+async function listWatchedThreadIds(input, paths = createAgentForumPaths()) {
+  const item = await target(input.forumAlias, input.identityId, paths);
+  return { ...item, threadIds: (await state(paths, item.forumId, item.memberId)).threadIds };
+}
+async function setThreadWatch(input, paths = createAgentForumPaths()) {
+  const item = await target(input.forumAlias, input.identityId, paths);
+  const lock = await acquireForumLock({ lockPath: resolve15(paths.locksDirectory, `watch-${item.forumId}-${item.memberId}.lock`), command: input.watch ? "thread watch" : "thread unwatch" });
+  try {
+    const existing = await state(paths, item.forumId, item.memberId);
+    const contains = existing.threadIds.includes(input.threadId);
+    const threadIds = input.watch ? contains ? existing.threadIds : [...existing.threadIds, input.threadId] : existing.threadIds.filter((id) => id !== input.threadId);
+    if (contains === input.watch) return { changed: false, ...item, threadIds };
+    await writeValidatedJsonAtomic(path(paths, item.forumId, item.memberId), "thread-watch", { ...existing, threadIds, updatedAt: currentUtcTimestamp() }, { overwrite: true, mode: 384 });
+    return { changed: true, ...item, threadIds };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/timeline-cache.ts
+init_local_config();
+init_runner();
+init_atomic();
+init_lock();
+init_paths();
+import { readFile as readFile11, readdir as readdir7 } from "node:fs/promises";
+import { relative, resolve as resolve16 } from "node:path";
+init_room();
+function cachePath(paths, forumId) {
+  return resolve16(forumStatePath(paths, forumId), "cache", "snapshot.json");
+}
+function sanitizeWarnings(repository, warnings) {
+  return warnings.map((warning) => {
+    const local = relative(repository, warning.path).replaceAll("\\", "/");
+    return {
+      ...warning,
+      path: local && !local.startsWith("..") ? local : "<outside-forum>"
+    };
+  });
+}
+async function readEventDirectory(directory) {
+  let names;
+  try {
+    names = await readdir7(directory);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
+    throw error;
+  }
+  const events = [];
+  for (const name of names) {
+    try {
+      const event = await readJsonDocument(resolve16(directory, name, "event.json"), "event");
+      events.push({
+        id: String(event.id),
+        kind: "event",
+        type: String(event.type),
+        actorId: String(event.actorId),
+        createdAt: String(event.createdAt),
+        reason: String(event.reason),
+        data: event.data
+      });
+    } catch {
+    }
+  }
+  return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}
+async function readRoomMembers(repository, roomId) {
+  const members = {};
+  const directory = resolve16(repository, "rooms", roomId, "members");
+  let names = [];
+  try {
+    names = await readdir7(directory);
+  } catch {
+    return members;
+  }
+  for (const name of names) {
+    try {
+      const membership = await readJsonDocument(resolve16(directory, name, "membership.json"), "room-member");
+      members[name] = {
+        role: String(membership.role),
+        responsibility: String(membership.responsibility),
+        status: String(membership.status)
+      };
+    } catch {
+    }
+  }
+  return members;
+}
+async function buildRoom(forumAlias, repository, room, head, paths) {
+  const threads = await listThreads(forumAlias, room.id, paths);
+  const cachedThreads = [];
+  const warnings = [...threads.warnings];
+  for (const thread of threads.threads) {
+    const detail = await showThread(forumAlias, room.id, thread.id, paths);
+    warnings.push(...detail.warnings);
+    const events = await readEventDirectory(
+      resolve16(repository, "rooms", room.id, "threads", thread.id, "events")
+    );
+    const timeline = [
+      ...detail.messages.map((message) => ({ ...message, kind: "message" })),
+      ...events
+    ].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    cachedThreads.push({ thread: detail.thread, timeline });
+  }
+  cachedThreads.sort(
+    (a, b) => b.thread.lastActivityAt.localeCompare(a.thread.lastActivityAt) || a.thread.id.localeCompare(b.thread.id)
+  );
+  return {
+    cached: {
+      room,
+      sourceHead: head,
+      members: await readRoomMembers(repository, room.id),
+      events: await readEventDirectory(resolve16(repository, "rooms", room.id, "events")),
+      threads: cachedThreads
+    },
+    warnings
+  };
+}
+async function readMembers(repository) {
+  const members = {};
+  const directory = resolve16(repository, "members");
+  let names = [];
+  try {
+    names = await readdir7(directory);
+  } catch {
+    return members;
+  }
+  for (const name of names) {
+    try {
+      const profile = await readJsonDocument(resolve16(directory, name, "profile.json"), "member-profile");
+      members[name] = {
+        displayName: String(profile.displayName),
+        role: String(profile.role),
+        responsibility: String(profile.responsibility),
+        status: String(profile.status)
+      };
+    } catch {
+    }
+  }
+  return members;
+}
+async function loadCache(path2) {
+  try {
+    const value = JSON.parse(await readFile11(path2, "utf8"));
+    const compatible = value.formatVersion === 1 && typeof value.sourceHead === "string" && Array.isArray(value.rooms) && value.rooms.every((room) => room && typeof room === "object" && "members" in room) && value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
+    return compatible ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function affectedRooms(repository, oldHead, newHead) {
+  const diff = runGit(repository, ["diff", "--name-only", `${oldHead}..${newHead}`]);
+  if (diff.status !== 0) return void 0;
+  const ids = /* @__PURE__ */ new Set();
+  for (const path2 of diff.stdout.split(/\r?\n/u)) {
+    const match = /^rooms\/([^/]+)\//u.exec(path2.replaceAll("\\", "/"));
+    if (match?.[1]) ids.add(match[1]);
+  }
+  return ids;
+}
+async function getForumSnapshot(forumAlias, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const head = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+  const path2 = cachePath(paths, registration.forumId);
+  const existing = await loadCache(path2);
+  if (existing?.sourceHead === head) return { snapshot: existing, cache: "hit" };
+  const lock = await acquireForumLock({
+    lockPath: resolve16(paths.locksDirectory, `${registration.forumId}-cache.lock`),
+    command: "cache rebuild"
+  });
+  try {
+    const latest = await loadCache(path2);
+    if (latest?.sourceHead === head) return { snapshot: latest, cache: "hit" };
+    const affected = latest ? affectedRooms(registration.path, latest.sourceHead, head) : void 0;
+    const [forum, rooms] = await Promise.all([
+      showForum(forumAlias, paths),
+      listRooms(forumAlias, paths)
+    ]);
+    const oldRooms = new Map((latest?.rooms ?? []).map((room) => [room.room.id, room]));
+    const cachedRooms = [];
+    const warnings = [...forum.warnings, ...rooms.warnings];
+    for (const room of rooms.rooms) {
+      const preserved = affected && !affected.has(room.id) ? oldRooms.get(room.id) : void 0;
+      if (preserved) cachedRooms.push(preserved);
+      else {
+        const built = await buildRoom(forumAlias, registration.path, room, head, paths);
+        cachedRooms.push(built.cached);
+        warnings.push(...built.warnings);
+      }
+    }
+    cachedRooms.sort((a, b) => a.room.slug.localeCompare(b.room.slug));
+    const snapshot = {
+      formatVersion: 1,
+      forumAlias,
+      forumId: registration.forumId,
+      sourceHead: head,
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      forum: forum.forum,
+      members: await readMembers(registration.path),
+      rooms: cachedRooms,
+      warnings: sanitizeWarnings(registration.path, warnings)
+    };
+    await writeJsonAtomic(path2, snapshot, { overwrite: true, mode: 384 });
+    return { snapshot, cache: latest && affected ? "incremental" : "rebuilt" };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/inbox.ts
 init_room();
 function cursorPath(paths, forumId, memberId) {
-  return resolve14(forumStatePath(paths, forumId), "cursors", `${memberId}.json`);
+  return resolve17(forumStatePath(paths, forumId), "cursors", `${memberId}.json`);
 }
 async function loadCursor(paths, forumId, memberId) {
-  const path = cursorPath(paths, forumId, memberId);
+  const path2 = cursorPath(paths, forumId, memberId);
   try {
-    const value = JSON.parse(await readFile9(path, "utf8"));
+    const value = JSON.parse(await readFile12(path2, "utf8"));
     const validation = validateProtocolDocument("inbox-cursor", value);
     if (!validation.ok || value.forumId !== forumId || value.memberId !== memberId) {
       throw new StorageError(
         "SCHEMA_VALIDATION_FAILED",
-        `inbox cursor is invalid: ${path}`,
+        `inbox cursor is invalid: ${path2}`,
         validation.ok ? void 0 : validation.issues
       );
     }
@@ -13325,14 +13898,14 @@ async function loadCursor(paths, forumId, memberId) {
     if (error instanceof StorageError) throw error;
     throw new StorageError(
       "SCHEMA_VALIDATION_FAILED",
-      `inbox cursor contains invalid JSON: ${path}`
+      `inbox cursor contains invalid JSON: ${path2}`
     );
   }
 }
 async function readEvents(directory, roomId, roomSlug, threadId, actorId, activeSince) {
   let names;
   try {
-    names = await readdir7(directory);
+    names = await readdir8(directory);
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { entries: [], warnings: [] };
@@ -13342,10 +13915,10 @@ async function readEvents(directory, roomId, roomSlug, threadId, actorId, active
   const entries = [];
   const warnings = [];
   for (const name of names) {
-    const path = resolve14(directory, name, "event.json");
+    const path2 = resolve17(directory, name, "event.json");
     try {
-      const event = await readJsonDocument(path, "event");
-      if (event.actorId !== actorId && String(event.createdAt) >= activeSince) {
+      const event = await readJsonDocument(path2, "event");
+      if (String(event.createdAt) >= activeSince) {
         entries.push({
           id: String(event.id),
           kind: "event",
@@ -13356,11 +13929,15 @@ async function readEvents(directory, roomId, roomSlug, threadId, actorId, active
           actorId: String(event.actorId),
           createdAt: String(event.createdAt),
           summary: String(event.reason),
-          replyTo: null
+          replyTo: null,
+          mentions: [],
+          relevance: "discovery",
+          reasons: [],
+          summaryTruncated: false
         });
       }
     } catch (error) {
-      warnings.push(protocolWarning(path, error));
+      warnings.push(protocolWarning(path2, error));
     }
   }
   return { entries, warnings };
@@ -13372,7 +13949,7 @@ async function collectRelevantEntries(forumAlias, memberId, paths) {
   const entries = [];
   const warnings = [...rooms.warnings];
   for (const room of rooms.rooms) {
-    const membershipPath = resolve14(
+    const membershipPath = resolve17(
       registration.path,
       "rooms",
       room.id,
@@ -13390,7 +13967,7 @@ async function collectRelevantEntries(forumAlias, memberId, paths) {
     if (membership.status !== "active") continue;
     const activeSince = String(membership.updatedAt);
     const roomEvents = await readEvents(
-      resolve14(registration.path, "rooms", room.id, "events"),
+      resolve17(registration.path, "rooms", room.id, "events"),
       room.id,
       room.slug,
       null,
@@ -13405,7 +13982,7 @@ async function collectRelevantEntries(forumAlias, memberId, paths) {
       const detail = await showThread(forumAlias, room.id, thread.id, paths);
       warnings.push(...detail.warnings);
       for (const message of detail.messages) {
-        if (message.authorId === memberId || message.createdAt < activeSince) continue;
+        if (message.createdAt < activeSince) continue;
         const compact = message.body.replace(/\s+/gu, " ").trim();
         entries.push({
           id: message.id,
@@ -13417,11 +13994,15 @@ async function collectRelevantEntries(forumAlias, memberId, paths) {
           actorId: message.authorId,
           createdAt: message.createdAt,
           summary: compact.length > 500 ? `${compact.slice(0, 497)}...` : compact,
-          replyTo: message.replyTo
+          replyTo: message.replyTo,
+          mentions: message.mentions,
+          relevance: "discovery",
+          reasons: [],
+          summaryTruncated: compact.length > 500
         });
       }
       const threadEvents = await readEvents(
-        resolve14(
+        resolve17(
           registration.path,
           "rooms",
           room.id,
@@ -13442,16 +14023,67 @@ async function collectRelevantEntries(forumAlias, memberId, paths) {
   const unique = new Map(entries.map((entry) => [entry.id, entry]));
   return { entries: [...unique.values()], warnings };
 }
+function classifyEntries(entries, attentionIds, watchedIds) {
+  const authorByMessageId = new Map(entries.filter((entry) => entry.kind === "message").map((entry) => [entry.id, entry.actorId]));
+  const priorityTypes = /* @__PURE__ */ new Set(["blocker", "question", "proposal", "decision", "objection", "thread-closed", "thread-reopened"]);
+  return entries.map((entry) => {
+    const reasons = [];
+    if (entry.kind === "message" && entry.mentions.some((id) => attentionIds.has(id))) reasons.push("mention");
+    if (entry.replyTo && attentionIds.has(authorByMessageId.get(entry.replyTo) ?? "")) reasons.push("reply-to-attention");
+    if (reasons.length > 0) return { ...entry, relevance: "direct", reasons };
+    if (entry.threadId && watchedIds.has(entry.threadId)) return { ...entry, relevance: "watched", reasons: ["watched-thread"] };
+    if (priorityTypes.has(entry.type)) return { ...entry, relevance: "priority", reasons: ["priority-type"] };
+    return { ...entry, relevance: "discovery", reasons };
+  });
+}
+function balancedPage(entries, limit) {
+  const ordered = [...entries].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+  if (limit < 3) return ordered.slice(0, limit);
+  const discoveryQuota = Math.min(Math.max(2, Math.ceil(limit * 0.2)), limit - 1);
+  const discovery = ordered.filter((entry) => entry.relevance === "discovery").slice(0, discoveryQuota);
+  const selected = new Set(discovery.map((entry) => entry.id));
+  return [...ordered.filter((entry) => !selected.has(entry.id)).slice(0, limit - discovery.length), ...discovery].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+}
+async function showInboxEntry(input, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const profile = await readJsonDocument(resolve17(registration.path, "members", identity.memberId, "profile.json"), "member-profile");
+  if (profile.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
+  const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
+  const entry = collected.entries.find((item) => item.id === input.id);
+  if (!entry) throw new ServiceError("MESSAGE_NOT_FOUND", `inbox entry was not found or is outside active Room membership: ${input.id}`);
+  try {
+    const cached = await getForumSnapshot(input.forumAlias, paths);
+    const item = cached.snapshot.rooms.flatMap((room) => [...room.events, ...room.threads.flatMap((thread) => thread.timeline)]).find((candidate) => candidate.id === entry.id);
+    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache };
+    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache };
+  } catch {
+  }
+  if (entry.kind === "message" && entry.threadId) {
+    const detail = await showThread(input.forumAlias, entry.roomId, entry.threadId, paths);
+    const message = detail.messages.find((item) => item.id === entry.id);
+    if (!message) throw new ServiceError("MESSAGE_NOT_FOUND", `message was not found: ${entry.id}`);
+    return { entry, content: { body: message.body }, cache: "fallback" };
+  }
+  const eventPath = entry.threadId ? resolve17(registration.path, "rooms", entry.roomId, "threads", entry.threadId, "events", entry.id, "event.json") : resolve17(registration.path, "rooms", entry.roomId, "events", entry.id, "event.json");
+  const event = await readJsonDocument(eventPath, "event");
+  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback" };
+}
 async function getInbox(input, paths = createAgentForumPaths()) {
   const limit = input.limit ?? 20;
+  const summaryChars = input.summaryChars ?? 180;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new StorageError("SCHEMA_VALIDATION_FAILED", "inbox limit must be between 1 and 100");
+  }
+  if (!Number.isInteger(summaryChars) || summaryChars < 0 || summaryChars > 500) {
+    throw new StorageError("SCHEMA_VALIDATION_FAILED", "inbox summaryChars must be between 0 and 500");
   }
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
   const publicProfile2 = await readJsonDocument(
-    resolve14(registration.path, "members", identity.memberId, "profile.json"),
+    resolve17(registration.path, "members", identity.memberId, "profile.json"),
     "member-profile"
   );
   if (publicProfile2.status !== "active") {
@@ -13461,19 +14093,20 @@ async function getInbox(input, paths = createAgentForumPaths()) {
     );
   }
   const syncResult = input.sync ? await syncForum(input.forumAlias, paths) : null;
-  const [collected, cursor] = await Promise.all([
+  const [collected, cursor, attention, watches] = await Promise.all([
     collectRelevantEntries(input.forumAlias, identity.memberId, paths),
-    loadCursor(paths, registration.forumId, identity.memberId)
+    loadCursor(paths, registration.forumId, identity.memberId),
+    listIdentityAttention({ forumAlias: input.forumAlias, ownerMemberId: identity.memberId }, paths),
+    listWatchedThreadIds({ forumAlias: input.forumAlias, identityId: identity.memberId }, paths)
   ]);
   const seen = new Set(cursor.seenIds);
-  const unread = collected.entries.filter((entry) => !seen.has(entry.id)).sort(
-    (left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
-  );
-  const page = unread.slice(0, limit);
+  const attentionIds = /* @__PURE__ */ new Set([identity.memberId, ...attention.links.filter((link2) => link2.active).map((link2) => link2.subjectMemberId)]);
+  const unread = classifyEntries(collected.entries, attentionIds, new Set(watches.threadIds)).filter((entry) => entry.actorId !== identity.memberId && !seen.has(entry.id)).sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+  const page = balancedPage(unread, limit);
   const idsToMark = input.markAllRead ? unread.map((entry) => entry.id) : input.markRead ? page.map((entry) => entry.id) : [];
   if (idsToMark.length > 0) {
     const lock = await acquireForumLock({
-      lockPath: resolve14(
+      lockPath: resolve17(
         paths.locksDirectory,
         `${registration.forumId}-${identity.memberId}-cursor.lock`
       ),
@@ -13498,9 +14131,20 @@ async function getInbox(input, paths = createAgentForumPaths()) {
       await lock.release();
     }
   }
+  const relevanceCounts = { direct: 0, watched: 0, priority: 0, discovery: 0 };
+  for (const entry of unread) relevanceCounts[entry.relevance] += 1;
+  const displayed = page.map((entry) => {
+    const truncated = entry.summary.length > summaryChars;
+    return {
+      ...entry,
+      summary: summaryChars === 0 ? "" : truncated ? `${entry.summary.slice(0, Math.max(0, summaryChars - 3))}...` : entry.summary,
+      summaryTruncated: entry.summaryTruncated || truncated
+    };
+  });
   return {
-    entries: input.markAllRead ? [] : page,
+    entries: input.markAllRead ? [] : displayed,
     totalUnread: unread.length,
+    relevanceCounts,
     hasMore: unread.length > page.length,
     markedRead: idsToMark.length,
     warnings: collected.warnings,
@@ -13510,43 +14154,39 @@ async function getInbox(input, paths = createAgentForumPaths()) {
 
 // src/commands/inbox.ts
 async function executeInboxCommand(args) {
-  const parsed = parseCommandOptions(args, {
-    values: ["--forum", "--identity", "--limit"],
-    flags: ["--sync", "--mark-read", "--mark-all-read"]
+  const show = args[0] === "show";
+  const parsed = parseCommandOptions(show ? args.slice(1) : args, {
+    values: show ? ["--forum", "--identity", "--id"] : ["--forum", "--identity", "--limit", "--summary-chars"],
+    flags: show ? [] : ["--sync", "--mark-read", "--mark-all-read"]
   });
   if ("error" in parsed) return invalidArgument(parsed.error);
-  if (parsed.flags.has("--mark-read") && parsed.flags.has("--mark-all-read")) {
-    return invalidArgument("--mark-read and --mark-all-read cannot be combined");
-  }
+  if (!show && parsed.flags.has("--mark-read") && parsed.flags.has("--mark-all-read")) return invalidArgument("--mark-read and --mark-all-read cannot be combined");
   const forumAlias = requireOption(parsed, "--forum");
   if (typeof forumAlias !== "string") return invalidArgument(forumAlias.error);
-  const limitText = parsed.values.get("--limit");
-  const limit = limitText === void 0 ? void 0 : Number(limitText);
-  if (limit !== void 0 && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
-    return invalidArgument("--limit must be an integer between 1 and 100");
-  }
   try {
     const identityId = parsed.values.get("--identity");
-    const result = await getInbox({
-      forumAlias,
-      ...identityId ? { identityId } : {},
-      sync: parsed.flags.has("--sync"),
-      ...limit !== void 0 ? { limit } : {},
-      markRead: parsed.flags.has("--mark-read"),
-      markAllRead: parsed.flags.has("--mark-all-read")
-    });
-    return {
-      exitCode: ExitCode.Success,
-      command: "inbox",
-      data: result,
-      human: result.entries.length === 0 ? `No unread entries.
+    if (show) {
+      const id = requireOption(parsed, "--id");
+      if (typeof id !== "string") return invalidArgument(id.error);
+      const result2 = await showInboxEntry({ forumAlias, id, ...identityId ? { identityId } : {} });
+      return { exitCode: ExitCode.Success, command: "inbox.show", data: result2, human: `${result2.entry.type}: ${result2.entry.id}
+${result2.content.body ?? result2.content.reason ?? ""}
+` };
+    }
+    const limitText = parsed.values.get("--limit");
+    const summaryText = parsed.values.get("--summary-chars");
+    const limit = limitText === void 0 ? void 0 : Number(limitText);
+    const summaryChars = summaryText === void 0 ? void 0 : Number(summaryText);
+    if (limit !== void 0 && (!Number.isInteger(limit) || limit < 1 || limit > 100)) return invalidArgument("--limit must be an integer between 1 and 100");
+    if (summaryChars !== void 0 && (!Number.isInteger(summaryChars) || summaryChars < 0 || summaryChars > 500)) return invalidArgument("--summary-chars must be an integer between 0 and 500");
+    const result = await getInbox({ forumAlias, ...identityId ? { identityId } : {}, sync: parsed.flags.has("--sync"), ...limit !== void 0 ? { limit } : {}, ...summaryChars !== void 0 ? { summaryChars } : {}, markRead: parsed.flags.has("--mark-read"), markAllRead: parsed.flags.has("--mark-all-read") });
+    return { exitCode: ExitCode.Success, command: "inbox", data: result, human: result.entries.length === 0 ? `No unread entries.
 marked read: ${result.markedRead}
-` : `${result.entries.map((entry) => `${entry.createdAt}	${entry.roomSlug}	${entry.type}	${entry.summary}`).join("\n")}
+` : `${result.entries.map((entry) => `${entry.createdAt}	${entry.relevance}	${entry.roomSlug}	${entry.type}	${entry.summary}`).join("\n")}
 unread: ${result.totalUnread}${result.hasMore ? " (more available)" : ""}
-`
-    };
+` };
   } catch (error) {
-    const handled = commandError("inbox", error);
+    const handled = commandError(show ? "inbox.show" : "inbox", error);
     if (handled) return handled;
     throw error;
   }
@@ -14108,15 +14748,15 @@ import { createHash, randomUUID as randomUUID6 } from "node:crypto";
 import {
   cp,
   mkdir as mkdir5,
-  readFile as readFile10,
-  readdir as readdir8,
+  readFile as readFile13,
+  readdir as readdir9,
   rename as rename5,
   rm as rm9,
   stat as stat4,
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative, resolve as resolve15, sep as sep2 } from "node:path";
+import { dirname as dirname3, relative as relative2, resolve as resolve18, sep as sep2 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 
@@ -14138,26 +14778,26 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve15(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve18(homeDirectory, ".AgentForum", "state", "installations.json");
 }
-function namedSkillDestination(target, skillName, homeDirectory = homedir2()) {
-  if (commonTargets.has(target)) {
-    return resolve15(homeDirectory, ".agents", "skills", skillName);
+function namedSkillDestination(target2, skillName, homeDirectory = homedir2()) {
+  if (commonTargets.has(target2)) {
+    return resolve18(homeDirectory, ".agents", "skills", skillName);
   }
-  if (target === "claude-code") {
-    return resolve15(homeDirectory, ".claude", "skills", skillName);
+  if (target2 === "claude-code") {
+    return resolve18(homeDirectory, ".claude", "skills", skillName);
   }
-  throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
+  throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target2}`);
 }
-function skillDestination(target, homeDirectory = homedir2()) {
-  return namedSkillDestination(target, "agent-forum", homeDirectory);
+function skillDestination(target2, homeDirectory = homedir2()) {
+  return namedSkillDestination(target2, "agent-forum", homeDirectory);
 }
-function viewerSkillDestination(target, homeDirectory = homedir2()) {
-  return namedSkillDestination(target, "agent-forum-viewer", homeDirectory);
+function viewerSkillDestination(target2, homeDirectory = homedir2()) {
+  return namedSkillDestination(target2, "agent-forum-viewer", homeDirectory);
 }
-async function pathExists4(path) {
+async function pathExists4(path2) {
   try {
-    await stat4(path);
+    await stat4(path2);
     return true;
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
@@ -14166,9 +14806,9 @@ async function pathExists4(path) {
     throw error;
   }
 }
-async function loadState(homeDirectory) {
+async function loadState2(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile10(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile13(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -14183,12 +14823,12 @@ async function loadState(homeDirectory) {
     throw error;
   }
 }
-async function saveState(homeDirectory, state) {
+async function saveState(homeDirectory, state2) {
   const destination = stateFile(homeDirectory);
   await mkdir5(dirname3(destination), { recursive: true });
   const temporary = `${destination}.tmp-${randomUUID6()}`;
   try {
-    await writeFile2(temporary, `${JSON.stringify(state, null, 2)}
+    await writeFile2(temporary, `${JSON.stringify(state2, null, 2)}
 `, {
       encoding: "utf8",
       flag: "wx"
@@ -14201,10 +14841,10 @@ async function saveState(homeDirectory, state) {
 }
 async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const files = {};
-  const entries = await readdir8(current, { withFileTypes: true });
+  const entries = await readdir9(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve15(current, entry.name);
+    const absolute = resolve18(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -14212,7 +14852,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
           `symbolic links are not allowed in the managed skill payload: ${absolute}`
         );
       }
-      const relativePath2 = relative(root, absolute).split(sep2).join("/");
+      const relativePath2 = relative2(root, absolute).split(sep2).join("/");
       files[relativePath2] = "SYMLINK";
       continue;
     }
@@ -14224,8 +14864,8 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
       continue;
     }
     if (!entry.isFile()) continue;
-    const relativePath = relative(root, absolute).split(sep2).join("/");
-    files[relativePath] = createHash("sha256").update(await readFile10(absolute)).digest("hex");
+    const relativePath = relative2(root, absolute).split(sep2).join("/");
+    files[relativePath] = createHash("sha256").update(await readFile13(absolute)).digest("hex");
   }
   return files;
 }
@@ -14237,11 +14877,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve15(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve15(process.cwd(), "skills", "agent-forum")
+    resolve18(dirname3(fileURLToPath(import.meta.url)), ".."),
+    resolve18(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists4(resolve15(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists4(resolve18(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -14272,20 +14912,20 @@ async function replaceDirectory(source, destination) {
 async function installSkill(options) {
   const homeDirectory = options.homeDirectory ?? homedir2();
   const coreSource = await resolveSkillSource(options.sourceDirectory);
-  const viewerSource = resolve15(dirname3(coreSource), "agent-forum-viewer");
-  if (!await pathExists4(resolve15(viewerSource, "SKILL.md"))) {
+  const viewerSource = resolve18(dirname3(coreSource), "agent-forum-viewer");
+  if (!await pathExists4(resolve18(viewerSource, "SKILL.md"))) {
     throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-viewer/SKILL.md");
   }
   const payloads = [
     { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
     { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) }
   ];
-  const state = await loadState(homeDirectory);
+  const state2 = await loadState2(homeDirectory);
   const inspected = await Promise.all(payloads.map(async (payload) => {
     const files2 = await collectFiles(payload.source);
     const exists2 = await pathExists4(payload.destination);
     const current = exists2 ? await collectFiles(payload.destination, payload.destination, true) : void 0;
-    const record = state.installations.find((candidate) => candidate.path === payload.destination);
+    const record = state2.installations.find((candidate) => candidate.path === payload.destination);
     return {
       ...payload,
       files: files2,
@@ -14312,7 +14952,7 @@ async function installSkill(options) {
   }
   for (const item of inspected) if (!item.unchanged) await replaceDirectory(item.source, item.destination);
   const now = options.now ?? (/* @__PURE__ */ new Date()).toISOString();
-  let installations = [...state.installations];
+  let installations = [...state2.installations];
   for (const item of inspected) {
     const existing = installations.find((record2) => record2.path === item.destination);
     const record = {
@@ -14329,16 +14969,16 @@ async function installSkill(options) {
   const action = inspected.every((item) => item.unchanged) ? "unchanged" : hasManagedUpdate ? "updated" : "installed";
   return { action, target: options.target, destination: destinations[0], destinations, version: VERSION, files, requiresReload: true };
 }
-async function getSkillStatus(target, homeDirectory = homedir2()) {
-  const destination = skillDestination(target, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(target, homeDirectory)];
-  const state = await loadState(homeDirectory);
-  const records = destinations.map((path) => state.installations.find(
-    (installation) => installation.path === path && installation.targets.includes(target)
+async function getSkillStatus(target2, homeDirectory = homedir2()) {
+  const destination = skillDestination(target2, homeDirectory);
+  const destinations = [destination, viewerSkillDestination(target2, homeDirectory)];
+  const state2 = await loadState2(homeDirectory);
+  const records = destinations.map((path2) => state2.installations.find(
+    (installation) => installation.path === path2 && installation.targets.includes(target2)
   ));
-  const exists2 = await Promise.all(destinations.map((path) => pathExists4(path)));
-  if (exists2.every((value) => !value)) return { target, destination, destinations, status: "not-installed" };
-  if (records.some((record) => !record) || exists2.some((value) => !value)) return { target, destination, destinations, status: "unmanaged" };
+  const exists2 = await Promise.all(destinations.map((path2) => pathExists4(path2)));
+  if (exists2.every((value) => !value)) return { target: target2, destination, destinations, status: "not-installed" };
+  if (records.some((record) => !record) || exists2.some((value) => !value)) return { target: target2, destination, destinations, status: "unmanaged" };
   let modified = false;
   let files = 0;
   for (let index = 0; index < destinations.length; index += 1) {
@@ -14347,17 +14987,17 @@ async function getSkillStatus(target, homeDirectory = homedir2()) {
     if (!sameFiles(current, record.files)) modified = true;
     files += Object.keys(record.files).length;
   }
-  return { target, destination, destinations, status: modified ? "modified" : "installed", version: records[0].version, files };
+  return { target: target2, destination, destinations, status: modified ? "modified" : "installed", version: records[0].version, files };
 }
 async function uninstallSkill(options) {
   const homeDirectory = options.homeDirectory ?? homedir2();
   const destination = skillDestination(options.target, homeDirectory);
   const destinations = [destination, viewerSkillDestination(options.target, homeDirectory)];
-  const state = await loadState(homeDirectory);
-  const records = state.installations.filter((installation) => destinations.includes(installation.path) && installation.targets.includes(options.target));
+  const state2 = await loadState2(homeDirectory);
+  const records = state2.installations.filter((installation) => destinations.includes(installation.path) && installation.targets.includes(options.target));
   if (records.length === 0) return { action: "not-installed", target: options.target, destination, destinations, removedFiles: false };
   for (const record of records) {
-    const remaining = record.targets.filter((target) => target !== options.target);
+    const remaining = record.targets.filter((target2) => target2 !== options.target);
     if (remaining.length === 0 && await pathExists4(record.path)) {
       const current = await collectFiles(record.path, record.path, true);
       if (!sameFiles(current, record.files) && !options.force) throw new SkillInstallationError("INSTALLATION_MODIFIED", `installed skill contains modified or additional files: ${record.path}`);
@@ -14365,9 +15005,9 @@ async function uninstallSkill(options) {
   }
   const removesFiles = records.some((record) => record.targets.length === 1);
   if (options.dryRun) return { action: "would-uninstall", target: options.target, destination, destinations, removedFiles: removesFiles };
-  let installations = [...state.installations];
+  let installations = [...state2.installations];
   for (const record of records) {
-    const remaining = record.targets.filter((target) => target !== options.target);
+    const remaining = record.targets.filter((target2) => target2 !== options.target);
     if (remaining.length === 0) {
       await rm9(record.path, { recursive: true, force: true });
       installations = installations.filter((candidate) => candidate.path !== record.path);
@@ -14378,13 +15018,13 @@ async function uninstallSkill(options) {
   await saveState(homeDirectory, { formatVersion: 1, installations });
   return { action: removesFiles ? "uninstalled" : "unregistered", target: options.target, destination, destinations, removedFiles: removesFiles };
 }
-async function doctorSkill(target, homeDirectory = homedir2()) {
+async function doctorSkill(target2, homeDirectory = homedir2()) {
   const major = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
   const git = spawnSync2("git", ["--version"], {
     encoding: "utf8",
     shell: false
   });
-  const installation = await getSkillStatus(target, homeDirectory);
+  const installation = await getSkillStatus(target2, homeDirectory);
   const node = { ok: major >= 20, version: process.versions.node, required: ">=20" };
   const gitResult = git.status === 0 ? { ok: true, version: (git.stdout ?? "").trim() } : { ok: false };
   return {
@@ -14540,7 +15180,7 @@ function threadHelp() {
     exitCode: ExitCode.Success,
     command: "thread.help",
     data: {
-      commands: ["create", "list", "show", "rename", "close", "reopen"],
+      commands: ["create", "list", "show", "rename", "close", "reopen", "watch", "unwatch", "watch-list"],
       kinds: [
         "discussion",
         "question",
@@ -14560,6 +15200,8 @@ Usage:
   agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id>
   agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>
   agent-forum thread close|reopen --forum <alias> --room <id-or-slug> --thread <thread-id> --reason <reason>
+  agent-forum thread watch|unwatch --forum <alias> --room <id-or-slug> --thread <thread-id> [--identity <member-id>]
+  agent-forum thread watch-list --forum <alias> [--identity <member-id>]
 `
   };
 }
@@ -14573,6 +15215,31 @@ async function executeThreadCommand(args) {
     return threadHelp();
   }
   try {
+    if (subcommand === "watch-list") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--identity"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = required(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const identityId = parsed.values.get("--identity");
+      const result = await listWatchedThreadIds({ forumAlias, ...identityId ? { identityId } : {} });
+      return { exitCode: ExitCode.Success, command: "thread.watch-list", data: result, human: result.threadIds.length ? `${result.threadIds.join("\n")}
+` : "No watched threads.\n" };
+    }
+    if (subcommand === "watch" || subcommand === "unwatch") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--thread", "--identity"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = required(parsed, "--forum");
+      if (typeof forumAlias !== "string") return forumAlias;
+      const room = required(parsed, "--room");
+      if (typeof room !== "string") return room;
+      const threadId = required(parsed, "--thread");
+      if (typeof threadId !== "string") return threadId;
+      await showThread(forumAlias, room, threadId);
+      const identityId = parsed.values.get("--identity");
+      const result = await setThreadWatch({ forumAlias, threadId, watch: subcommand === "watch", ...identityId ? { identityId } : {} });
+      return { exitCode: ExitCode.Success, command: `thread.${subcommand}`, data: result, human: `${result.changed ? subcommand === "watch" ? "watched" : "unwatched" : "unchanged"}: ${threadId}
+` };
+    }
     if (subcommand === "create") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: [
@@ -14715,201 +15382,8 @@ init_atomic();
 init_paths();
 import { randomBytes as randomBytes2, randomUUID as randomUUID7 } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdir as mkdir6, readFile as readFile12, readdir as readdir10, rm as rm10 } from "node:fs/promises";
-import { dirname as dirname4, resolve as resolve17 } from "node:path";
-
-// src/services/timeline-cache.ts
-init_local_config();
-init_runner();
-init_atomic();
-init_lock();
-init_paths();
-import { readFile as readFile11, readdir as readdir9 } from "node:fs/promises";
-import { relative as relative2, resolve as resolve16 } from "node:path";
-init_room();
-function cachePath(paths, forumId) {
-  return resolve16(forumStatePath(paths, forumId), "cache", "snapshot.json");
-}
-function sanitizeWarnings(repository, warnings) {
-  return warnings.map((warning) => {
-    const local = relative2(repository, warning.path).replaceAll("\\", "/");
-    return {
-      ...warning,
-      path: local && !local.startsWith("..") ? local : "<outside-forum>"
-    };
-  });
-}
-async function readEventDirectory(directory) {
-  let names;
-  try {
-    names = await readdir9(directory);
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
-    throw error;
-  }
-  const events = [];
-  for (const name of names) {
-    try {
-      const event = await readJsonDocument(resolve16(directory, name, "event.json"), "event");
-      events.push({
-        id: String(event.id),
-        kind: "event",
-        type: String(event.type),
-        actorId: String(event.actorId),
-        createdAt: String(event.createdAt),
-        reason: String(event.reason),
-        data: event.data
-      });
-    } catch {
-    }
-  }
-  return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-}
-async function readRoomMembers(repository, roomId) {
-  const members = {};
-  const directory = resolve16(repository, "rooms", roomId, "members");
-  let names = [];
-  try {
-    names = await readdir9(directory);
-  } catch {
-    return members;
-  }
-  for (const name of names) {
-    try {
-      const membership = await readJsonDocument(resolve16(directory, name, "membership.json"), "room-member");
-      members[name] = {
-        role: String(membership.role),
-        responsibility: String(membership.responsibility),
-        status: String(membership.status)
-      };
-    } catch {
-    }
-  }
-  return members;
-}
-async function buildRoom(forumAlias, repository, room, head, paths) {
-  const threads = await listThreads(forumAlias, room.id, paths);
-  const cachedThreads = [];
-  const warnings = [...threads.warnings];
-  for (const thread of threads.threads) {
-    const detail = await showThread(forumAlias, room.id, thread.id, paths);
-    warnings.push(...detail.warnings);
-    const events = await readEventDirectory(
-      resolve16(repository, "rooms", room.id, "threads", thread.id, "events")
-    );
-    const timeline = [
-      ...detail.messages.map((message) => ({ ...message, kind: "message" })),
-      ...events
-    ].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-    cachedThreads.push({ thread: detail.thread, timeline });
-  }
-  cachedThreads.sort(
-    (a, b) => b.thread.lastActivityAt.localeCompare(a.thread.lastActivityAt) || a.thread.id.localeCompare(b.thread.id)
-  );
-  return {
-    cached: {
-      room,
-      sourceHead: head,
-      members: await readRoomMembers(repository, room.id),
-      events: await readEventDirectory(resolve16(repository, "rooms", room.id, "events")),
-      threads: cachedThreads
-    },
-    warnings
-  };
-}
-async function readMembers(repository) {
-  const members = {};
-  const directory = resolve16(repository, "members");
-  let names = [];
-  try {
-    names = await readdir9(directory);
-  } catch {
-    return members;
-  }
-  for (const name of names) {
-    try {
-      const profile = await readJsonDocument(resolve16(directory, name, "profile.json"), "member-profile");
-      members[name] = {
-        displayName: String(profile.displayName),
-        role: String(profile.role),
-        responsibility: String(profile.responsibility),
-        status: String(profile.status)
-      };
-    } catch {
-    }
-  }
-  return members;
-}
-async function loadCache(path) {
-  try {
-    const value = JSON.parse(await readFile11(path, "utf8"));
-    const compatible = value.formatVersion === 1 && typeof value.sourceHead === "string" && Array.isArray(value.rooms) && value.rooms.every((room) => room && typeof room === "object" && "members" in room) && value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
-    return compatible ? value : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function affectedRooms(repository, oldHead, newHead) {
-  const diff = runGit(repository, ["diff", "--name-only", `${oldHead}..${newHead}`]);
-  if (diff.status !== 0) return void 0;
-  const ids = /* @__PURE__ */ new Set();
-  for (const path of diff.stdout.split(/\r?\n/u)) {
-    const match = /^rooms\/([^/]+)\//u.exec(path.replaceAll("\\", "/"));
-    if (match?.[1]) ids.add(match[1]);
-  }
-  return ids;
-}
-async function getForumSnapshot(forumAlias, paths = createAgentForumPaths()) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, forumAlias);
-  const head = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
-  const path = cachePath(paths, registration.forumId);
-  const existing = await loadCache(path);
-  if (existing?.sourceHead === head) return { snapshot: existing, cache: "hit" };
-  const lock = await acquireForumLock({
-    lockPath: resolve16(paths.locksDirectory, `${registration.forumId}-cache.lock`),
-    command: "cache rebuild"
-  });
-  try {
-    const latest = await loadCache(path);
-    if (latest?.sourceHead === head) return { snapshot: latest, cache: "hit" };
-    const affected = latest ? affectedRooms(registration.path, latest.sourceHead, head) : void 0;
-    const [forum, rooms] = await Promise.all([
-      showForum(forumAlias, paths),
-      listRooms(forumAlias, paths)
-    ]);
-    const oldRooms = new Map((latest?.rooms ?? []).map((room) => [room.room.id, room]));
-    const cachedRooms = [];
-    const warnings = [...forum.warnings, ...rooms.warnings];
-    for (const room of rooms.rooms) {
-      const preserved = affected && !affected.has(room.id) ? oldRooms.get(room.id) : void 0;
-      if (preserved) cachedRooms.push(preserved);
-      else {
-        const built = await buildRoom(forumAlias, registration.path, room, head, paths);
-        cachedRooms.push(built.cached);
-        warnings.push(...built.warnings);
-      }
-    }
-    cachedRooms.sort((a, b) => a.room.slug.localeCompare(b.room.slug));
-    const snapshot = {
-      formatVersion: 1,
-      forumAlias,
-      forumId: registration.forumId,
-      sourceHead: head,
-      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      forum: forum.forum,
-      members: await readMembers(registration.path),
-      rooms: cachedRooms,
-      warnings: sanitizeWarnings(registration.path, warnings)
-    };
-    await writeJsonAtomic(path, snapshot, { overwrite: true, mode: 384 });
-    return { snapshot, cache: latest && affected ? "incremental" : "rebuilt" };
-  } finally {
-    await lock.release();
-  }
-}
-
-// src/services/viewer.ts
+import { mkdir as mkdir6, readFile as readFile14, readdir as readdir10, rm as rm10 } from "node:fs/promises";
+import { dirname as dirname4, resolve as resolve19 } from "node:path";
 init_errors2();
 
 // src/viewer/server.ts
@@ -15186,7 +15660,7 @@ async function startViewerServer(input) {
 // src/services/viewer.ts
 function sessionPath(paths, id) {
   if (!/^[0-9a-f-]{36}$/u.test(id)) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", "invalid Viewer session ID");
-  return resolve17(paths.viewerDirectory, `${id}.json`);
+  return resolve19(paths.viewerDirectory, `${id}.json`);
 }
 async function isProcessAlive(pid) {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
@@ -15197,9 +15671,9 @@ async function isProcessAlive(pid) {
     return false;
   }
 }
-async function readSession(path) {
+async function readSession(path2) {
   try {
-    const value = JSON.parse(await readFile12(path, "utf8"));
+    const value = JSON.parse(await readFile14(path2, "utf8"));
     const url = new URL(value.url);
     const validUrl = url.protocol === "http:" && url.hostname === "127.0.0.1" && /^\/session\/[0-9a-f]{32}\/$/u.test(url.pathname);
     return value.formatVersion === 1 && /^[0-9a-f-]{36}$/u.test(value.sessionId) && Number.isSafeInteger(value.pid) && value.pid > 0 && validUrl ? value : void 0;
@@ -15216,10 +15690,10 @@ async function listViewerSessions(paths = createAgentForumPaths()) {
   }
   const sessions = [];
   for (const name of names.filter((name2) => name2.endsWith(".json"))) {
-    const path = resolve17(paths.viewerDirectory, name);
-    const session = await readSession(path);
+    const path2 = resolve19(paths.viewerDirectory, name);
+    const session = await readSession(path2);
     if (session && await isProcessAlive(session.pid)) sessions.push(session);
-    else await rm10(path, { force: true });
+    else await rm10(path2, { force: true });
   }
   return sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
@@ -15232,10 +15706,10 @@ async function cleanViewerSessions(paths = createAgentForumPaths()) {
   }
   let removed = 0;
   for (const name of names.filter((name2) => name2.endsWith(".json") || name2.endsWith(".ready"))) {
-    const path = resolve17(paths.viewerDirectory, name);
-    const session = name.endsWith(".json") ? await readSession(path) : void 0;
+    const path2 = resolve19(paths.viewerDirectory, name);
+    const session = name.endsWith(".json") ? await readSession(path2) : void 0;
     if (!session || !await isProcessAlive(session.pid)) {
-      await rm10(path, { force: true });
+      await rm10(path2, { force: true });
       removed += 1;
     }
   }
@@ -15309,11 +15783,11 @@ async function openViewer(input, paths = createAgentForumPaths()) {
     startError = error;
   });
   child.unref();
-  const path = sessionPath(paths, sessionId);
+  const path2 = sessionPath(paths, sessionId);
   const deadline = Date.now() + 1e4;
   let session;
   while (Date.now() < deadline) {
-    session = await readSession(path);
+    session = await readSession(path2);
     if (session) break;
     if (!await isProcessAlive(child.pid ?? -1)) break;
     await new Promise((resolveWait) => setTimeout(resolveWait, 50));
@@ -15326,7 +15800,7 @@ async function generateViewerHtml(input, paths = createAgentForumPaths()) {
   const context = await resolveContext({ ...input.cwd ? { cwd: input.cwd } : {}, ...input.forumAlias ? { forumAlias: input.forumAlias } : {}, ...input.room ? { room: input.room } : {} }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const cached = await getForumSnapshot(context.forumAlias, paths);
-  const output2 = input.output ?? resolve17(paths.viewerDirectory, `${context.roomId}.html`);
+  const output2 = input.output ?? resolve19(paths.viewerDirectory, `${context.roomId}.html`);
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir6(dirname4(output2), { recursive: true });

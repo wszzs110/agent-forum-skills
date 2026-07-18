@@ -4,17 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
-import { getInbox } from "../src/services/inbox.js";
+import { getInbox, showInboxEntry } from "../src/services/inbox.js";
 import { initLocalForum, publishIdentity } from "../src/services/local-forum.js";
 import { createRoom, joinRoom, leaveRoom } from "../src/services/room.js";
 import { createPost, createThread, createThreadEvent } from "../src/services/thread.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
+import { setThreadWatch } from "../src/services/thread-watch.js";
 
 const memberA = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
 const memberB = "member_0194f6d2-8c10-7a31-9e42-123456789ac2";
 const forumId = "forum_0194f6d2-8c10-7a31-9e42-123456789abc";
 const roomId = "room_0194f6d2-8c10-7a31-9e42-123456789abd";
 const threadId = "thread_0194f6d2-8c10-7a31-9e42-123456789abe";
+const discoveryThreadId = "thread_0194f6d2-8c10-7a31-9e42-123456789abf";
 const createdAt = new Date("2026-07-12T10:20:30.123Z");
 
 async function setup(home: string) {
@@ -77,6 +79,12 @@ test("Inbox returns relevant unread entries newest-first and marks pages explici
     assert.equal(first.hasMore, true);
     assert.equal(first.entries[0]?.summary, "Frontend implementation has started.");
     assert.equal(first.markedRead, 0);
+    const short = await getInbox({ forumAlias: "team", limit: 1, summaryChars: 8 }, paths);
+    assert.equal(short.entries[0]?.summaryTruncated, true);
+    assert.equal(short.entries[0]?.summary, "Front...");
+    const shown = await showInboxEntry({ forumAlias: "team", id: first.entries[0]?.id ?? "" }, paths);
+    assert.equal(shown.content.body, "Frontend implementation has started.");
+    assert.notEqual(shown.cache, "fallback");
 
     const marked = await getInbox(
       { forumAlias: "team", limit: 1, markRead: true },
@@ -92,6 +100,23 @@ test("Inbox returns relevant unread entries newest-first and marks pages explici
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+});
+
+test("Inbox promotes replies and watched closed Threads without hiding discovery", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-inbox-relevance-"));
+  try {
+    const paths = await setup(home);
+    await createThread({ forumAlias: "team", room: "checkout", identityId: memberB, title: "Watched", kind: "discussion", body: "Opening.", threadId, now: new Date("2026-07-12T10:21:00.000Z") }, paths);
+    await setThreadWatch({ forumAlias: "team", threadId, watch: true }, paths);
+    const mine = await createPost({ forumAlias: "team", room: "checkout", thread: threadId, type: "status", body: "My tracked update.", now: new Date("2026-07-12T10:22:00.000Z") }, paths);
+    await createPost({ forumAlias: "team", room: "checkout", thread: threadId, identityId: memberB, replyTo: mine.message.id, type: "answer", body: "Reply to A.", now: new Date("2026-07-12T10:23:00.000Z") }, paths);
+    await createThreadEvent({ forumAlias: "team", room: "checkout", thread: threadId, identityId: memberB, type: "thread-closed", reason: "Completed.", data: {}, now: new Date("2026-07-12T10:24:00.000Z") }, paths);
+    await createThread({ forumAlias: "team", room: "checkout", identityId: memberB, title: "Unrelated", kind: "discussion", body: "Discovery item.", threadId: discoveryThreadId, now: new Date("2026-07-12T10:25:00.000Z") }, paths);
+    const inbox = await getInbox({ forumAlias: "team", limit: 3 }, paths);
+    assert.equal(inbox.entries.some((entry) => entry.summary === "Reply to A." && entry.relevance === "direct"), true);
+    assert.equal(inbox.entries.some((entry) => entry.type === "thread-closed" && entry.relevance === "watched"), true);
+    assert.equal(inbox.relevanceCounts.discovery > 0, true);
+  } finally { await rm(home, { recursive: true, force: true }); }
 });
 
 test("Inbox includes Room/Thread events, excludes own activity, and stops while left", async () => {

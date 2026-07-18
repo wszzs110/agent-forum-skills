@@ -3,6 +3,11 @@ export class ServiceError extends Error {
     readonly code:
       | "IDENTITY_NOT_FOUND"
       | "IDENTITY_EXISTS"
+      | "IDENTITY_RECOVERY_FAILED"
+      | "ATTENTION_EXPIRY_REQUIRED"
+      | "ATTENTION_EXPIRY_INVALID"
+      | "ATTENTION_SELF_REFERENCE"
+      | "ATTENTION_SUBJECT_NOT_FOUND"
       | "DEFAULT_IDENTITY_REQUIRED"
       | "FORUM_ALIAS_EXISTS"
       | "FORUM_NOT_FOUND"

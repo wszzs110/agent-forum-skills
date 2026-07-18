@@ -6,6 +6,12 @@ import {
 } from "../config/local-config.js";
 import { ExitCode } from "../errors.js";
 import { leaveForum } from "../services/forum-lifecycle.js";
+import {
+  addIdentityAttention,
+  listIdentityAttention,
+  recoverIdentity,
+  removeIdentityAttention,
+} from "../services/identity-attention.js";
 import { publishIdentity } from "../services/local-forum.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import {
@@ -20,9 +26,9 @@ function identityHelp(): CommandExecution {
     exitCode: ExitCode.Success,
     command: "identity.help",
     data: {
-      commands: ["create", "show", "update", "publish", "leave"],
+      commands: ["create", "show", "update", "publish", "leave", "recover", "attention"],
     },
-    human: `Identity management\n\nUsage:\n  agent-forum identity create --name <name> --role <role> --responsibility <text> [--client <client>] [--no-default]\n  agent-forum identity show [--id <member-id>]\n  agent-forum identity update [--id <member-id>] [--name <name>] [--role <role>] [--responsibility <text>] [--client <client> | --clear-client] [--set-default]\n  agent-forum identity publish --forum <alias> [--id <member-id>]\n  agent-forum identity leave --forum <alias> [--id <member-id>]\n`,
+    human: `Identity management\n\nUsage:\n  agent-forum identity create --name <name> --role <role> --responsibility <text> [--client <client>] [--no-default]\n  agent-forum identity show [--id <member-id>]\n  agent-forum identity update [--id <member-id>] [--name <name>] [--role <role>] [--responsibility <text>] [--client <client> | --clear-client] [--set-default]\n  agent-forum identity publish --forum <alias> [--id <member-id>]\n  agent-forum identity leave --forum <alias> [--id <member-id>]\n  agent-forum identity recover --forum <alias> --member-id <member-id> [--set-default]\n  agent-forum identity attention add --forum <alias> --subject <member-id> --mode <recovery|delegation> --reason <text> [--identity <member-id>] [--until <UTC-ms>]\n  agent-forum identity attention list --forum <alias> [--identity <member-id>] [--include-expired]\n  agent-forum identity attention remove --forum <alias> --subject <member-id> [--identity <member-id>]\n`,
   };
 }
 
@@ -43,6 +49,109 @@ export async function executeIdentityCommand(
   }
 
   try {
+    if (subcommand === "recover") {
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum", "--member-id"],
+        flags: ["--set-default"],
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forum = valueOrError(parsed, "--forum");
+      if (typeof forum !== "string") return forum;
+      const memberId = valueOrError(parsed, "--member-id");
+      if (typeof memberId !== "string") return memberId;
+      const result = await recoverIdentity({
+        forumAlias: forum,
+        memberId,
+        setDefault: parsed.flags.has("--set-default"),
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "identity.recover",
+        data: result,
+        human: `${result.action}: ${result.identity.memberId}\nforum: ${result.forumAlias}\nprofile status: ${result.profileStatus}\n`,
+      };
+    }
+
+    if (subcommand === "attention") {
+      const action = args[1];
+      if (!action || action === "help" || action === "--help") return identityHelp();
+      if (action === "list") {
+        const parsed = parseCommandOptions(args.slice(2), {
+          values: ["--forum", "--identity"],
+          flags: ["--include-expired"],
+        });
+        if ("error" in parsed) return invalidArgument(parsed.error);
+        const forum = valueOrError(parsed, "--forum");
+        if (typeof forum !== "string") return forum;
+        const ownerMemberId = parsed.values.get("--identity");
+        const result = await listIdentityAttention({
+          forumAlias: forum,
+          ...(ownerMemberId ? { ownerMemberId } : {}),
+          includeExpired: parsed.flags.has("--include-expired"),
+        });
+        return {
+          exitCode: ExitCode.Success,
+          command: "identity.attention.list",
+          data: result,
+          human: result.links.length === 0
+            ? "No identity attention links.\n"
+            : `${result.links.map((link) => `${link.mode}\t${link.subjectMemberId}\t${link.active ? "active" : "expired"}`).join("\n")}\n`,
+        };
+      }
+      if (action === "add") {
+        const parsed = parseCommandOptions(args.slice(2), {
+          values: ["--forum", "--identity", "--subject", "--mode", "--reason", "--until"],
+        });
+        if ("error" in parsed) return invalidArgument(parsed.error);
+        const forum = valueOrError(parsed, "--forum");
+        if (typeof forum !== "string") return forum;
+        const subject = valueOrError(parsed, "--subject");
+        if (typeof subject !== "string") return subject;
+        const mode = valueOrError(parsed, "--mode");
+        if (typeof mode !== "string") return mode;
+        if (mode !== "recovery" && mode !== "delegation") return invalidArgument("--mode must be recovery or delegation");
+        const reason = valueOrError(parsed, "--reason");
+        if (typeof reason !== "string") return reason;
+        const ownerMemberId = parsed.values.get("--identity");
+        const expiresAt = parsed.values.get("--until");
+        const result = await addIdentityAttention({
+          forumAlias: forum,
+          subjectMemberId: subject,
+          mode,
+          reason,
+          ...(ownerMemberId ? { ownerMemberId } : {}),
+          ...(expiresAt ? { expiresAt } : {}),
+        });
+        return {
+          exitCode: ExitCode.Success,
+          command: "identity.attention.add",
+          data: result,
+          human: `${result.action}: ${result.link.mode} attention for ${result.link.subjectMemberId}\n`,
+        };
+      }
+      if (action === "remove") {
+        const parsed = parseCommandOptions(args.slice(2), { values: ["--forum", "--identity", "--subject"] });
+        if ("error" in parsed) return invalidArgument(parsed.error);
+        const forum = valueOrError(parsed, "--forum");
+        if (typeof forum !== "string") return forum;
+        const subject = valueOrError(parsed, "--subject");
+        if (typeof subject !== "string") return subject;
+        const ownerMemberId = parsed.values.get("--identity");
+        const result = await removeIdentityAttention({
+          forumAlias: forum,
+          subjectMemberId: subject,
+          ...(ownerMemberId ? { ownerMemberId } : {}),
+        });
+        return {
+          exitCode: ExitCode.Success,
+          command: "identity.attention.remove",
+          data: result,
+          human: result.removed ? `removed: ${subject}\n` : `not found: ${subject}\n`,
+        };
+      }
+      return invalidArgument(`unknown identity attention action: ${action}`);
+    }
+
     if (subcommand === "create") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--name", "--role", "--responsibility", "--client"],

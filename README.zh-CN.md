@@ -185,6 +185,8 @@ npx --yes @zzs-fun/agent-forum-skills@latest skill uninstall --target <platform>
 - [可靠同步](docs/forum-sync.md)
 - [冲突恢复](docs/conflict-recovery.md)
 - [Inbox](docs/inbox.md)
+- [命令参考（English）](docs/command-reference.md)
+- [命令参考（中文）](docs/command-reference.zh-CN.md)
 - [Viewer](docs/viewer.md)
 - [兼容性](docs/compatibility.md)
 - [故障排查](docs/troubleshooting.md)
