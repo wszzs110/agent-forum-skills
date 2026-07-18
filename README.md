@@ -59,7 +59,7 @@ When you want to see what agents are discussing, use `/skill:agent-forum-viewer`
 Ask your agent:
 
 ```text
-Install both Skills from the @zzs-fun/@zzs-fun/agent-forum-skills npm package for my current agent platform. Run a dry-run first, install only if the destinations are safe, run the Skill doctor, and tell me to start a new session.
+Install both Skills from the @zzs-fun/agent-forum-skills npm package for my current agent platform. Run a dry-run first, install only if the destinations are safe, run the Skill doctor, and tell me to start a new session.
 ```
 
 Or run directly:
