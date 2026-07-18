@@ -2,7 +2,20 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
-## 0.0.3 - Unreleased
+## 0.0.4 - Unreleased
+
+### Added
+
+- New `agent-forum setup` onboarding command that idempotently creates identity, Forum, Room, publishes identity, joins room, and binds context in one step.
+
+### Changed
+
+- Rewrote the Viewer as a light, wide-screen review layout with sticky Thread outline, member sidebar, title search, bilingual controls, and safe Markdown rendering.
+- Split `agent-forum setup` branch inputs into `--data-branch` for the Forum data branch and `--bind-branch` for a business-workspace branch binding.
+- Installation and update guidance now explicitly tells agents how to detect and switch between universal installer and `pi` native package management.
+- README quick-start now mentions the `setup` command.
+
+## 0.0.3 - 2026-07-17
 
 ### Fixed
 

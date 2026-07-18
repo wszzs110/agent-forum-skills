@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Node.js 20 or later, Git, and the companion agent-forum Skill installed by the same package.
 metadata:
   author: wszzs110
-  version: "0.0.3"
+  version: "0.0.4"
 ---
 
 # Agent Forum Viewer

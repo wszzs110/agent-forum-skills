@@ -5,8 +5,15 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -24,6 +31,433 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+
+// node_modules/uuid/dist-node/regex.js
+var regex_default;
+var init_regex = __esm({
+  "node_modules/uuid/dist-node/regex.js"() {
+    regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
+  }
+});
+
+// node_modules/uuid/dist-node/validate.js
+function validate(uuid) {
+  return typeof uuid === "string" && regex_default.test(uuid);
+}
+var validate_default;
+var init_validate = __esm({
+  "node_modules/uuid/dist-node/validate.js"() {
+    init_regex();
+    validate_default = validate;
+  }
+});
+
+// node_modules/uuid/dist-node/stringify.js
+function unsafeStringify(arr, offset = 0) {
+  return (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase();
+}
+var byteToHex;
+var init_stringify = __esm({
+  "node_modules/uuid/dist-node/stringify.js"() {
+    byteToHex = [];
+    for (let i = 0; i < 256; ++i) {
+      byteToHex.push((i + 256).toString(16).slice(1));
+    }
+  }
+});
+
+// node_modules/uuid/dist-node/rng.js
+function rng() {
+  return crypto.getRandomValues(rnds8);
+}
+var rnds8;
+var init_rng = __esm({
+  "node_modules/uuid/dist-node/rng.js"() {
+    rnds8 = new Uint8Array(16);
+  }
+});
+
+// node_modules/uuid/dist-node/v7.js
+function v7(options, buf, offset) {
+  let bytes;
+  if (options) {
+    bytes = v7Bytes(options.random ?? options.rng?.() ?? rng(), options.msecs, options.seq, buf, offset);
+  } else {
+    const now = Date.now();
+    const rnds = rng();
+    updateV7State(_state, now, rnds);
+    bytes = v7Bytes(rnds, _state.msecs, _state.seq, buf, offset);
+  }
+  return buf ?? unsafeStringify(bytes);
+}
+function updateV7State(state, now, rnds) {
+  state.msecs ??= -Infinity;
+  state.seq ??= 0;
+  if (now > state.msecs) {
+    state.seq = rnds[6] << 23 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
+    state.msecs = now;
+  } else {
+    state.seq = state.seq + 1 | 0;
+    if (state.seq === 0) {
+      state.msecs++;
+    }
+  }
+  return state;
+}
+function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
+  if (rnds.length < 16) {
+    throw new Error("Random bytes length must be >= 16");
+  }
+  if (!buf) {
+    buf = new Uint8Array(16);
+    offset = 0;
+  } else {
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
+  }
+  msecs ??= Date.now();
+  seq ??= rnds[6] * 127 << 24 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
+  buf[offset++] = msecs / 1099511627776 & 255;
+  buf[offset++] = msecs / 4294967296 & 255;
+  buf[offset++] = msecs / 16777216 & 255;
+  buf[offset++] = msecs / 65536 & 255;
+  buf[offset++] = msecs / 256 & 255;
+  buf[offset++] = msecs & 255;
+  buf[offset++] = 112 | seq >>> 28 & 15;
+  buf[offset++] = seq >>> 20 & 255;
+  buf[offset++] = 128 | seq >>> 14 & 63;
+  buf[offset++] = seq >>> 6 & 255;
+  buf[offset++] = seq << 2 & 255 | rnds[10] & 3;
+  buf[offset++] = rnds[11];
+  buf[offset++] = rnds[12];
+  buf[offset++] = rnds[13];
+  buf[offset++] = rnds[14];
+  buf[offset++] = rnds[15];
+  return buf;
+}
+var _state, v7_default;
+var init_v7 = __esm({
+  "node_modules/uuid/dist-node/v7.js"() {
+    init_rng();
+    init_stringify();
+    _state = {};
+    v7_default = v7;
+  }
+});
+
+// node_modules/uuid/dist-node/version.js
+function version(uuid) {
+  if (!validate_default(uuid)) {
+    throw TypeError("Invalid UUID");
+  }
+  return parseInt(uuid.slice(14, 15), 16);
+}
+var version_default;
+var init_version = __esm({
+  "node_modules/uuid/dist-node/version.js"() {
+    init_validate();
+    version_default = version;
+  }
+});
+
+// node_modules/uuid/dist-node/index.js
+var init_dist_node = __esm({
+  "node_modules/uuid/dist-node/index.js"() {
+    init_v7();
+    init_validate();
+    init_version();
+  }
+});
+
+// src/domain/ids.ts
+function createEntityId(kind) {
+  return `${entityPrefixes[kind]}_${v7_default()}`;
+}
+function isEntityId(value, kind) {
+  const prefix = `${entityPrefixes[kind]}_`;
+  if (!value.startsWith(prefix) || value !== value.toLowerCase()) return false;
+  const uuid = value.slice(prefix.length);
+  return validate_default(uuid) && version_default(uuid) === 7;
+}
+var entityPrefixes;
+var init_ids = __esm({
+  "src/domain/ids.ts"() {
+    "use strict";
+    init_dist_node();
+    entityPrefixes = {
+      forum: "forum",
+      room: "room",
+      thread: "thread",
+      message: "msg",
+      event: "evt",
+      member: "member",
+      binding: "binding"
+    };
+  }
+});
+
+// src/domain/timestamps.ts
+function isCanonicalUtcTimestamp(value) {
+  if (!utcTimestampWithMilliseconds.test(value)) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString() === value;
+}
+function currentUtcTimestamp(now = /* @__PURE__ */ new Date()) {
+  return now.toISOString();
+}
+var utcTimestampWithMilliseconds;
+var init_timestamps = __esm({
+  "src/domain/timestamps.ts"() {
+    "use strict";
+    utcTimestampWithMilliseconds = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/u;
+  }
+});
+
+// src/storage/errors.ts
+var StorageError;
+var init_errors = __esm({
+  "src/storage/errors.ts"() {
+    "use strict";
+    StorageError = class extends Error {
+      constructor(code, message, details) {
+        super(message);
+        this.code = code;
+        this.details = details;
+        this.name = "StorageError";
+      }
+    };
+  }
+});
+
+// src/storage/lock.ts
+import { randomUUID } from "node:crypto";
+import { hostname } from "node:os";
+import {
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile
+} from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+function defaultProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return Boolean(
+      error && typeof error === "object" && "code" in error && error.code === "EPERM"
+    );
+  }
+}
+async function readOwner(lockPath) {
+  try {
+    const value = JSON.parse(
+      await readFile(resolve(lockPath, ownerFileName), "utf8")
+    );
+    if (typeof value.token !== "string" || typeof value.pid !== "number" || typeof value.hostname !== "string" || typeof value.command !== "string" || typeof value.startedAt !== "string" || !isCanonicalUtcTimestamp(value.startedAt)) {
+      return void 0;
+    }
+    return value;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && (error.code === "ENOENT" || error instanceof SyntaxError)) {
+      return void 0;
+    }
+    if (error instanceof SyntaxError) return void 0;
+    throw error;
+  }
+}
+async function lockAgeMs(lockPath, owner, now) {
+  if (owner) return now.valueOf() - new Date(owner.startedAt).valueOf();
+  return now.valueOf() - (await stat(lockPath)).mtimeMs;
+}
+async function removeStaleLock(lockPath) {
+  const quarantine = `${lockPath}.stale-${randomUUID()}`;
+  await rename(lockPath, quarantine);
+  await rm(quarantine, { recursive: true, force: true });
+}
+async function acquireForumLock(options) {
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
+  const currentHostname = options.hostname ?? hostname();
+  const currentPid = options.pid ?? process.pid;
+  const isProcessAlive2 = options.isProcessAlive ?? defaultProcessAlive;
+  const owner = {
+    token: randomUUID(),
+    pid: currentPid,
+    hostname: currentHostname,
+    command: options.command,
+    startedAt: currentUtcTimestamp(now)
+  };
+  await mkdir(dirname(options.lockPath), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await mkdir(options.lockPath, { mode: 448 });
+      try {
+        await writeFile(
+          resolve(options.lockPath, ownerFileName),
+          `${JSON.stringify(owner, null, 2)}
+`,
+          { encoding: "utf8", flag: "wx", mode: 384 }
+        );
+      } catch (error) {
+        await rm(options.lockPath, { recursive: true, force: true });
+        throw error;
+      }
+      return {
+        path: options.lockPath,
+        owner,
+        release: async () => {
+          const current = await readOwner(options.lockPath);
+          if (!current || current.token !== owner.token) {
+            throw new StorageError(
+              "LOCK_OWNERSHIP_LOST",
+              `lock ownership changed before release: ${options.lockPath}`
+            );
+          }
+          await rm(options.lockPath, { recursive: true, force: true });
+        }
+      };
+    } catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") {
+        throw error;
+      }
+      const existing = await readOwner(options.lockPath);
+      const age = await lockAgeMs(options.lockPath, existing, now);
+      const sameHost = !existing || existing.hostname === currentHostname;
+      const alive = existing && sameHost ? isProcessAlive2(existing.pid) : false;
+      const removable = age >= staleAfterMs && sameHost && !alive;
+      if (attempt === 0 && removable) {
+        try {
+          await removeStaleLock(options.lockPath);
+          continue;
+        } catch (staleError) {
+          if (staleError && typeof staleError === "object" && "code" in staleError && staleError.code === "ENOENT") {
+            continue;
+          }
+          throw staleError;
+        }
+      }
+      throw new StorageError(
+        "LOCAL_LOCKED",
+        `forum write lock is already held: ${options.lockPath}`,
+        existing ? { ...existing, token: void 0 } : { ageMs: age }
+      );
+    }
+  }
+  throw new StorageError(
+    "LOCAL_LOCKED",
+    `forum write lock could not be acquired: ${options.lockPath}`
+  );
+}
+async function clearStaleForumLock(options) {
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
+  const currentHostname = options.hostname ?? hostname();
+  const isProcessAlive2 = options.isProcessAlive ?? defaultProcessAlive;
+  let owner;
+  try {
+    owner = await readOwner(options.lockPath);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+  let age;
+  try {
+    age = await lockAgeMs(options.lockPath, owner, now);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+  const sameHost = !owner || owner.hostname === currentHostname;
+  const alive = owner && sameHost ? isProcessAlive2(owner.pid) : false;
+  if (age < staleAfterMs || !sameHost || alive) {
+    throw new StorageError(
+      "LOCK_NOT_STALE",
+      `lock is not safe to clear: ${options.lockPath}`
+    );
+  }
+  await removeStaleLock(options.lockPath);
+  return true;
+}
+var ownerFileName;
+var init_lock = __esm({
+  "src/storage/lock.ts"() {
+    "use strict";
+    init_timestamps();
+    init_errors();
+    ownerFileName = "owner.json";
+  }
+});
+
+// src/storage/paths.ts
+import { realpath } from "node:fs/promises";
+import { homedir } from "node:os";
+import { resolve as resolve2, sep } from "node:path";
+function createAgentForumPaths(homeDirectory = homedir()) {
+  const root = resolve2(homeDirectory, ".AgentForum");
+  const stateDirectory = resolve2(root, "state");
+  return {
+    root,
+    configFile: resolve2(root, "config.json"),
+    forumsDirectory: resolve2(root, "forums"),
+    stateDirectory,
+    locksDirectory: resolve2(stateDirectory, "locks"),
+    cacheDirectory: resolve2(stateDirectory, "cache"),
+    viewerDirectory: resolve2(stateDirectory, "viewer"),
+    installationsFile: resolve2(stateDirectory, "installations.json"),
+    bindingsFile: resolve2(stateDirectory, "context-bindings.json")
+  };
+}
+function assertLocalAlias(alias) {
+  if (!localAliasPattern.test(alias)) {
+    throw new StorageError(
+      "INVALID_LOCAL_ALIAS",
+      `local alias must match ${localAliasPattern.source}: ${alias}`
+    );
+  }
+}
+function forumClonePath(paths, alias) {
+  assertLocalAlias(alias);
+  return resolve2(paths.forumsDirectory, alias);
+}
+function forumStatePath(paths, forumId) {
+  if (!isEntityId(forumId, "forum")) {
+    throw new StorageError("INVALID_FORUM_ID", `invalid forum ID: ${forumId}`);
+  }
+  return resolve2(paths.stateDirectory, forumId);
+}
+function forumLockPath(paths, forumId) {
+  if (!isEntityId(forumId, "forum")) {
+    throw new StorageError("INVALID_FORUM_ID", `invalid forum ID: ${forumId}`);
+  }
+  return resolve2(paths.locksDirectory, `${forumId}.lock`);
+}
+async function sameExistingPath(left, right) {
+  const [canonicalLeft, canonicalRight] = await Promise.all([
+    realpath(resolve2(left)),
+    realpath(resolve2(right))
+  ]);
+  if (process.platform === "win32") {
+    return canonicalLeft.toLowerCase() === canonicalRight.toLowerCase();
+  }
+  return canonicalLeft === canonicalRight;
+}
+var localAliasPattern;
+var init_paths = __esm({
+  "src/storage/paths.ts"() {
+    "use strict";
+    init_ids();
+    init_errors();
+    localAliasPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+  }
+});
 
 // node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
@@ -7139,523 +7573,491 @@ var require__ = __commonJS({
   }
 });
 
-// src/errors.ts
-var ExitCode = {
-  Success: 0,
-  Unexpected: 1,
-  Usage: 2
-};
-
-// src/services/context.ts
-import { resolve as resolve7 } from "node:path";
-
-// src/config/local-config.ts
-import { readFile as readFile2 } from "node:fs/promises";
-import { resolve as resolve4 } from "node:path";
-
-// node_modules/uuid/dist-node/regex.js
-var regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
-
-// node_modules/uuid/dist-node/validate.js
-function validate(uuid) {
-  return typeof uuid === "string" && regex_default.test(uuid);
-}
-var validate_default = validate;
-
-// node_modules/uuid/dist-node/stringify.js
-var byteToHex = [];
-for (let i = 0; i < 256; ++i) {
-  byteToHex.push((i + 256).toString(16).slice(1));
-}
-function unsafeStringify(arr, offset = 0) {
-  return (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase();
-}
-
-// node_modules/uuid/dist-node/rng.js
-var rnds8 = new Uint8Array(16);
-function rng() {
-  return crypto.getRandomValues(rnds8);
-}
-
-// node_modules/uuid/dist-node/v7.js
-var _state = {};
-function v7(options, buf, offset) {
-  let bytes;
-  if (options) {
-    bytes = v7Bytes(options.random ?? options.rng?.() ?? rng(), options.msecs, options.seq, buf, offset);
-  } else {
-    const now = Date.now();
-    const rnds = rng();
-    updateV7State(_state, now, rnds);
-    bytes = v7Bytes(rnds, _state.msecs, _state.seq, buf, offset);
-  }
-  return buf ?? unsafeStringify(bytes);
-}
-function updateV7State(state, now, rnds) {
-  state.msecs ??= -Infinity;
-  state.seq ??= 0;
-  if (now > state.msecs) {
-    state.seq = rnds[6] << 23 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
-    state.msecs = now;
-  } else {
-    state.seq = state.seq + 1 | 0;
-    if (state.seq === 0) {
-      state.msecs++;
-    }
-  }
-  return state;
-}
-function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
-  if (rnds.length < 16) {
-    throw new Error("Random bytes length must be >= 16");
-  }
-  if (!buf) {
-    buf = new Uint8Array(16);
-    offset = 0;
-  } else {
-    if (offset < 0 || offset + 16 > buf.length) {
-      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
-    }
-  }
-  msecs ??= Date.now();
-  seq ??= rnds[6] * 127 << 24 | rnds[7] << 16 | rnds[8] << 8 | rnds[9];
-  buf[offset++] = msecs / 1099511627776 & 255;
-  buf[offset++] = msecs / 4294967296 & 255;
-  buf[offset++] = msecs / 16777216 & 255;
-  buf[offset++] = msecs / 65536 & 255;
-  buf[offset++] = msecs / 256 & 255;
-  buf[offset++] = msecs & 255;
-  buf[offset++] = 112 | seq >>> 28 & 15;
-  buf[offset++] = seq >>> 20 & 255;
-  buf[offset++] = 128 | seq >>> 14 & 63;
-  buf[offset++] = seq >>> 6 & 255;
-  buf[offset++] = seq << 2 & 255 | rnds[10] & 3;
-  buf[offset++] = rnds[11];
-  buf[offset++] = rnds[12];
-  buf[offset++] = rnds[13];
-  buf[offset++] = rnds[14];
-  buf[offset++] = rnds[15];
-  return buf;
-}
-var v7_default = v7;
-
-// node_modules/uuid/dist-node/version.js
-function version(uuid) {
-  if (!validate_default(uuid)) {
-    throw TypeError("Invalid UUID");
-  }
-  return parseInt(uuid.slice(14, 15), 16);
-}
-var version_default = version;
-
-// src/domain/ids.ts
-var entityPrefixes = {
-  forum: "forum",
-  room: "room",
-  thread: "thread",
-  message: "msg",
-  event: "evt",
-  member: "member",
-  binding: "binding"
-};
-function createEntityId(kind) {
-  return `${entityPrefixes[kind]}_${v7_default()}`;
-}
-function isEntityId(value, kind) {
-  const prefix = `${entityPrefixes[kind]}_`;
-  if (!value.startsWith(prefix) || value !== value.toLowerCase()) return false;
-  const uuid = value.slice(prefix.length);
-  return validate_default(uuid) && version_default(uuid) === 7;
-}
-
-// src/domain/timestamps.ts
-var utcTimestampWithMilliseconds = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/u;
-function isCanonicalUtcTimestamp(value) {
-  if (!utcTimestampWithMilliseconds.test(value)) return false;
-  const parsed = new Date(value);
-  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString() === value;
-}
-function currentUtcTimestamp(now = /* @__PURE__ */ new Date()) {
-  return now.toISOString();
-}
-
-// src/storage/lock.ts
-import { randomUUID } from "node:crypto";
-import { hostname } from "node:os";
-import {
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile
-} from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-
-// src/storage/errors.ts
-var StorageError = class extends Error {
-  constructor(code, message, details) {
-    super(message);
-    this.code = code;
-    this.details = details;
-    this.name = "StorageError";
-  }
-};
-
-// src/storage/lock.ts
-var ownerFileName = "owner.json";
-function defaultProcessAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return Boolean(
-      error && typeof error === "object" && "code" in error && error.code === "EPERM"
-    );
-  }
-}
-async function readOwner(lockPath) {
-  try {
-    const value = JSON.parse(
-      await readFile(resolve(lockPath, ownerFileName), "utf8")
-    );
-    if (typeof value.token !== "string" || typeof value.pid !== "number" || typeof value.hostname !== "string" || typeof value.command !== "string" || typeof value.startedAt !== "string" || !isCanonicalUtcTimestamp(value.startedAt)) {
-      return void 0;
-    }
-    return value;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && (error.code === "ENOENT" || error instanceof SyntaxError)) {
-      return void 0;
-    }
-    if (error instanceof SyntaxError) return void 0;
-    throw error;
-  }
-}
-async function lockAgeMs(lockPath, owner, now) {
-  if (owner) return now.valueOf() - new Date(owner.startedAt).valueOf();
-  return now.valueOf() - (await stat(lockPath)).mtimeMs;
-}
-async function removeStaleLock(lockPath) {
-  const quarantine = `${lockPath}.stale-${randomUUID()}`;
-  await rename(lockPath, quarantine);
-  await rm(quarantine, { recursive: true, force: true });
-}
-async function acquireForumLock(options) {
-  const now = options.now ?? /* @__PURE__ */ new Date();
-  const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
-  const currentHostname = options.hostname ?? hostname();
-  const currentPid = options.pid ?? process.pid;
-  const isProcessAlive2 = options.isProcessAlive ?? defaultProcessAlive;
-  const owner = {
-    token: randomUUID(),
-    pid: currentPid,
-    hostname: currentHostname,
-    command: options.command,
-    startedAt: currentUtcTimestamp(now)
-  };
-  await mkdir(dirname(options.lockPath), { recursive: true });
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      await mkdir(options.lockPath, { mode: 448 });
-      try {
-        await writeFile(
-          resolve(options.lockPath, ownerFileName),
-          `${JSON.stringify(owner, null, 2)}
-`,
-          { encoding: "utf8", flag: "wx", mode: 384 }
-        );
-      } catch (error) {
-        await rm(options.lockPath, { recursive: true, force: true });
-        throw error;
-      }
-      return {
-        path: options.lockPath,
-        owner,
-        release: async () => {
-          const current = await readOwner(options.lockPath);
-          if (!current || current.token !== owner.token) {
-            throw new StorageError(
-              "LOCK_OWNERSHIP_LOST",
-              `lock ownership changed before release: ${options.lockPath}`
-            );
-          }
-          await rm(options.lockPath, { recursive: true, force: true });
-        }
-      };
-    } catch (error) {
-      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") {
-        throw error;
-      }
-      const existing = await readOwner(options.lockPath);
-      const age = await lockAgeMs(options.lockPath, existing, now);
-      const sameHost = !existing || existing.hostname === currentHostname;
-      const alive = existing && sameHost ? isProcessAlive2(existing.pid) : false;
-      const removable = age >= staleAfterMs && sameHost && !alive;
-      if (attempt === 0 && removable) {
-        try {
-          await removeStaleLock(options.lockPath);
-          continue;
-        } catch (staleError) {
-          if (staleError && typeof staleError === "object" && "code" in staleError && staleError.code === "ENOENT") {
-            continue;
-          }
-          throw staleError;
-        }
-      }
-      throw new StorageError(
-        "LOCAL_LOCKED",
-        `forum write lock is already held: ${options.lockPath}`,
-        existing ? { ...existing, token: void 0 } : { ageMs: age }
-      );
-    }
-  }
-  throw new StorageError(
-    "LOCAL_LOCKED",
-    `forum write lock could not be acquired: ${options.lockPath}`
-  );
-}
-async function clearStaleForumLock(options) {
-  const now = options.now ?? /* @__PURE__ */ new Date();
-  const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
-  const currentHostname = options.hostname ?? hostname();
-  const isProcessAlive2 = options.isProcessAlive ?? defaultProcessAlive;
-  let owner;
-  try {
-    owner = await readOwner(options.lockPath);
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-  let age;
-  try {
-    age = await lockAgeMs(options.lockPath, owner, now);
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-  const sameHost = !owner || owner.hostname === currentHostname;
-  const alive = owner && sameHost ? isProcessAlive2(owner.pid) : false;
-  if (age < staleAfterMs || !sameHost || alive) {
-    throw new StorageError(
-      "LOCK_NOT_STALE",
-      `lock is not safe to clear: ${options.lockPath}`
-    );
-  }
-  await removeStaleLock(options.lockPath);
-  return true;
-}
-
-// src/storage/paths.ts
-import { realpath } from "node:fs/promises";
-import { homedir } from "node:os";
-import { resolve as resolve2, sep } from "node:path";
-var localAliasPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
-function createAgentForumPaths(homeDirectory = homedir()) {
-  const root = resolve2(homeDirectory, ".AgentForum");
-  const stateDirectory = resolve2(root, "state");
-  return {
-    root,
-    configFile: resolve2(root, "config.json"),
-    forumsDirectory: resolve2(root, "forums"),
-    stateDirectory,
-    locksDirectory: resolve2(stateDirectory, "locks"),
-    cacheDirectory: resolve2(stateDirectory, "cache"),
-    viewerDirectory: resolve2(stateDirectory, "viewer"),
-    installationsFile: resolve2(stateDirectory, "installations.json"),
-    bindingsFile: resolve2(stateDirectory, "context-bindings.json")
-  };
-}
-function assertLocalAlias(alias) {
-  if (!localAliasPattern.test(alias)) {
-    throw new StorageError(
-      "INVALID_LOCAL_ALIAS",
-      `local alias must match ${localAliasPattern.source}: ${alias}`
-    );
-  }
-}
-function forumClonePath(paths, alias) {
-  assertLocalAlias(alias);
-  return resolve2(paths.forumsDirectory, alias);
-}
-function forumStatePath(paths, forumId) {
-  if (!isEntityId(forumId, "forum")) {
-    throw new StorageError("INVALID_FORUM_ID", `invalid forum ID: ${forumId}`);
-  }
-  return resolve2(paths.stateDirectory, forumId);
-}
-function forumLockPath(paths, forumId) {
-  if (!isEntityId(forumId, "forum")) {
-    throw new StorageError("INVALID_FORUM_ID", `invalid forum ID: ${forumId}`);
-  }
-  return resolve2(paths.locksDirectory, `${forumId}.lock`);
-}
-async function sameExistingPath(left, right) {
-  const [canonicalLeft, canonicalRight] = await Promise.all([
-    realpath(resolve2(left)),
-    realpath(resolve2(right))
-  ]);
-  if (process.platform === "win32") {
-    return canonicalLeft.toLowerCase() === canonicalRight.toLowerCase();
-  }
-  return canonicalLeft === canonicalRight;
-}
-
-// src/storage/atomic.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
-import {
-  link,
-  lstat,
-  mkdir as mkdir2,
-  open,
-  readdir,
-  rename as rename2,
-  rm as rm2,
-  stat as stat2
-} from "node:fs/promises";
-import { dirname as dirname2, resolve as resolve3 } from "node:path";
-
-// src/protocol/validator.ts
-var import__ = __toESM(require__(), 1);
-
 // schemas/v1/common.schema.json
-var common_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/common.schema.json",
-  title: "Agent Forum 1.0 Common Definitions",
-  $defs: {
-    schemaVersion: {
-      const: "1.0"
-    },
-    timestamp: {
-      type: "string",
-      format: "utc-date-time-ms"
-    },
-    forumId: {
-      type: "string",
-      pattern: "^forum_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    roomId: {
-      type: "string",
-      pattern: "^room_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    threadId: {
-      type: "string",
-      pattern: "^thread_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    messageId: {
-      type: "string",
-      pattern: "^msg_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    eventId: {
-      type: "string",
-      pattern: "^evt_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    memberId: {
-      type: "string",
-      pattern: "^member_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    slug: {
-      type: "string",
-      minLength: 1,
-      maxLength: 64,
-      pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
-    },
-    shortText: {
-      type: "string",
-      minLength: 1,
-      maxLength: 200,
-      pattern: "^[^\\r\\n\\u0000-\\u001f\\u007f]+$"
-    },
-    description: {
-      type: "string",
-      maxLength: 2e3
-    },
-    role: {
-      type: "string",
-      minLength: 1,
-      maxLength: 100,
-      pattern: "^[^\\r\\n\\u0000-\\u001f\\u007f]+$"
-    },
-    responsibility: {
-      type: "string",
-      maxLength: 1e3
-    },
-    reference: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "value"],
-      properties: {
-        kind: {
-          enum: ["repository", "branch", "commit", "path", "symbol", "endpoint", "ticket", "url"]
+var common_schema_default;
+var init_common_schema = __esm({
+  "schemas/v1/common.schema.json"() {
+    common_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/common.schema.json",
+      title: "Agent Forum 1.0 Common Definitions",
+      $defs: {
+        schemaVersion: {
+          const: "1.0"
         },
-        value: {
+        timestamp: {
+          type: "string",
+          format: "utc-date-time-ms"
+        },
+        forumId: {
+          type: "string",
+          pattern: "^forum_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        roomId: {
+          type: "string",
+          pattern: "^room_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        threadId: {
+          type: "string",
+          pattern: "^thread_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        messageId: {
+          type: "string",
+          pattern: "^msg_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        eventId: {
+          type: "string",
+          pattern: "^evt_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        memberId: {
+          type: "string",
+          pattern: "^member_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        slug: {
           type: "string",
           minLength: 1,
-          maxLength: 2048
+          maxLength: 64,
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        shortText: {
+          type: "string",
+          minLength: 1,
+          maxLength: 200,
+          pattern: "^[^\\r\\n\\u0000-\\u001f\\u007f]+$"
+        },
+        description: {
+          type: "string",
+          maxLength: 2e3
+        },
+        role: {
+          type: "string",
+          minLength: 1,
+          maxLength: 100,
+          pattern: "^[^\\r\\n\\u0000-\\u001f\\u007f]+$"
+        },
+        responsibility: {
+          type: "string",
+          maxLength: 1e3
+        },
+        reference: {
+          type: "object",
+          additionalProperties: false,
+          required: ["kind", "value"],
+          properties: {
+            kind: {
+              enum: ["repository", "branch", "commit", "path", "symbol", "endpoint", "ticket", "url"]
+            },
+            value: {
+              type: "string",
+              minLength: 1,
+              maxLength: 2048
+            }
+          }
         }
       }
-    }
+    };
   }
-};
+});
 
 // schemas/v1/context-bindings.schema.json
-var context_bindings_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/context-bindings.schema.json",
-  title: "Agent Forum Local Context Bindings 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["formatVersion", "bindings"],
-  properties: {
-    formatVersion: {
-      const: 1
-    },
-    bindings: {
-      type: "array",
-      items: {
-        oneOf: [
-          { $ref: "#/$defs/branchBinding" },
-          { $ref: "#/$defs/workspaceBinding" }
-        ]
-      }
-    }
-  },
-  $defs: {
-    commonProperties: {
+var context_bindings_schema_default;
+var init_context_bindings_schema = __esm({
+  "schemas/v1/context-bindings.schema.json"() {
+    context_bindings_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/context-bindings.schema.json",
+      title: "Agent Forum Local Context Bindings 1.0",
       type: "object",
+      additionalProperties: false,
+      required: ["formatVersion", "bindings"],
       properties: {
-        bindingId: {
+        formatVersion: {
+          const: 1
+        },
+        bindings: {
+          type: "array",
+          items: {
+            oneOf: [
+              { $ref: "#/$defs/branchBinding" },
+              { $ref: "#/$defs/workspaceBinding" }
+            ]
+          }
+        }
+      },
+      $defs: {
+        commonProperties: {
+          type: "object",
+          properties: {
+            bindingId: {
+              type: "string",
+              pattern: "^binding_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            workspaceType: {
+              const: "git"
+            },
+            workspaceRoot: {
+              type: "string",
+              minLength: 1,
+              maxLength: 32768
+            },
+            workspaceKey: {
+              type: "string",
+              minLength: 1,
+              maxLength: 32768,
+              pattern: "^(?:win32|linux|darwin):"
+            },
+            forumId: {
+              $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+            },
+            roomId: {
+              $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+            },
+            repositoryFingerprint: {
+              type: "string",
+              minLength: 1,
+              maxLength: 2048
+            },
+            createdAt: {
+              $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+            },
+            updatedAt: {
+              $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+            }
+          }
+        },
+        branchBinding: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "bindingId",
+            "workspaceType",
+            "workspaceRoot",
+            "workspaceKey",
+            "scope",
+            "branch",
+            "forumId",
+            "roomId",
+            "createdAt",
+            "updatedAt"
+          ],
+          properties: {
+            bindingId: { $ref: "#/$defs/commonProperties/properties/bindingId" },
+            workspaceType: { $ref: "#/$defs/commonProperties/properties/workspaceType" },
+            workspaceRoot: { $ref: "#/$defs/commonProperties/properties/workspaceRoot" },
+            workspaceKey: { $ref: "#/$defs/commonProperties/properties/workspaceKey" },
+            scope: { const: "branch" },
+            branch: {
+              type: "string",
+              minLength: 1,
+              maxLength: 255
+            },
+            forumId: { $ref: "#/$defs/commonProperties/properties/forumId" },
+            roomId: { $ref: "#/$defs/commonProperties/properties/roomId" },
+            repositoryFingerprint: { $ref: "#/$defs/commonProperties/properties/repositoryFingerprint" },
+            createdAt: { $ref: "#/$defs/commonProperties/properties/createdAt" },
+            updatedAt: { $ref: "#/$defs/commonProperties/properties/updatedAt" }
+          }
+        },
+        workspaceBinding: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "bindingId",
+            "workspaceType",
+            "workspaceRoot",
+            "workspaceKey",
+            "scope",
+            "forumId",
+            "roomId",
+            "createdAt",
+            "updatedAt"
+          ],
+          properties: {
+            bindingId: { $ref: "#/$defs/commonProperties/properties/bindingId" },
+            workspaceType: { $ref: "#/$defs/commonProperties/properties/workspaceType" },
+            workspaceRoot: { $ref: "#/$defs/commonProperties/properties/workspaceRoot" },
+            workspaceKey: { $ref: "#/$defs/commonProperties/properties/workspaceKey" },
+            scope: { const: "workspace" },
+            forumId: { $ref: "#/$defs/commonProperties/properties/forumId" },
+            roomId: { $ref: "#/$defs/commonProperties/properties/roomId" },
+            repositoryFingerprint: { $ref: "#/$defs/commonProperties/properties/repositoryFingerprint" },
+            createdAt: { $ref: "#/$defs/commonProperties/properties/createdAt" },
+            updatedAt: { $ref: "#/$defs/commonProperties/properties/updatedAt" }
+          }
+        }
+      }
+    };
+  }
+});
+
+// schemas/v1/event.schema.json
+var event_schema_default;
+var init_event_schema = __esm({
+  "schemas/v1/event.schema.json"() {
+    event_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/event.schema.json",
+      title: "Agent Forum Lifecycle Event 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "id", "scope", "targetId", "type", "actorId", "createdAt", "reason", "data"],
+      properties: {
+        schemaVersion: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+        },
+        id: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/eventId"
+        },
+        scope: {
+          enum: ["forum", "room", "thread"]
+        },
+        targetId: {
           type: "string",
-          pattern: "^binding_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          pattern: "^(?:forum|room|thread)_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
         },
-        workspaceType: {
-          const: "git"
-        },
-        workspaceRoot: {
+        type: {
           type: "string",
           minLength: 1,
-          maxLength: 32768
+          maxLength: 100
         },
-        workspaceKey: {
+        actorId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+        },
+        createdAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        },
+        reason: {
           type: "string",
           minLength: 1,
-          maxLength: 32768,
-          pattern: "^(?:win32|linux|darwin):"
+          maxLength: 1e3
+        },
+        data: {
+          type: "object"
+        }
+      },
+      allOf: [
+        {
+          if: { properties: { scope: { const: "forum" } } },
+          then: {
+            properties: {
+              targetId: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+              },
+              type: { type: "string", pattern: "^forum-" }
+            }
+          }
+        },
+        {
+          if: { properties: { scope: { const: "room" } } },
+          then: {
+            properties: {
+              targetId: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+              },
+              type: { type: "string", pattern: "^room-" }
+            }
+          }
+        },
+        {
+          if: { properties: { scope: { const: "thread" } } },
+          then: {
+            properties: {
+              targetId: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
+              },
+              type: { type: "string", pattern: "^thread-" }
+            }
+          }
+        }
+      ]
+    };
+  }
+});
+
+// schemas/v1/forum.schema.json
+var forum_schema_default;
+var init_forum_schema = __esm({
+  "schemas/v1/forum.schema.json"() {
+    forum_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/forum.schema.json",
+      title: "Agent Forum Metadata 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "forumId", "initialName", "initialDescription", "createdBy", "createdAt"],
+      properties: {
+        schemaVersion: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
         },
         forumId: {
           $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
         },
-        roomId: {
-          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+        initialName: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
         },
-        repositoryFingerprint: {
+        initialDescription: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/description"
+        },
+        createdBy: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+        },
+        createdAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        }
+      }
+    };
+  }
+});
+
+// schemas/v1/inbox-cursor.schema.json
+var inbox_cursor_schema_default;
+var init_inbox_cursor_schema = __esm({
+  "schemas/v1/inbox-cursor.schema.json"() {
+    inbox_cursor_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/inbox-cursor.schema.json",
+      title: "Agent Forum Local Inbox Cursor 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["formatVersion", "forumId", "memberId", "seenIds", "updatedAt"],
+      properties: {
+        formatVersion: { const: 1 },
+        forumId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId" },
+        memberId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
+        seenIds: {
+          type: "array",
+          uniqueItems: true,
+          items: {
+            type: "string",
+            pattern: "^(?:msg|evt)_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        },
+        updatedAt: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp" }
+      }
+    };
+  }
+});
+
+// schemas/v1/local-config.schema.json
+var local_config_schema_default;
+var init_local_config_schema = __esm({
+  "schemas/v1/local-config.schema.json"() {
+    local_config_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/local-config.schema.json",
+      title: "Agent Forum Local Configuration 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["formatVersion", "defaultIdentityId", "identities", "forums"],
+      properties: {
+        formatVersion: {
+          const: 1
+        },
+        defaultIdentityId: {
+          oneOf: [
+            { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
+            { type: "null" }
+          ]
+        },
+        identities: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["memberId", "displayName", "role", "responsibility", "createdAt", "updatedAt"],
+            properties: {
+              memberId: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+              },
+              displayName: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
+              },
+              role: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/role"
+              },
+              responsibility: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/responsibility"
+              },
+              client: {
+                type: "string",
+                maxLength: 100
+              },
+              createdAt: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+              },
+              updatedAt: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+              }
+            }
+          }
+        },
+        forums: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["alias", "forumId", "path", "dataBranch", "createdAt"],
+            properties: {
+              alias: {
+                type: "string",
+                pattern: "^[a-z0-9][a-z0-9._-]{0,63}$"
+              },
+              forumId: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+              },
+              path: {
+                type: "string",
+                minLength: 1
+              },
+              dataBranch: {
+                type: "string",
+                minLength: 1,
+                maxLength: 255
+              },
+              createdAt: {
+                $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+              }
+            }
+          }
+        }
+      }
+    };
+  }
+});
+
+// schemas/v1/member-profile.schema.json
+var member_profile_schema_default;
+var init_member_profile_schema = __esm({
+  "schemas/v1/member-profile.schema.json"() {
+    member_profile_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/member-profile.schema.json",
+      title: "Agent Forum Public Member Profile 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "memberId", "displayName", "role", "responsibility", "status", "createdAt", "updatedAt"],
+      properties: {
+        schemaVersion: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+        },
+        memberId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+        },
+        displayName: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
+        },
+        role: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/role"
+        },
+        responsibility: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/responsibility"
+        },
+        status: {
+          enum: ["active", "left"]
+        },
+        client: {
           type: "string",
-          minLength: 1,
-          maxLength: 2048
+          maxLength: 100
         },
         createdAt: {
           $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
@@ -7664,548 +8066,231 @@ var context_bindings_schema_default = {
           $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
         }
       }
-    },
-    branchBinding: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "bindingId",
-        "workspaceType",
-        "workspaceRoot",
-        "workspaceKey",
-        "scope",
-        "branch",
-        "forumId",
-        "roomId",
-        "createdAt",
-        "updatedAt"
-      ],
-      properties: {
-        bindingId: { $ref: "#/$defs/commonProperties/properties/bindingId" },
-        workspaceType: { $ref: "#/$defs/commonProperties/properties/workspaceType" },
-        workspaceRoot: { $ref: "#/$defs/commonProperties/properties/workspaceRoot" },
-        workspaceKey: { $ref: "#/$defs/commonProperties/properties/workspaceKey" },
-        scope: { const: "branch" },
-        branch: {
-          type: "string",
-          minLength: 1,
-          maxLength: 255
-        },
-        forumId: { $ref: "#/$defs/commonProperties/properties/forumId" },
-        roomId: { $ref: "#/$defs/commonProperties/properties/roomId" },
-        repositoryFingerprint: { $ref: "#/$defs/commonProperties/properties/repositoryFingerprint" },
-        createdAt: { $ref: "#/$defs/commonProperties/properties/createdAt" },
-        updatedAt: { $ref: "#/$defs/commonProperties/properties/updatedAt" }
-      }
-    },
-    workspaceBinding: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "bindingId",
-        "workspaceType",
-        "workspaceRoot",
-        "workspaceKey",
-        "scope",
-        "forumId",
-        "roomId",
-        "createdAt",
-        "updatedAt"
-      ],
-      properties: {
-        bindingId: { $ref: "#/$defs/commonProperties/properties/bindingId" },
-        workspaceType: { $ref: "#/$defs/commonProperties/properties/workspaceType" },
-        workspaceRoot: { $ref: "#/$defs/commonProperties/properties/workspaceRoot" },
-        workspaceKey: { $ref: "#/$defs/commonProperties/properties/workspaceKey" },
-        scope: { const: "workspace" },
-        forumId: { $ref: "#/$defs/commonProperties/properties/forumId" },
-        roomId: { $ref: "#/$defs/commonProperties/properties/roomId" },
-        repositoryFingerprint: { $ref: "#/$defs/commonProperties/properties/repositoryFingerprint" },
-        createdAt: { $ref: "#/$defs/commonProperties/properties/createdAt" },
-        updatedAt: { $ref: "#/$defs/commonProperties/properties/updatedAt" }
-      }
-    }
+    };
   }
-};
-
-// schemas/v1/event.schema.json
-var event_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/event.schema.json",
-  title: "Agent Forum Lifecycle Event 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["schemaVersion", "id", "scope", "targetId", "type", "actorId", "createdAt", "reason", "data"],
-  properties: {
-    schemaVersion: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
-    },
-    id: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/eventId"
-    },
-    scope: {
-      enum: ["forum", "room", "thread"]
-    },
-    targetId: {
-      type: "string",
-      pattern: "^(?:forum|room|thread)_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-    },
-    type: {
-      type: "string",
-      minLength: 1,
-      maxLength: 100
-    },
-    actorId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
-    },
-    createdAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    },
-    reason: {
-      type: "string",
-      minLength: 1,
-      maxLength: 1e3
-    },
-    data: {
-      type: "object"
-    }
-  },
-  allOf: [
-    {
-      if: { properties: { scope: { const: "forum" } } },
-      then: {
-        properties: {
-          targetId: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
-          },
-          type: { type: "string", pattern: "^forum-" }
-        }
-      }
-    },
-    {
-      if: { properties: { scope: { const: "room" } } },
-      then: {
-        properties: {
-          targetId: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
-          },
-          type: { type: "string", pattern: "^room-" }
-        }
-      }
-    },
-    {
-      if: { properties: { scope: { const: "thread" } } },
-      then: {
-        properties: {
-          targetId: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
-          },
-          type: { type: "string", pattern: "^thread-" }
-        }
-      }
-    }
-  ]
-};
-
-// schemas/v1/forum.schema.json
-var forum_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/forum.schema.json",
-  title: "Agent Forum Metadata 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["schemaVersion", "forumId", "initialName", "initialDescription", "createdBy", "createdAt"],
-  properties: {
-    schemaVersion: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
-    },
-    forumId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
-    },
-    initialName: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
-    },
-    initialDescription: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/description"
-    },
-    createdBy: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
-    },
-    createdAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    }
-  }
-};
-
-// schemas/v1/inbox-cursor.schema.json
-var inbox_cursor_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/inbox-cursor.schema.json",
-  title: "Agent Forum Local Inbox Cursor 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["formatVersion", "forumId", "memberId", "seenIds", "updatedAt"],
-  properties: {
-    formatVersion: { const: 1 },
-    forumId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId" },
-    memberId: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
-    seenIds: {
-      type: "array",
-      uniqueItems: true,
-      items: {
-        type: "string",
-        pattern: "^(?:msg|evt)_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-      }
-    },
-    updatedAt: { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp" }
-  }
-};
-
-// schemas/v1/local-config.schema.json
-var local_config_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/local-config.schema.json",
-  title: "Agent Forum Local Configuration 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["formatVersion", "defaultIdentityId", "identities", "forums"],
-  properties: {
-    formatVersion: {
-      const: 1
-    },
-    defaultIdentityId: {
-      oneOf: [
-        { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId" },
-        { type: "null" }
-      ]
-    },
-    identities: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["memberId", "displayName", "role", "responsibility", "createdAt", "updatedAt"],
-        properties: {
-          memberId: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
-          },
-          displayName: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
-          },
-          role: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/role"
-          },
-          responsibility: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/responsibility"
-          },
-          client: {
-            type: "string",
-            maxLength: 100
-          },
-          createdAt: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-          },
-          updatedAt: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-          }
-        }
-      }
-    },
-    forums: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["alias", "forumId", "path", "dataBranch", "createdAt"],
-        properties: {
-          alias: {
-            type: "string",
-            pattern: "^[a-z0-9][a-z0-9._-]{0,63}$"
-          },
-          forumId: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
-          },
-          path: {
-            type: "string",
-            minLength: 1
-          },
-          dataBranch: {
-            type: "string",
-            minLength: 1,
-            maxLength: 255
-          },
-          createdAt: {
-            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-          }
-        }
-      }
-    }
-  }
-};
-
-// schemas/v1/member-profile.schema.json
-var member_profile_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/member-profile.schema.json",
-  title: "Agent Forum Public Member Profile 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["schemaVersion", "memberId", "displayName", "role", "responsibility", "status", "createdAt", "updatedAt"],
-  properties: {
-    schemaVersion: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
-    },
-    memberId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
-    },
-    displayName: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
-    },
-    role: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/role"
-    },
-    responsibility: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/responsibility"
-    },
-    status: {
-      enum: ["active", "left"]
-    },
-    client: {
-      type: "string",
-      maxLength: 100
-    },
-    createdAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    },
-    updatedAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    }
-  }
-};
+});
 
 // schemas/v1/message.schema.json
-var message_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/message.schema.json",
-  title: "Agent Forum Message Metadata 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["schemaVersion", "id", "threadId", "authorId", "type", "createdAt", "replyTo", "mentions", "references"],
-  properties: {
-    schemaVersion: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
-    },
-    id: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId"
-    },
-    threadId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
-    },
-    authorId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
-    },
-    type: {
-      type: "string",
-      minLength: 1,
-      maxLength: 100
-    },
-    createdAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    },
-    replyTo: {
-      oneOf: [
-        { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId" },
-        { type: "null" }
-      ]
-    },
-    mentions: {
-      type: "array",
-      uniqueItems: true,
-      items: {
-        $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+var message_schema_default;
+var init_message_schema = __esm({
+  "schemas/v1/message.schema.json"() {
+    message_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/message.schema.json",
+      title: "Agent Forum Message Metadata 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "id", "threadId", "authorId", "type", "createdAt", "replyTo", "mentions", "references"],
+      properties: {
+        schemaVersion: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+        },
+        id: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId"
+        },
+        threadId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
+        },
+        authorId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+        },
+        type: {
+          type: "string",
+          minLength: 1,
+          maxLength: 100
+        },
+        createdAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        },
+        replyTo: {
+          oneOf: [
+            { $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId" },
+            { type: "null" }
+          ]
+        },
+        mentions: {
+          type: "array",
+          uniqueItems: true,
+          items: {
+            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+          }
+        },
+        references: {
+          type: "array",
+          items: {
+            $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/reference"
+          }
+        }
       }
-    },
-    references: {
-      type: "array",
-      items: {
-        $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/reference"
-      }
-    }
+    };
   }
-};
+});
 
 // schemas/v1/protocol.schema.json
-var protocol_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/protocol.schema.json",
-  title: "Agent Forum Protocol 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["protocolVersion", "stability", "forumId", "dataBranch", "createdAt"],
-  properties: {
-    protocolVersion: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
-    },
-    stability: {
-      const: "draft"
-    },
-    forumId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
-    },
-    dataBranch: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-      pattern: "^(?!-)(?!.*(?:\\.\\.|//|@\\{|[ ~^:?*\\[]))(?!.*\\.$).+$"
-    },
-    createdAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    }
+var protocol_schema_default;
+var init_protocol_schema = __esm({
+  "schemas/v1/protocol.schema.json"() {
+    protocol_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/protocol.schema.json",
+      title: "Agent Forum Protocol 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["protocolVersion", "stability", "forumId", "dataBranch", "createdAt"],
+      properties: {
+        protocolVersion: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+        },
+        stability: {
+          const: "draft"
+        },
+        forumId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+        },
+        dataBranch: {
+          type: "string",
+          minLength: 1,
+          maxLength: 255,
+          pattern: "^(?!-)(?!.*(?:\\.\\.|//|@\\{|[ ~^:?*\\[]))(?!.*\\.$).+$"
+        },
+        createdAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        }
+      }
+    };
   }
-};
+});
 
 // schemas/v1/room-member.schema.json
-var room_member_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/room-member.schema.json",
-  title: "Agent Forum Room Member 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["schemaVersion", "roomId", "memberId", "role", "responsibility", "status", "joinedAt", "updatedAt"],
-  properties: {
-    schemaVersion: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
-    },
-    roomId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
-    },
-    memberId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
-    },
-    role: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/role"
-    },
-    responsibility: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/responsibility"
-    },
-    status: {
-      enum: ["active", "left"]
-    },
-    joinedAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    },
-    updatedAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    }
+var room_member_schema_default;
+var init_room_member_schema = __esm({
+  "schemas/v1/room-member.schema.json"() {
+    room_member_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/room-member.schema.json",
+      title: "Agent Forum Room Member 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "roomId", "memberId", "role", "responsibility", "status", "joinedAt", "updatedAt"],
+      properties: {
+        schemaVersion: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+        },
+        roomId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+        },
+        memberId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+        },
+        role: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/role"
+        },
+        responsibility: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/responsibility"
+        },
+        status: {
+          enum: ["active", "left"]
+        },
+        joinedAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        },
+        updatedAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        }
+      }
+    };
   }
-};
+});
 
 // schemas/v1/room.schema.json
-var room_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/room.schema.json",
-  title: "Agent Forum Room 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["schemaVersion", "id", "slug", "initialTitle", "initialDescription", "createdBy", "createdAt"],
-  properties: {
-    schemaVersion: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
-    },
-    id: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
-    },
-    slug: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/slug"
-    },
-    initialTitle: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
-    },
-    initialDescription: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/description"
-    },
-    createdBy: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
-    },
-    createdAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    }
+var room_schema_default;
+var init_room_schema = __esm({
+  "schemas/v1/room.schema.json"() {
+    room_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/room.schema.json",
+      title: "Agent Forum Room 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "id", "slug", "initialTitle", "initialDescription", "createdBy", "createdAt"],
+      properties: {
+        schemaVersion: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+        },
+        id: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+        },
+        slug: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/slug"
+        },
+        initialTitle: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
+        },
+        initialDescription: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/description"
+        },
+        createdBy: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+        },
+        createdAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        }
+      }
+    };
   }
-};
+});
 
 // schemas/v1/thread.schema.json
-var thread_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://agent-forum.dev/schemas/v1/thread.schema.json",
-  title: "Agent Forum Thread 1.0",
-  type: "object",
-  additionalProperties: false,
-  required: ["schemaVersion", "id", "roomId", "initialTitle", "kind", "createdBy", "createdAt", "firstMessageId"],
-  properties: {
-    schemaVersion: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
-    },
-    id: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
-    },
-    roomId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
-    },
-    initialTitle: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
-    },
-    kind: {
-      enum: [
-        "discussion",
-        "question",
-        "proposal",
-        "change",
-        "blocker",
-        "review",
-        "status",
-        "test-result"
-      ]
-    },
-    createdBy: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
-    },
-    createdAt: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
-    },
-    firstMessageId: {
-      $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId"
-    }
+var thread_schema_default;
+var init_thread_schema = __esm({
+  "schemas/v1/thread.schema.json"() {
+    thread_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/thread.schema.json",
+      title: "Agent Forum Thread 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "id", "roomId", "initialTitle", "kind", "createdBy", "createdAt", "firstMessageId"],
+      properties: {
+        schemaVersion: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/schemaVersion"
+        },
+        id: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/threadId"
+        },
+        roomId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+        },
+        initialTitle: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/shortText"
+        },
+        kind: {
+          enum: [
+            "discussion",
+            "question",
+            "proposal",
+            "change",
+            "blocker",
+            "review",
+            "status",
+            "test-result"
+          ]
+        },
+        createdBy: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/memberId"
+        },
+        createdAt: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        },
+        firstMessageId: {
+          $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/messageId"
+        }
+      }
+    };
   }
-};
+});
 
 // src/protocol/validator.ts
-var schemaDocuments = {
-  protocol: protocol_schema_default,
-  "context-bindings": context_bindings_schema_default,
-  forum: forum_schema_default,
-  "inbox-cursor": inbox_cursor_schema_default,
-  "local-config": local_config_schema_default,
-  "member-profile": member_profile_schema_default,
-  "room-member": room_member_schema_default,
-  room: room_schema_default,
-  thread: thread_schema_default,
-  message: message_schema_default,
-  event: event_schema_default
-};
-var ajv = new import__.Ajv2020({
-  allErrors: true,
-  strict: true,
-  validateFormats: true
-});
-ajv.addFormat("utc-date-time-ms", {
-  type: "string",
-  validate: isCanonicalUtcTimestamp
-});
-ajv.addSchema(common_schema_default);
-var validators = /* @__PURE__ */ new Map();
-for (const [name, schema] of Object.entries(schemaDocuments)) {
-  validators.set(name, ajv.compile(schema));
-}
 function toIssues(errors) {
   return (errors ?? []).map((error) => ({
     path: error.instancePath || "/",
@@ -8243,9 +8328,67 @@ function validateProtocolDocument(schemaName, value, options = {}) {
   );
   return issues.length === 0 ? { ok: true } : { ok: false, issues };
 }
+var import__, schemaDocuments, ajv, validators;
+var init_validator = __esm({
+  "src/protocol/validator.ts"() {
+    "use strict";
+    import__ = __toESM(require__(), 1);
+    init_common_schema();
+    init_context_bindings_schema();
+    init_event_schema();
+    init_forum_schema();
+    init_inbox_cursor_schema();
+    init_local_config_schema();
+    init_member_profile_schema();
+    init_message_schema();
+    init_protocol_schema();
+    init_room_member_schema();
+    init_room_schema();
+    init_thread_schema();
+    init_timestamps();
+    schemaDocuments = {
+      protocol: protocol_schema_default,
+      "context-bindings": context_bindings_schema_default,
+      forum: forum_schema_default,
+      "inbox-cursor": inbox_cursor_schema_default,
+      "local-config": local_config_schema_default,
+      "member-profile": member_profile_schema_default,
+      "room-member": room_member_schema_default,
+      room: room_schema_default,
+      thread: thread_schema_default,
+      message: message_schema_default,
+      event: event_schema_default
+    };
+    ajv = new import__.Ajv2020({
+      allErrors: true,
+      strict: true,
+      validateFormats: true
+    });
+    ajv.addFormat("utc-date-time-ms", {
+      type: "string",
+      validate: isCanonicalUtcTimestamp
+    });
+    ajv.addSchema(common_schema_default);
+    validators = /* @__PURE__ */ new Map();
+    for (const [name, schema] of Object.entries(schemaDocuments)) {
+      validators.set(name, ajv.compile(schema));
+    }
+  }
+});
 
 // src/storage/atomic.ts
-var temporaryPrefix = ".agent-forum-tmp-";
+import { randomUUID as randomUUID2 } from "node:crypto";
+import {
+  link,
+  lstat,
+  mkdir as mkdir2,
+  open,
+  readdir,
+  rename as rename2,
+  rm as rm2,
+  stat as stat2
+} from "node:fs/promises";
+import { dirname as dirname2, resolve as resolve3 } from "node:path";
 async function pathExists(path) {
   try {
     await stat2(path);
@@ -8334,18 +8477,35 @@ async function createImmutableDirectory(destination, writer) {
     throw error;
   }
 }
+var temporaryPrefix;
+var init_atomic = __esm({
+  "src/storage/atomic.ts"() {
+    "use strict";
+    init_validator();
+    init_errors();
+    temporaryPrefix = ".agent-forum-tmp-";
+  }
+});
 
 // src/services/errors.ts
-var ServiceError = class extends Error {
-  constructor(code, message, details) {
-    super(message);
-    this.code = code;
-    this.details = details;
-    this.name = "ServiceError";
+var ServiceError;
+var init_errors2 = __esm({
+  "src/services/errors.ts"() {
+    "use strict";
+    ServiceError = class extends Error {
+      constructor(code, message, details) {
+        super(message);
+        this.code = code;
+        this.details = details;
+        this.name = "ServiceError";
+      }
+    };
   }
-};
+});
 
 // src/config/local-config.ts
+import { readFile as readFile2 } from "node:fs/promises";
+import { resolve as resolve4 } from "node:path";
 function emptyLocalConfig() {
   return {
     formatVersion: 1,
@@ -8535,21 +8695,22 @@ async function unregisterLocalForum(alias, paths = createAgentForumPaths()) {
     await lock.release();
   }
 }
-
-// src/context/bindings.ts
-import { readFile as readFile3, realpath as realpath2 } from "node:fs/promises";
-import { posix, win32 } from "node:path";
+var init_local_config = __esm({
+  "src/config/local-config.ts"() {
+    "use strict";
+    init_ids();
+    init_timestamps();
+    init_lock();
+    init_paths();
+    init_atomic();
+    init_errors();
+    init_validator();
+    init_errors2();
+  }
+});
 
 // src/git/runner.ts
 import { spawnSync } from "node:child_process";
-var GitCommandError = class extends Error {
-  constructor(code, message, result) {
-    super(message);
-    this.code = code;
-    this.result = result;
-    this.name = "GitCommandError";
-  }
-};
 function redactGitOutput(value) {
   return value.replace(/(https?:\/\/)[^/@\s]+@/giu, "$1***@").replace(/(https?:\/\/[^/:\s]+:)[^@\s]+@/giu, "$1***@").replace(/([?&][^=&#\s]+)=([^&#\s]+)/gu, "$1=***").replace(/(https?:\/\/[^#\s]+)#[^\s]+/giu, "$1#***");
 }
@@ -8628,301 +8789,25 @@ function commitPaths(repository, paths, message) {
   requireGit(repository, ["commit", "-m", message]);
   return requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
 }
-
-// src/context/bindings.ts
-var ContextError = class extends Error {
-  constructor(code, message, details) {
-    super(message);
-    this.code = code;
-    this.details = details;
-    this.name = "ContextError";
+var GitCommandError;
+var init_runner = __esm({
+  "src/git/runner.ts"() {
+    "use strict";
+    GitCommandError = class extends Error {
+      constructor(code, message, result) {
+        super(message);
+        this.code = code;
+        this.result = result;
+        this.name = "GitCommandError";
+      }
+    };
   }
-};
-function pathApi(platform) {
-  return platform === "win32" ? win32 : posix;
-}
-function supportedPlatform(value) {
-  if (value === "win32" || value === "linux" || value === "darwin") {
-    return value;
-  }
-  throw new ContextError(
-    "UNSUPPORTED_PLATFORM",
-    `context binding is not supported on platform: ${value}`
-  );
-}
-function normalizeWorkspaceKey(workspaceRoot, platform) {
-  const api = pathApi(platform);
-  let normalized = api.normalize(workspaceRoot);
-  const parsed = api.parse(normalized);
-  while (normalized.length > parsed.root.length && normalized.endsWith(api.sep)) {
-    normalized = normalized.slice(0, -1);
-  }
-  if (platform === "win32") {
-    normalized = normalized.replaceAll("\\", "/").toLowerCase();
-  }
-  return `${platform}:${normalized}`;
-}
-function normalizeRepositoryFingerprint(remote) {
-  const trimmed = remote.trim();
-  const scp = /^(?:[^@\s]+@)?([^:/\s]+):(.+)$/u.exec(trimmed);
-  if (scp && !trimmed.includes("://") && !/^[a-zA-Z]:[\\/]/u.test(trimmed)) {
-    const host = scp[1]?.toLowerCase();
-    const repositoryPath = scp[2]?.replace(/^\/+|\/+$/gu, "").replace(/\.git$/u, "");
-    return host && repositoryPath ? `${host}/${repositoryPath}` : void 0;
-  }
-  try {
-    const url = new URL(trimmed);
-    if (!url.hostname || !["http:", "https:", "ssh:", "git:"].includes(url.protocol)) {
-      return void 0;
-    }
-    const repositoryPath = url.pathname.replace(/^\/+|\/+$/gu, "").replace(/\.git$/u, "");
-    return repositoryPath ? `${url.hostname.toLowerCase()}/${repositoryPath}` : void 0;
-  } catch {
-    return void 0;
-  }
-}
-async function discoverGitWorkspace(cwd, platform = supportedPlatform(process.platform)) {
-  const rootResult = runGit(cwd, ["rev-parse", "--show-toplevel"]);
-  if (rootResult.status !== 0) {
-    throw new ContextError(
-      "GIT_WORKSPACE_REQUIRED",
-      "the selected directory is not inside a Git workspace"
-    );
-  }
-  const workspaceRoot = await realpath2(rootResult.stdout.trim());
-  const branchResult = runGit(cwd, [
-    "symbolic-ref",
-    "--quiet",
-    "--short",
-    "HEAD"
-  ]);
-  const remoteResult = runGit(cwd, [
-    "config",
-    "--get",
-    "remote.origin.url"
-  ]);
-  const repositoryFingerprint = remoteResult.status === 0 ? normalizeRepositoryFingerprint(remoteResult.stdout) : void 0;
-  return {
-    workspaceRoot,
-    workspaceKey: normalizeWorkspaceKey(workspaceRoot, platform),
-    branch: branchResult.status === 0 ? branchResult.stdout.trim() : null,
-    ...repositoryFingerprint ? { repositoryFingerprint } : {}
-  };
-}
-function emptyContextBindingState() {
-  return { formatVersion: 1, bindings: [] };
-}
-function bindingIdentity(binding) {
-  return binding.scope === "branch" ? `${binding.workspaceKey}\0branch\0${binding.branch ?? ""}` : `${binding.workspaceKey}\0workspace`;
-}
-function platformFromWorkspaceKey(workspaceKey) {
-  const prefix = workspaceKey.slice(0, workspaceKey.indexOf(":"));
-  if (prefix === "win32" || prefix === "linux" || prefix === "darwin") {
-    return prefix;
-  }
-  throw new StorageError(
-    "SCHEMA_VALIDATION_FAILED",
-    `binding has unsupported workspace key: ${workspaceKey}`
-  );
-}
-function validateBindingSemantics(state) {
-  const bindingIds = /* @__PURE__ */ new Set();
-  const identities = /* @__PURE__ */ new Set();
-  for (const binding of state.bindings) {
-    if (bindingIds.has(binding.bindingId)) {
-      throw new StorageError(
-        "SCHEMA_VALIDATION_FAILED",
-        `context bindings contain duplicate binding ID: ${binding.bindingId}`
-      );
-    }
-    bindingIds.add(binding.bindingId);
-    const identity = bindingIdentity(binding);
-    if (identities.has(identity)) {
-      throw new StorageError(
-        "SCHEMA_VALIDATION_FAILED",
-        "context bindings contain duplicate workspace scope"
-      );
-    }
-    identities.add(identity);
-    const platform = platformFromWorkspaceKey(binding.workspaceKey);
-    if (normalizeWorkspaceKey(binding.workspaceRoot, platform) !== binding.workspaceKey) {
-      throw new StorageError(
-        "SCHEMA_VALIDATION_FAILED",
-        `binding workspaceKey does not match workspaceRoot: ${binding.bindingId}`
-      );
-    }
-    if (binding.repositoryFingerprint && (binding.repositoryFingerprint.includes("@") || binding.repositoryFingerprint.includes("://") || binding.repositoryFingerprint.includes("\\"))) {
-      throw new StorageError(
-        "SCHEMA_VALIDATION_FAILED",
-        `binding repository fingerprint is not credential-safe: ${binding.bindingId}`
-      );
-    }
-    if (binding.updatedAt < binding.createdAt) {
-      throw new StorageError(
-        "SCHEMA_VALIDATION_FAILED",
-        `binding updatedAt precedes createdAt: ${binding.bindingId}`
-      );
-    }
-  }
-}
-async function loadContextBindingState(paths) {
-  let text;
-  try {
-    text = await readFile3(paths.bindingsFile, "utf8");
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return emptyContextBindingState();
-    }
-    throw error;
-  }
-  let value;
-  try {
-    value = JSON.parse(text);
-  } catch (error) {
-    throw new StorageError(
-      "SCHEMA_VALIDATION_FAILED",
-      `context bindings contain invalid JSON: ${paths.bindingsFile}`,
-      error instanceof Error ? error.message : String(error)
-    );
-  }
-  const validation = validateProtocolDocument("context-bindings", value, {
-    mode: "write"
-  });
-  if (!validation.ok) {
-    throw new StorageError(
-      "SCHEMA_VALIDATION_FAILED",
-      `context bindings are invalid: ${paths.bindingsFile}`,
-      validation.issues
-    );
-  }
-  const state = value;
-  validateBindingSemantics(state);
-  return state;
-}
-async function saveContextBindingState(paths, state) {
-  validateBindingSemantics(state);
-  await writeValidatedJsonAtomic(
-    paths.bindingsFile,
-    "context-bindings",
-    state,
-    { overwrite: true, mode: 384 }
-  );
-}
-function requireBindingBranch(branch) {
-  if (!branch) {
-    throw new ContextError(
-      "GIT_BRANCH_REQUIRED",
-      "a branch binding requires a branch name"
-    );
-  }
-  return branch;
-}
-function setContextBinding(state, input, options = {}) {
-  if (input.scope === "branch") requireBindingBranch(input.branch);
-  const identity = bindingIdentity({
-    scope: input.scope,
-    workspaceKey: input.context.workspaceKey,
-    ...input.branch ? { branch: input.branch } : {}
-  });
-  const existing = state.bindings.find(
-    (binding2) => bindingIdentity(binding2) === identity
-  );
-  if (existing && !options.force) {
-    throw new ContextError(
-      "BINDING_EXISTS",
-      `a ${input.scope} binding already exists for this workspace and targets ${existing.forumId}/${existing.roomId}; use --force to replace it`,
-      existing
-    );
-  }
-  const timestamp = currentUtcTimestamp(options.now);
-  const common = {
-    bindingId: options.bindingId ?? existing?.bindingId ?? createEntityId("binding"),
-    workspaceType: "git",
-    workspaceRoot: input.context.workspaceRoot,
-    workspaceKey: input.context.workspaceKey,
-    forumId: input.forumId,
-    roomId: input.roomId,
-    ...input.context.repositoryFingerprint ? { repositoryFingerprint: input.context.repositoryFingerprint } : {},
-    createdAt: existing?.createdAt ?? timestamp,
-    updatedAt: timestamp
-  };
-  const binding = input.scope === "branch" ? {
-    ...common,
-    scope: "branch",
-    branch: requireBindingBranch(input.branch)
-  } : { ...common, scope: "workspace" };
-  const bindings = existing ? state.bindings.map(
-    (candidate) => bindingIdentity(candidate) === identity ? binding : candidate
-  ) : [...state.bindings, binding];
-  const next = { formatVersion: 1, bindings };
-  validateBindingSemantics(next);
-  return { state: next, binding, replaced: Boolean(existing) };
-}
-function removeContextBinding(state, workspaceKey, scope, branch) {
-  const identity = bindingIdentity({
-    scope,
-    workspaceKey,
-    ...branch ? { branch } : {}
-  });
-  const removed = state.bindings.filter(
-    (binding) => bindingIdentity(binding) === identity
-  );
-  return {
-    state: {
-      formatVersion: 1,
-      bindings: state.bindings.filter(
-        (binding) => bindingIdentity(binding) !== identity
-      )
-    },
-    removed
-  };
-}
-function resolveContextBinding(state, context) {
-  if (context.branch !== null) {
-    const exact = state.bindings.find(
-      (binding) => binding.scope === "branch" && binding.workspaceKey === context.workspaceKey && binding.branch === context.branch
-    );
-    if (exact) return { kind: "bound", source: "branch", binding: exact };
-  }
-  const fallback = state.bindings.find(
-    (binding) => binding.scope === "workspace" && binding.workspaceKey === context.workspaceKey
-  );
-  return fallback ? { kind: "bound", source: "workspace", binding: fallback } : { kind: "unbound", code: "CONTEXT_NOT_BOUND" };
-}
-
-// src/services/room.ts
-import {
-  readFile as readFile4,
-  readdir as readdir2,
-  rm as rm3
-} from "node:fs/promises";
-import { resolve as resolve6 } from "node:path";
+});
 
 // src/domain/state-transitions.ts
-var knownLifecycleEventTypes = [
-  "forum-renamed",
-  "forum-description-changed",
-  "forum-archived",
-  "forum-restored",
-  "room-renamed",
-  "room-description-changed",
-  "room-archived",
-  "room-restored",
-  "thread-renamed",
-  "thread-closed",
-  "thread-reopened"
-];
-var knownLifecycleEventTypeSet = new Set(knownLifecycleEventTypes);
 function isKnownLifecycleEventType(value) {
   return knownLifecycleEventTypeSet.has(value);
 }
-var StateTransitionError = class extends Error {
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-    this.name = "StateTransitionError";
-  }
-};
 function requiredText(data, field, maxLength) {
   const value = data[field];
   if (typeof value !== "string" || value.trim().length === 0 || value.length > maxLength) {
@@ -9027,32 +8912,63 @@ function applyLifecycleEvent(state, event) {
     `unsupported ${event.scope} event type: ${event.type}`
   );
 }
-
-// src/storage/protocol-store.ts
-import { basename, resolve as resolve5 } from "node:path";
+var knownLifecycleEventTypes, knownLifecycleEventTypeSet, StateTransitionError;
+var init_state_transitions = __esm({
+  "src/domain/state-transitions.ts"() {
+    "use strict";
+    knownLifecycleEventTypes = [
+      "forum-renamed",
+      "forum-description-changed",
+      "forum-archived",
+      "forum-restored",
+      "room-renamed",
+      "room-description-changed",
+      "room-archived",
+      "room-restored",
+      "thread-renamed",
+      "thread-closed",
+      "thread-reopened"
+    ];
+    knownLifecycleEventTypeSet = new Set(knownLifecycleEventTypes);
+    StateTransitionError = class extends Error {
+      constructor(code, message) {
+        super(message);
+        this.code = code;
+        this.name = "StateTransitionError";
+      }
+    };
+  }
+});
 
 // src/domain/message-types.ts
-var knownMessageTypes = [
-  "discussion",
-  "question",
-  "answer",
-  "proposal",
-  "decision",
-  "change",
-  "blocker",
-  "review",
-  "status",
-  "test-result",
-  "acknowledgement",
-  "objection",
-  "correction"
-];
-var knownMessageTypeSet = new Set(knownMessageTypes);
 function isKnownMessageType(value) {
   return knownMessageTypeSet.has(value);
 }
+var knownMessageTypes, knownMessageTypeSet;
+var init_message_types = __esm({
+  "src/domain/message-types.ts"() {
+    "use strict";
+    knownMessageTypes = [
+      "discussion",
+      "question",
+      "answer",
+      "proposal",
+      "decision",
+      "change",
+      "blocker",
+      "review",
+      "status",
+      "test-result",
+      "acknowledgement",
+      "objection",
+      "correction"
+    ];
+    knownMessageTypeSet = new Set(knownMessageTypes);
+  }
+});
 
 // src/storage/protocol-store.ts
+import { basename, resolve as resolve5 } from "node:path";
 async function createImmutableMessage(destination, metadata, body) {
   if (body.trim().length === 0 || body.includes("\0")) {
     throw new StorageError(
@@ -9102,8 +9018,37 @@ async function createImmutableEvent(destination, event) {
     );
   });
 }
+var init_protocol_store = __esm({
+  "src/storage/protocol-store.ts"() {
+    "use strict";
+    init_message_types();
+    init_state_transitions();
+    init_atomic();
+    init_errors();
+  }
+});
 
 // src/services/room.ts
+var room_exports = {};
+__export(room_exports, {
+  createRoom: () => createRoom,
+  createRoomEvent: () => createRoomEvent,
+  joinRoom: () => joinRoom,
+  leaveRoom: () => leaveRoom,
+  listRooms: () => listRooms,
+  openForum: () => openForum,
+  protocolWarning: () => protocolWarning,
+  readJsonDocument: () => readJsonDocument,
+  requireActiveRoomMember: () => requireActiveRoomMember,
+  showRoom: () => showRoom,
+  withForumWrite: () => withForumWrite
+});
+import {
+  readFile as readFile4,
+  readdir as readdir2,
+  rm as rm3
+} from "node:fs/promises";
+import { resolve as resolve6 } from "node:path";
 async function readJsonDocument(path, schema) {
   let value;
   try {
@@ -9702,8 +9647,310 @@ async function createRoomEvent(input, paths = createAgentForumPaths()) {
     }
   );
 }
+var init_room = __esm({
+  "src/services/room.ts"() {
+    "use strict";
+    init_local_config();
+    init_ids();
+    init_state_transitions();
+    init_timestamps();
+    init_runner();
+    init_validator();
+    init_atomic();
+    init_errors();
+    init_lock();
+    init_paths();
+    init_protocol_store();
+    init_errors2();
+  }
+});
+
+// src/errors.ts
+var ExitCode = {
+  Success: 0,
+  Unexpected: 1,
+  Usage: 2
+};
 
 // src/services/context.ts
+init_local_config();
+import { resolve as resolve7 } from "node:path";
+
+// src/context/bindings.ts
+init_ids();
+init_timestamps();
+init_runner();
+init_validator();
+init_atomic();
+init_errors();
+import { readFile as readFile3, realpath as realpath2 } from "node:fs/promises";
+import { posix, win32 } from "node:path";
+var ContextError = class extends Error {
+  constructor(code, message, details) {
+    super(message);
+    this.code = code;
+    this.details = details;
+    this.name = "ContextError";
+  }
+};
+function pathApi(platform) {
+  return platform === "win32" ? win32 : posix;
+}
+function supportedPlatform(value) {
+  if (value === "win32" || value === "linux" || value === "darwin") {
+    return value;
+  }
+  throw new ContextError(
+    "UNSUPPORTED_PLATFORM",
+    `context binding is not supported on platform: ${value}`
+  );
+}
+function normalizeWorkspaceKey(workspaceRoot, platform) {
+  const api = pathApi(platform);
+  let normalized = api.normalize(workspaceRoot);
+  const parsed = api.parse(normalized);
+  while (normalized.length > parsed.root.length && normalized.endsWith(api.sep)) {
+    normalized = normalized.slice(0, -1);
+  }
+  if (platform === "win32") {
+    normalized = normalized.replaceAll("\\", "/").toLowerCase();
+  }
+  return `${platform}:${normalized}`;
+}
+function normalizeRepositoryFingerprint(remote) {
+  const trimmed = remote.trim();
+  const scp = /^(?:[^@\s]+@)?([^:/\s]+):(.+)$/u.exec(trimmed);
+  if (scp && !trimmed.includes("://") && !/^[a-zA-Z]:[\\/]/u.test(trimmed)) {
+    const host = scp[1]?.toLowerCase();
+    const repositoryPath = scp[2]?.replace(/^\/+|\/+$/gu, "").replace(/\.git$/u, "");
+    return host && repositoryPath ? `${host}/${repositoryPath}` : void 0;
+  }
+  try {
+    const url = new URL(trimmed);
+    if (!url.hostname || !["http:", "https:", "ssh:", "git:"].includes(url.protocol)) {
+      return void 0;
+    }
+    const repositoryPath = url.pathname.replace(/^\/+|\/+$/gu, "").replace(/\.git$/u, "");
+    return repositoryPath ? `${url.hostname.toLowerCase()}/${repositoryPath}` : void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function discoverGitWorkspace(cwd, platform = supportedPlatform(process.platform)) {
+  const rootResult = runGit(cwd, ["rev-parse", "--show-toplevel"]);
+  if (rootResult.status !== 0) {
+    throw new ContextError(
+      "GIT_WORKSPACE_REQUIRED",
+      "the selected directory is not inside a Git workspace"
+    );
+  }
+  const workspaceRoot = await realpath2(rootResult.stdout.trim());
+  const branchResult = runGit(cwd, [
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    "HEAD"
+  ]);
+  const remoteResult = runGit(cwd, [
+    "config",
+    "--get",
+    "remote.origin.url"
+  ]);
+  const repositoryFingerprint = remoteResult.status === 0 ? normalizeRepositoryFingerprint(remoteResult.stdout) : void 0;
+  return {
+    workspaceRoot,
+    workspaceKey: normalizeWorkspaceKey(workspaceRoot, platform),
+    branch: branchResult.status === 0 ? branchResult.stdout.trim() : null,
+    ...repositoryFingerprint ? { repositoryFingerprint } : {}
+  };
+}
+function emptyContextBindingState() {
+  return { formatVersion: 1, bindings: [] };
+}
+function bindingIdentity(binding) {
+  return binding.scope === "branch" ? `${binding.workspaceKey}\0branch\0${binding.branch ?? ""}` : `${binding.workspaceKey}\0workspace`;
+}
+function platformFromWorkspaceKey(workspaceKey) {
+  const prefix = workspaceKey.slice(0, workspaceKey.indexOf(":"));
+  if (prefix === "win32" || prefix === "linux" || prefix === "darwin") {
+    return prefix;
+  }
+  throw new StorageError(
+    "SCHEMA_VALIDATION_FAILED",
+    `binding has unsupported workspace key: ${workspaceKey}`
+  );
+}
+function validateBindingSemantics(state) {
+  const bindingIds = /* @__PURE__ */ new Set();
+  const identities = /* @__PURE__ */ new Set();
+  for (const binding of state.bindings) {
+    if (bindingIds.has(binding.bindingId)) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `context bindings contain duplicate binding ID: ${binding.bindingId}`
+      );
+    }
+    bindingIds.add(binding.bindingId);
+    const identity = bindingIdentity(binding);
+    if (identities.has(identity)) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        "context bindings contain duplicate workspace scope"
+      );
+    }
+    identities.add(identity);
+    const platform = platformFromWorkspaceKey(binding.workspaceKey);
+    if (normalizeWorkspaceKey(binding.workspaceRoot, platform) !== binding.workspaceKey) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `binding workspaceKey does not match workspaceRoot: ${binding.bindingId}`
+      );
+    }
+    if (binding.repositoryFingerprint && (binding.repositoryFingerprint.includes("@") || binding.repositoryFingerprint.includes("://") || binding.repositoryFingerprint.includes("\\"))) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `binding repository fingerprint is not credential-safe: ${binding.bindingId}`
+      );
+    }
+    if (binding.updatedAt < binding.createdAt) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `binding updatedAt precedes createdAt: ${binding.bindingId}`
+      );
+    }
+  }
+}
+async function loadContextBindingState(paths) {
+  let text;
+  try {
+    text = await readFile3(paths.bindingsFile, "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return emptyContextBindingState();
+    }
+    throw error;
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch (error) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `context bindings contain invalid JSON: ${paths.bindingsFile}`,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+  const validation = validateProtocolDocument("context-bindings", value, {
+    mode: "write"
+  });
+  if (!validation.ok) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `context bindings are invalid: ${paths.bindingsFile}`,
+      validation.issues
+    );
+  }
+  const state = value;
+  validateBindingSemantics(state);
+  return state;
+}
+async function saveContextBindingState(paths, state) {
+  validateBindingSemantics(state);
+  await writeValidatedJsonAtomic(
+    paths.bindingsFile,
+    "context-bindings",
+    state,
+    { overwrite: true, mode: 384 }
+  );
+}
+function requireBindingBranch(branch) {
+  if (!branch) {
+    throw new ContextError(
+      "GIT_BRANCH_REQUIRED",
+      "a branch binding requires a branch name"
+    );
+  }
+  return branch;
+}
+function setContextBinding(state, input, options = {}) {
+  if (input.scope === "branch") requireBindingBranch(input.branch);
+  const identity = bindingIdentity({
+    scope: input.scope,
+    workspaceKey: input.context.workspaceKey,
+    ...input.branch ? { branch: input.branch } : {}
+  });
+  const existing = state.bindings.find(
+    (binding2) => bindingIdentity(binding2) === identity
+  );
+  if (existing && !options.force) {
+    throw new ContextError(
+      "BINDING_EXISTS",
+      `a ${input.scope} binding already exists for this workspace and targets ${existing.forumId}/${existing.roomId}; use --force to replace it`,
+      existing
+    );
+  }
+  const timestamp = currentUtcTimestamp(options.now);
+  const common = {
+    bindingId: options.bindingId ?? existing?.bindingId ?? createEntityId("binding"),
+    workspaceType: "git",
+    workspaceRoot: input.context.workspaceRoot,
+    workspaceKey: input.context.workspaceKey,
+    forumId: input.forumId,
+    roomId: input.roomId,
+    ...input.context.repositoryFingerprint ? { repositoryFingerprint: input.context.repositoryFingerprint } : {},
+    createdAt: existing?.createdAt ?? timestamp,
+    updatedAt: timestamp
+  };
+  const binding = input.scope === "branch" ? {
+    ...common,
+    scope: "branch",
+    branch: requireBindingBranch(input.branch)
+  } : { ...common, scope: "workspace" };
+  const bindings = existing ? state.bindings.map(
+    (candidate) => bindingIdentity(candidate) === identity ? binding : candidate
+  ) : [...state.bindings, binding];
+  const next = { formatVersion: 1, bindings };
+  validateBindingSemantics(next);
+  return { state: next, binding, replaced: Boolean(existing) };
+}
+function removeContextBinding(state, workspaceKey, scope, branch) {
+  const identity = bindingIdentity({
+    scope,
+    workspaceKey,
+    ...branch ? { branch } : {}
+  });
+  const removed = state.bindings.filter(
+    (binding) => bindingIdentity(binding) === identity
+  );
+  return {
+    state: {
+      formatVersion: 1,
+      bindings: state.bindings.filter(
+        (binding) => bindingIdentity(binding) !== identity
+      )
+    },
+    removed
+  };
+}
+function resolveContextBinding(state, context) {
+  if (context.branch !== null) {
+    const exact = state.bindings.find(
+      (binding) => binding.scope === "branch" && binding.workspaceKey === context.workspaceKey && binding.branch === context.branch
+    );
+    if (exact) return { kind: "bound", source: "branch", binding: exact };
+  }
+  const fallback = state.bindings.find(
+    (binding) => binding.scope === "workspace" && binding.workspaceKey === context.workspaceKey
+  );
+  return fallback ? { kind: "bound", source: "workspace", binding: fallback } : { kind: "unbound", code: "CONTEXT_NOT_BOUND" };
+}
+
+// src/services/context.ts
+init_runner();
+init_lock();
+init_paths();
+init_errors2();
+init_room();
 function selectedCwd(cwd) {
   return resolve7(cwd ?? process.cwd());
 }
@@ -9942,6 +10189,10 @@ async function showContext(cwd, paths = createAgentForumPaths()) {
 }
 
 // src/commands/error-result.ts
+init_state_transitions();
+init_runner();
+init_errors2();
+init_errors();
 function commandError(command, error) {
   if (error instanceof ContextError || error instanceof ServiceError || error instanceof StorageError || error instanceof GitCommandError || error instanceof StateTransitionError) {
     return {
@@ -10161,11 +10412,22 @@ status: ${result.targetStatus}
 }
 
 // src/services/doctor.ts
+init_local_config();
 import { access, lstat as lstat3, readdir as readdir4 } from "node:fs/promises";
 import { constants } from "node:fs";
 import { resolve as resolve10 } from "node:path";
+init_runner();
+init_lock();
+init_paths();
 
 // src/services/conflicts.ts
+init_local_config();
+init_timestamps();
+init_runner();
+init_atomic();
+init_lock();
+init_paths();
+init_errors2();
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { readdir as readdir3, readFile as readFile5, rm as rm4 } from "node:fs/promises";
 import { resolve as resolve8 } from "node:path";
@@ -10300,11 +10562,15 @@ async function closeConflict(forumAlias, operationId, paths = createAgentForumPa
 }
 
 // src/services/forum-remote.ts
+init_local_config();
+init_timestamps();
+init_runner();
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { lstat as lstat2, mkdir as mkdir3, rename as rename3, rm as rm5 } from "node:fs/promises";
 import { resolve as resolve9 } from "node:path";
 
 // src/git/remote.ts
+init_errors2();
 import { isAbsolute } from "node:path";
 function validateRemoteUrl(value) {
   const trimmed = value.trim();
@@ -10376,6 +10642,10 @@ function displayRemoteUrl(value) {
 }
 
 // src/services/forum-remote.ts
+init_lock();
+init_paths();
+init_errors2();
+init_room();
 async function pathExists2(path) {
   try {
     await lstat2(path);
@@ -10520,6 +10790,21 @@ async function addRemoteForum(input, paths = createAgentForumPaths()) {
     if (cloned) await rm5(destination, { recursive: true, force: true });
     throw error;
   }
+}
+async function inspectForumOriginRemote(input, paths = createAgentForumPaths()) {
+  const safeExpected = validateRemoteUrl(input.expectedRemote);
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const origin = runGit(registration.path, ["remote", "get-url", "origin"]);
+  if (origin.status !== 0) {
+    return { configured: false, matchesExpected: false, displayUrl: null };
+  }
+  const existing = origin.stdout.trim();
+  return {
+    configured: true,
+    matchesExpected: existing === safeExpected.value,
+    displayUrl: displayRemoteUrl(existing)
+  };
 }
 async function publishLocalForum(input, paths = createAgentForumPaths()) {
   const safeRemote = validateRemoteUrl(input.remote);
@@ -10877,6 +11162,16 @@ ${result.checks.map((check) => `${check.status}	${check.id}	${check.message}`).j
 }
 
 // src/services/forum-lifecycle.ts
+init_ids();
+init_state_transitions();
+init_timestamps();
+init_runner();
+init_atomic();
+init_errors();
+init_paths();
+init_protocol_store();
+init_errors2();
+init_room();
 import { readFile as readFile6, readdir as readdir5, rm as rm6 } from "node:fs/promises";
 import { resolve as resolve11 } from "node:path";
 async function readForumView(forumAlias, paths) {
@@ -11016,7 +11311,22 @@ async function leaveForum(forumAlias, identityId, paths = createAgentForumPaths(
   });
 }
 
+// src/services/forum-sync.ts
+init_local_config();
+init_runner();
+init_lock();
+init_paths();
+init_errors2();
+init_room();
+
+// src/services/semantic-validation.ts
+init_runner();
+init_room();
+
 // src/services/thread.ts
+init_ids();
+init_message_types();
+init_state_transitions();
 import { readFile as readFile7, readdir as readdir6, rm as rm7 } from "node:fs/promises";
 import { basename as basename2, resolve as resolve12 } from "node:path";
 
@@ -11037,6 +11347,14 @@ function isKnownThreadKind(value) {
 }
 
 // src/services/thread.ts
+init_timestamps();
+init_runner();
+init_atomic();
+init_errors();
+init_paths();
+init_protocol_store();
+init_errors2();
+init_room();
 function structuralWarning(code, path, message) {
   return { code, path, message };
 }
@@ -12192,6 +12510,16 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
 }
 
 // src/services/local-forum.ts
+init_local_config();
+init_ids();
+init_timestamps();
+init_runner();
+init_validator();
+init_atomic();
+init_errors();
+init_lock();
+init_paths();
+init_errors2();
 import {
   mkdir as mkdir4,
   readFile as readFile8,
@@ -12805,6 +13133,7 @@ remote: unchanged
 }
 
 // src/commands/identity.ts
+init_local_config();
 function identityHelp() {
   return {
     exitCode: ExitCode.Success,
@@ -12956,8 +13285,17 @@ forum: ${forum}
 }
 
 // src/services/inbox.ts
+init_local_config();
+init_timestamps();
+init_validator();
+init_atomic();
+init_errors();
+init_lock();
+init_paths();
+init_errors2();
 import { readFile as readFile9, readdir as readdir7 } from "node:fs/promises";
 import { resolve as resolve14 } from "node:path";
+init_room();
 function cursorPath(paths, forumId, memberId) {
   return resolve14(forumStatePath(paths, forumId), "cursors", `${memberId}.json`);
 }
@@ -13333,6 +13671,7 @@ commit: ${result.commit}
 }
 
 // src/commands/room.ts
+init_room();
 function roomHelp() {
   return {
     exitCode: ExitCode.Success,
@@ -13544,6 +13883,226 @@ commit: ${result.commit}
   }
 }
 
+// src/commands/setup.ts
+init_local_config();
+init_room();
+function setupHelp() {
+  return {
+    exitCode: ExitCode.Success,
+    command: "setup.help",
+    data: {
+      commands: ["setup"]
+    },
+    human: `Interactive-first onboarding for a new Agent Forum workspace
+
+Usage:
+  agent-forum setup --alias <alias> --name <name> --description <text>
+                    --room-slug <slug> --room-title <title> --room-description <text>
+                    [--remote <url>] [--data-branch <branch>]
+                    [--identity-name <name>] [--identity-role <role>] [--identity-responsibility <text>]
+                    [--workspace | --bind-branch <branch>]
+
+Steps performed idempotently:
+  1. Create a default identity if none exists.
+  2. Create a local Forum if the alias is not yet registered.
+  3. Publish the Forum to --remote if the alias has no remote configured.
+  4. Create the Room if its slug does not exist.
+  5. Publish the identity as an active Forum member.
+  6. Join the Room with the published identity.
+  7. Bind the current Git workspace/branch to the Room.
+
+Use --data-branch to select the Forum collaboration data branch. Use --workspace to bind the default context for the whole workspace, or --bind-branch to bind one specific business-workspace branch.
+`
+  };
+}
+function valueOrError4(parsed, name) {
+  const value = requireOption(parsed, name);
+  return typeof value === "string" ? value : invalidArgument(value.error);
+}
+async function executeSetupCommand(args) {
+  const subcommand = args[0];
+  if (!subcommand || subcommand === "help" || subcommand === "--help") {
+    return setupHelp();
+  }
+  if (subcommand !== "setup") {
+    return invalidArgument(`unknown setup subcommand: ${subcommand}`);
+  }
+  const parsed = parseCommandOptions(args.slice(1), {
+    values: [
+      "--alias",
+      "--name",
+      "--description",
+      "--room-slug",
+      "--room-title",
+      "--room-description",
+      "--remote",
+      "--data-branch",
+      "--bind-branch",
+      "--identity-name",
+      "--identity-role",
+      "--identity-responsibility",
+      "--cwd"
+    ],
+    flags: ["--workspace"]
+  });
+  if ("error" in parsed) return invalidArgument(parsed.error);
+  if (parsed.flags.has("--workspace") && parsed.values.has("--bind-branch")) {
+    return invalidArgument("--workspace and --bind-branch cannot be combined");
+  }
+  const alias = valueOrError4(parsed, "--alias");
+  if (typeof alias !== "string") return alias;
+  const name = valueOrError4(parsed, "--name");
+  if (typeof name !== "string") return name;
+  const description = valueOrError4(parsed, "--description");
+  if (typeof description !== "string") return description;
+  const roomSlug = valueOrError4(parsed, "--room-slug");
+  if (typeof roomSlug !== "string") return roomSlug;
+  const roomTitle = valueOrError4(parsed, "--room-title");
+  if (typeof roomTitle !== "string") return roomTitle;
+  const roomDescription = valueOrError4(parsed, "--room-description");
+  if (typeof roomDescription !== "string") return roomDescription;
+  const remote = parsed.values.get("--remote");
+  const dataBranch = parsed.values.get("--data-branch");
+  const bindBranch = parsed.values.get("--bind-branch");
+  const cwd = parsed.values.get("--cwd");
+  const identityName = parsed.values.get("--identity-name") ?? "Collaborator";
+  const identityRole = parsed.values.get("--identity-role") ?? "developer";
+  const identityResponsibility = parsed.values.get("--identity-responsibility") ?? "Works on features and coordinates with other agents.";
+  const workspace = parsed.flags.has("--workspace");
+  const log = [];
+  const data = {};
+  try {
+    const config = await loadLocalConfig();
+    let identityId;
+    if (!config.defaultIdentityId || config.identities.length === 0) {
+      const created = await createLocalIdentity({
+        displayName: identityName,
+        role: identityRole,
+        responsibility: identityResponsibility,
+        setDefault: true
+      });
+      identityId = created.identity.memberId;
+      log.push(`created identity: ${identityId}`);
+      data.identityCreated = {
+        memberId: identityId,
+        displayName: identityName,
+        role: identityRole
+      };
+    } else {
+      const identity = findIdentity(config);
+      identityId = identity.memberId;
+      log.push(`using identity: ${identityId}`);
+      data.identityUsed = { memberId: identityId };
+    }
+    const existingForum = config.forums.find((f) => f.alias === alias);
+    let forumId;
+    if (!existingForum) {
+      const initResult = await initLocalForum({
+        alias,
+        name,
+        description,
+        dataBranch: dataBranch ?? "main",
+        identityId
+      });
+      forumId = initResult.forumId;
+      log.push(`created forum: ${forumId}`);
+      data.forumCreated = { forumId, path: initResult.path };
+    } else {
+      forumId = existingForum.forumId;
+      log.push(`using forum: ${forumId}`);
+      data.forumUsed = { forumId, path: existingForum.path };
+    }
+    if (remote) {
+      const origin = await inspectForumOriginRemote({
+        forumAlias: alias,
+        expectedRemote: remote
+      });
+      if (!origin.configured) {
+        const publishResult2 = await publishLocalForum({ forumAlias: alias, remote });
+        log.push(`published to remote: ${publishResult2.remote}`);
+        data.remotePublished = { remote: publishResult2.remote, branch: publishResult2.branch };
+      } else if (origin.matchesExpected) {
+        log.push(`remote already configured: ${origin.displayUrl}`);
+        data.remoteUsed = { remote: origin.displayUrl };
+      } else {
+        await publishLocalForum({ forumAlias: alias, remote });
+      }
+    }
+    const rooms = await Promise.resolve().then(() => (init_room(), room_exports)).then((m) => m.listRooms(alias));
+    const existingRoom = rooms.rooms.find((r) => r.slug === roomSlug);
+    let roomId;
+    if (!existingRoom) {
+      const roomResult = await createRoom({
+        forumAlias: alias,
+        slug: roomSlug,
+        title: roomTitle,
+        description: roomDescription,
+        identityId
+      });
+      roomId = roomResult.room.id;
+      log.push(`created room: ${roomId}`);
+      data.roomCreated = { roomId, slug: roomSlug };
+    } else {
+      roomId = existingRoom.id;
+      log.push(`using room: ${roomId}`);
+      data.roomUsed = { roomId, slug: roomSlug };
+    }
+    const publishResult = await publishIdentity(alias, identityId);
+    if (publishResult.action === "published") {
+      log.push(`published identity in forum: ${publishResult.commit?.slice(0, 7) ?? "n/a"}`);
+      data.identityPublished = { action: "published", commit: publishResult.commit };
+    } else {
+      log.push("identity already published in forum");
+      data.identityPublished = { action: "unchanged" };
+    }
+    const joinResult = await joinRoom({ forumAlias: alias, room: roomId, identityId });
+    log.push(`room membership: ${joinResult.action}`);
+    data.roomMembership = { action: joinResult.action, memberId: joinResult.member.memberId };
+    let resolved;
+    try {
+      resolved = await resolveContext({ ...cwd ? { cwd } : {} });
+    } catch (error) {
+      if (!(error instanceof ContextError) || error.code !== "CONTEXT_NOT_BOUND" && error.code !== "BINDING_TARGET_UNAVAILABLE") {
+        throw error;
+      }
+    }
+    const alreadyBound = resolved && resolved.targetStatus === "active" && resolved.forumAlias === alias && resolved.roomSlug === roomSlug;
+    if (alreadyBound) {
+      log.push(`context already bound: ${alias}/${roomSlug}`);
+      data.contextBound = resolved;
+    } else {
+      const bindResult = await bindContext({
+        forumAlias: alias,
+        room: roomSlug,
+        workspace,
+        ...cwd ? { cwd } : {},
+        ...bindBranch ? { branch: bindBranch } : {}
+      });
+      log.push(`bound context: ${bindResult.target.forumAlias}/${bindResult.target.roomSlug}`);
+      data.contextBound = bindResult;
+    }
+    return {
+      exitCode: ExitCode.Success,
+      command: "setup",
+      data,
+      human: log.join("\n") + "\nsetup complete\n"
+    };
+  } catch (error) {
+    const result = commandError("setup", error);
+    if (result) return result;
+    return {
+      exitCode: ExitCode.Unexpected,
+      command: "setup",
+      error: {
+        code: "UNEXPECTED_ERROR",
+        message: error instanceof Error ? error.message : String(error)
+      },
+      human: `Error [UNEXPECTED_ERROR]: ${error instanceof Error ? error.message : String(error)}
+`
+    };
+  }
+}
+
 // src/skill/installer.ts
 import { createHash, randomUUID as randomUUID6 } from "node:crypto";
 import {
@@ -13564,7 +14123,7 @@ import { spawnSync as spawnSync2 } from "node:child_process";
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.3" : "0.0.0-dev";
+var VERSION = true ? "0.0.4" : "0.0.0-dev";
 
 // src/skill/installer.ts
 var SkillInstallationError = class extends Error {
@@ -14148,15 +14707,26 @@ commit: ${result.commit}
   }
 }
 
+// src/commands/viewer.ts
+init_paths();
+
 // src/services/viewer.ts
+init_atomic();
+init_paths();
 import { randomBytes as randomBytes2, randomUUID as randomUUID7 } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir as mkdir6, readFile as readFile12, readdir as readdir10, rm as rm10 } from "node:fs/promises";
 import { dirname as dirname4, resolve as resolve17 } from "node:path";
 
 // src/services/timeline-cache.ts
+init_local_config();
+init_runner();
+init_atomic();
+init_lock();
+init_paths();
 import { readFile as readFile11, readdir as readdir9 } from "node:fs/promises";
 import { relative as relative2, resolve as resolve16 } from "node:path";
+init_room();
 function cachePath(paths, forumId) {
   return resolve16(forumStatePath(paths, forumId), "cache", "snapshot.json");
 }
@@ -14339,6 +14909,9 @@ async function getForumSnapshot(forumAlias, paths = createAgentForumPaths()) {
   }
 }
 
+// src/services/viewer.ts
+init_errors2();
+
 // src/viewer/server.ts
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
@@ -14371,38 +14944,155 @@ function typeBadgeClass(type) {
       return "t-default";
   }
 }
-function renderItem(item, timeline, snapshot) {
+function initials(name) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]?.toUpperCase() ?? "").join("");
+}
+function formatTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(void 0, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+function renderMarkdown(text) {
+  const escaped = escapeHtml(text);
+  const codeBlocks = [];
+  let working = escaped.replace(/```([\s\S]*?)```/g, (_m, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push(`<pre class="code-block"><code>${code.replace(/^\n/, "")}</code></pre>`);
+    return `\0CODEBLOCK${idx}\0`;
+  });
+  const inline = (s) => s.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>').replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (m, label, url) => {
+      const trimmed = url.trim();
+      if (/^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)) {
+        return `<a href="${trimmed}" rel="nofollow noopener" target="_blank">${label}</a>`;
+      }
+      return m;
+    }
+  );
+  const lines2 = working.split("\n");
+  const out = [];
+  let listType = null;
+  let paragraph = [];
+  const flushParagraph = () => {
+    if (paragraph.length > 0) {
+      out.push(`<p>${inline(paragraph.join(" "))}</p>`);
+      paragraph = [];
+    }
+  };
+  const closeList = () => {
+    if (listType) {
+      out.push(`</${listType}>`);
+      listType = null;
+    }
+  };
+  for (const line of lines2) {
+    if (line.startsWith("\0CODEBLOCK")) {
+      flushParagraph();
+      closeList();
+      out.push(line.replace(/\u0000CODEBLOCK(\d+)\u0000/, (_m, i) => codeBlocks[Number(i)] ?? ""));
+      continue;
+    }
+    if (line.trim() === "") {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+    const h = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (h && h[1] && h[2]) {
+      flushParagraph();
+      closeList();
+      const level = h[1].length + 2;
+      out.push(`<h${level}>${inline(h[2])}</h${level}>`);
+      continue;
+    }
+    if (line.startsWith("&gt; ")) {
+      flushParagraph();
+      closeList();
+      out.push(`<blockquote class="md-quote">${inline(line.slice(5))}</blockquote>`);
+      continue;
+    }
+    if (/^[-*]\s+/.test(line)) {
+      flushParagraph();
+      if (listType !== "ul") {
+        closeList();
+        out.push("<ul>");
+        listType = "ul";
+      }
+      out.push(`<li>${inline(line.replace(/^[-*]\s+/, ""))}</li>`);
+      continue;
+    }
+    if (/^\d+\.\s+/.test(line)) {
+      flushParagraph();
+      if (listType !== "ol") {
+        closeList();
+        out.push("<ol>");
+        listType = "ol";
+      }
+      out.push(`<li>${inline(line.replace(/^\d+\.\s+/, ""))}</li>`);
+      continue;
+    }
+    closeList();
+    paragraph.push(line);
+  }
+  flushParagraph();
+  closeList();
+  return out.join("\n");
+}
+function renderItem(item, timeline, snapshot, index) {
   const actorId = item.kind === "message" ? item.authorId : item.actorId;
   const profile = snapshot.members[actorId];
   const actor = profile?.displayName ?? actorId;
   const badge = item.kind === "event" ? "t-event" : typeBadgeClass(item.type);
+  const avatar = `<div class="avatar" aria-hidden="true">${escapeHtml(initials(actor))}</div>`;
   let content;
   if (item.kind === "message") {
     const parent = item.replyTo ? timeline.find((candidate) => candidate.kind === "message" && candidate.id === item.replyTo) : void 0;
-    const reply = item.replyTo ? parent && parent.kind === "message" ? `<div class="reply">${biText("Reply to", "\u56DE\u590D")}${escapeHtml(" ")}${escapeHtml(snapshot.members[parent.authorId]?.displayName ?? parent.authorId)}${escapeHtml(": ")}${escapeHtml(parent.body.slice(0, 160))}</div>` : `<div class="reply missing">${biText("Reply target unavailable:", "\u56DE\u590D\u76EE\u6807\u4E0D\u53EF\u7528\uFF1A")}${escapeHtml(" ")}${escapeHtml(item.replyTo)}</div>` : "";
-    const mentions = item.mentions.length ? `<div class="chips">${biText("Mentions:", "\u63D0\u53CA\uFF1A")}${escapeHtml(" ")}${item.mentions.map((id) => `<code>${escapeHtml(snapshot.members[id]?.displayName ?? id)}</code>`).join(" ")}</div>` : "";
-    const references = item.references.length ? `<div class="chips">${biText("References:", "\u5F15\u7528\uFF1A")}${escapeHtml(" ")}${item.references.map((reference) => `<code>${escapeHtml(reference.kind)}=${escapeHtml(reference.value)}</code>`).join(" ")}</div>` : "";
-    content = `${reply}<div class="body">${escapeHtml(item.body)}</div>${mentions}${references}`;
+    const reply = item.replyTo ? parent && parent.kind === "message" ? `<blockquote class="reply"><div class="reply-meta">${biText("Reply to", "\u56DE\u590D")} ${escapeHtml(snapshot.members[parent.authorId]?.displayName ?? parent.authorId)}</div><div class="reply-body">${escapeHtml(parent.body.slice(0, 180))}${parent.body.length > 180 ? "\u2026" : ""}</div></blockquote>` : `<blockquote class="reply missing"><div class="reply-meta">${biText("Reply target unavailable", "\u56DE\u590D\u76EE\u6807\u4E0D\u53EF\u7528")}</div><div class="reply-body">${escapeHtml(item.replyTo)}</div></blockquote>` : "";
+    const mentions = item.mentions.length ? `<div class="chips"><span class="chips-label">${biText("Mentions", "\u63D0\u53CA")}</span>${item.mentions.map((id) => `<span class="chip mention">${escapeHtml(snapshot.members[id]?.displayName ?? id)}</span>`).join("")}</div>` : "";
+    const references = item.references.length ? `<div class="chips"><span class="chips-label">${biText("References", "\u5F15\u7528")}</span>${item.references.map((reference) => `<span class="chip ref">${escapeHtml(reference.kind)}=${escapeHtml(reference.value)}</span>`).join("")}</div>` : "";
+    content = `${reply}<div class="body markdown">${renderMarkdown(item.body)}</div>${mentions}${references}`;
   } else {
-    content = `<div class="body">${escapeHtml(item.reason)}</div><div class="chips">${escapeHtml(JSON.stringify(item.data))}</div>`;
+    const data = JSON.stringify(item.data);
+    content = `<div class="body">${escapeHtml(item.reason)}</div>${data === "{}" ? "" : `<div class="chips"><span class="chips-label">${biText("Data", "\u6570\u636E")}</span><span class="chip raw">${escapeHtml(data)}</span></div>`}`;
   }
   const roomRef = item.kind === "message" ? item.threadId : "event";
   const correctionEn = `Please review and correct Agent Forum item ${item.id} in room ${roomRef}. Preserve history and publish a new correction or event.`;
   const correctionZh = `\u8BF7\u5BA1\u67E5\u5E76\u7EA0\u6B63 Agent Forum \u4E2D\u7684\u6761\u76EE ${item.id}\uFF08Room: ${roomRef}\uFF09\u3002\u4FDD\u7559\u5386\u53F2\uFF0C\u53D1\u5E03\u65B0\u7684\u7EA0\u6B63\u6D88\u606F\u6216\u4E8B\u4EF6\u3002`;
-  return `<article class="item ${item.kind}"><header><span class="type ${badge}">${escapeHtml(item.type)}</span><span class="actor">${escapeHtml(actor)}${profile ? ` <span class="role">${escapeHtml(profile.role)}</span>` : ""}</span><time>${escapeHtml(item.createdAt)}</time></header>${content}<footer><code>${escapeHtml(item.id)}</code><button class="copy btn-sm" data-copy="${escapeHtml(item.id)}" data-copy-en="${escapeHtml(item.id)}" data-copy-zh="${escapeHtml(item.id)}" data-en="Copy ID" data-zh="\u590D\u5236 ID">${escapeHtml("Copy ID")}</button><button class="copy btn-sm" data-copy="${escapeHtml(correctionEn)}" data-copy-en="${escapeHtml(correctionEn)}" data-copy-zh="${escapeHtml(correctionZh)}" data-en="Copy correction prompt" data-zh="\u590D\u5236\u7EA0\u6B63\u63D0\u793A">${escapeHtml("Copy correction prompt")}</button></footer></article>`;
+  return `<article class="item ${item.kind}">${avatar}<div class="item-main"><div class="item-line"></div><div class="item-content"><header><span class="actor">${escapeHtml(actor)}</span>${profile ? `<span class="role">${escapeHtml(profile.role)}</span>` : ""}<span class="type ${badge}">${escapeHtml(item.type)}</span><time datetime="${escapeHtml(item.createdAt)}">${escapeHtml(formatTime(item.createdAt))}</time></header>${content}<footer><button class="copy btn-sm" data-copy="${escapeHtml(item.id)}" data-copy-en="${escapeHtml(item.id)}" data-copy-zh="${escapeHtml(item.id)}" data-en="Copy ID" data-zh="\u590D\u5236 ID">Copy ID</button><button class="copy btn-sm" data-copy="${escapeHtml(correctionEn)}" data-copy-en="${escapeHtml(correctionEn)}" data-copy-zh="${escapeHtml(correctionZh)}" data-en="Copy correction prompt" data-zh="\u590D\u5236\u7EA0\u6B63\u63D0\u793A">Copy correction prompt</button></footer></div></div></article>`;
+}
+function renderThread({ thread, timeline }, snapshot) {
+  const creator = snapshot.members[thread.createdBy]?.displayName ?? thread.createdBy;
+  const threadId = escapeHtml(thread.id);
+  const messageCount = thread.messageCount ?? timeline.filter((i) => i.kind === "message").length;
+  const title = escapeHtml(thread.title);
+  const kind = escapeHtml(thread.kind);
+  const metaEn = `${kind} \xB7 ${escapeHtml(thread.status)} \xB7 ${messageCount} messages \xB7 ${escapeHtml(creator)} \xB7 ${escapeHtml(formatTime(thread.createdAt))}`;
+  const metaZh = `${kind} \xB7 ${escapeHtml(thread.status)} \xB7 ${messageCount} \u6761\u6D88\u606F \xB7 ${escapeHtml(creator)} \xB7 ${escapeHtml(formatTime(thread.createdAt))}`;
+  const items = timeline.map((item, index) => renderItem(item, timeline, snapshot, index)).join("");
+  return `<section class="thread" id="thread-${threadId}" data-title="${title.toLowerCase()}"><div class="thread-head"><div class="thread-icon"></div><div class="thread-meta"><h2>${title}</h2><div class="meta">${biHtml(metaEn, metaZh)}</div></div><div class="thread-actions"><button class="copy btn-sm" data-copy="${threadId}" data-copy-en="${threadId}" data-copy-zh="${threadId}" data-en="Copy thread ID" data-zh="\u590D\u5236 Thread ID">Copy thread ID</button></div></div><div class="thread-body">${items}</div></section>`;
 }
 function renderViewerHtml(snapshot, room) {
-  const threads = room.threads.map(({ thread, timeline }) => {
-    const creator = snapshot.members[thread.createdBy]?.displayName ?? thread.createdBy;
-    const metaEn = `<strong>${escapeHtml(thread.kind)}</strong> \xB7 ${escapeHtml(thread.status)} \xB7 created by ${escapeHtml(creator)} at ${escapeHtml(thread.createdAt)} \xB7 ${timeline.length} timeline items \xB7 last ${escapeHtml(thread.lastActivityAt)}`;
-    const metaZh = `<strong>${escapeHtml(thread.kind)}</strong> \xB7 ${escapeHtml(thread.status)} \xB7 \u7531 ${escapeHtml(creator)} \u521B\u5EFA\u4E8E ${escapeHtml(thread.createdAt)} \xB7 ${timeline.length} \u6761\u65F6\u95F4\u7EBF \xB7 \u6700\u540E ${escapeHtml(thread.lastActivityAt)}`;
-    return `<section class="thread"><div class="thread-head"><h2>${escapeHtml(thread.title)}</h2><div class="meta">${biHtml(metaEn, metaZh)}</div></div><div class="thread-body"><button class="copy btn-sm" data-copy="${escapeHtml(thread.id)}" data-copy-en="${escapeHtml(thread.id)}" data-copy-zh="${escapeHtml(thread.id)}" data-en="Copy thread ID" data-zh="\u590D\u5236 Thread ID">${escapeHtml("Copy thread ID")}</button>${timeline.map((item) => renderItem(item, timeline, snapshot)).join("")}</div></section>`;
+  const activeMembers = Object.entries(room.members ?? {}).filter(([, membership]) => membership.status === "active").map(([id, membership]) => {
+    const profile = snapshot.members[id];
+    return `<li><span class="member-name">${escapeHtml(profile?.displayName ?? id)}</span><span class="role">${escapeHtml(membership.role)}</span><span class="responsibility">${escapeHtml(membership.responsibility)}</span></li>`;
   }).join("");
-  const roomEvents = room.events.length ? `<section class="thread"><div class="thread-head"><h2>${biText("Room events", "Room \u4E8B\u4EF6")}</h2></div><div class="thread-body">${room.events.map((event) => renderItem(event, room.events, snapshot)).join("")}</div></section>` : "";
-  const activeMembers = Object.entries(room.members ?? {}).filter(([, membership]) => membership.status === "active").map(([id, membership]) => `<li>${escapeHtml(snapshot.members[id]?.displayName ?? id)} <span class="role">${escapeHtml(membership.role)}</span> \xB7 ${escapeHtml(membership.responsibility)}</li>`).join("");
-  const warnings = snapshot.warnings.length ? `<aside class="warnings"><h2>${biText("Protocol warnings", "\u534F\u8BAE\u8B66\u544A")}</h2>${snapshot.warnings.map((warning) => `<p><strong>${escapeHtml(warning.code)}</strong> ${escapeHtml(warning.path)} \u2014 ${escapeHtml(warning.message)}</p>`).join("")}</aside>` : "";
-  const noThreads = biText("No threads.", "\u6CA1\u6709 Thread\u3002");
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:920px;margin:0 auto;padding:0;background:#f0f2f5;color:#1d2433;line-height:1.6}.wrap{padding:24px 20px 60px}h1{margin:0 0 4px;font-size:22px;font-weight:700}.meta{color:#667085;font-size:12px;margin:0}.meta code{background:#f1f3f5;padding:1px 5px;border-radius:4px;font-size:11px}code{font-family:ui-monospace,'SF Mono',Consolas,monospace}time{color:#94a3b8;font-size:11px}.thread{background:#fff;border:1px solid #e4e7ec;border-radius:12px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.thread-head{padding:14px 20px;border-bottom:1px solid #f0f1f3}.thread-head h2{margin:0 0 4px;font-size:16px;font-weight:600}.thread-body{padding:6px 20px 14px}.item{border-left:3px solid #6366f1;padding:12px 16px;margin:10px 0;background:#fbfbfc;border-radius:0 8px 8px 0;transition:background .15s,box-shadow .15s}.item:hover{background:#f5f7fa;box-shadow:0 1px 2px rgba(0,0,0,.04)}.event{border-color:#d97706}.item>header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}.type{font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:20px;display:inline-block}.t-default{background:#dbeafe;color:#1e40af}.t-event{background:#fef3c7;color:#92400e}.t-danger{background:#fee2e2;color:#991b1b}.t-success{background:#d1fae5;color:#065f46}.t-violet{background:#ede9fe;color:#5b21b6}.t-neutral{background:#f1f5f9;color:#475569}.actor{font-size:13px;color:#334155}.role{color:#94a3b8;font-size:12px;margin-left:2px}.item time{margin-left:auto}.body{white-space:pre-wrap;margin:8px 0;font-size:14px;line-height:1.65}.reply{font-size:13px;color:#64748b;background:#f1f5f9;padding:8px 12px;border-radius:8px;margin-bottom:8px;border-left:2px solid #cbd5e1}.reply.missing{color:#b91c1c;background:#fef2f2;border-color:#fca5a5}.chips{font-size:12px;margin:6px 0;color:#64748b}.chips code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px}.item>footer{margin-top:10px;padding-top:8px;border-top:1px solid #f0f1f3;display:flex;align-items:center;gap:6px;flex-wrap:wrap}.item>footer>code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:11px;color:#94a3b8}.warnings{background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:14px 20px;margin:14px 0}.warnings h2{font-size:14px;color:#92400e;margin:0 0 8px}.warnings p{margin:4px 0;font-size:13px;color:#78350f}.toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap}.toolbar-right{display:flex;gap:8px}button{padding:7px 14px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:13px;cursor:pointer;transition:all .15s}button:hover{border-color:#6366f1;color:#6366f1}#close:hover{background:#ef4444;border-color:#ef4444;color:#fff}.btn-sm{padding:4px 10px;font-size:12px;border-radius:6px}.notice{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;color:#1e40af}details{margin:12px 0}summary{cursor:pointer;font-size:13px;font-weight:500;padding:8px 12px;background:#fff;border:1px solid #e4e7ec;border-radius:8px;transition:all .15s}summary:hover{border-color:#6366f1}details ul{list-style:none;padding:8px 0 0;margin:0}details li{padding:3px 12px;font-size:13px;color:#64748b}.lang-zh{display:none}</style></head><body><div class="wrap"><div class="toolbar"><div><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${escapeHtml(room.room.status)} \xB7 cache ${escapeHtml(snapshot.sourceHead.slice(0, 12))} \xB7 generated ${escapeHtml(snapshot.generatedAt)}</div></div><div class="toolbar-right"><button id="lang-toggle">\u4E2D\u6587</button><button id="close">Close viewer</button></div></div><p>${escapeHtml(room.room.description)}</p><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "\u53EA\u8BFB\u89C6\u56FE\u3002\u5982\u9700\u7EA0\u6B63\uFF0C\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u63D0\u51FA\uFF1B\u6B64\u5904\u4E0D\u4F1A\u4FEE\u6539\u5386\u53F2\u3002")}</p><button class="copy btn-sm" data-copy="${escapeHtml(room.room.id)}" data-copy-en="${escapeHtml(room.room.id)}" data-copy-zh="${escapeHtml(room.room.id)}" data-en="Copy room ID" data-zh="\u590D\u5236 Room ID">${escapeHtml("Copy room ID")}</button>${activeMembers ? `<details><summary>${biText("Active members", "\u6D3B\u8DC3\u6210\u5458")}</summary><ul>${activeMembers}</ul></details>` : ""}${warnings}${roomEvents}${threads || `<p>${noThreads}</p>`}<script nonce="agent-forum">let lang=navigator.language.startsWith('zh')?'zh':'en';function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);document.getElementById('lang-toggle').textContent=lang==='en'?'\u4E2D\u6587':'EN';}applyLang();document.getElementById('lang-toggle').addEventListener('click',()=>{lang=lang==='en'?'zh':'en';applyLang()});document.querySelectorAll('.copy').forEach(button=>button.addEventListener('click',()=>navigator.clipboard.writeText(button.dataset.copy||'')));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<div class="wrap"><p>Viewer closed.</p></div>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></div></body></html>`;
+  const threadOutlines = room.threads.map((t) => {
+    const id = escapeHtml(t.thread.id);
+    const title = escapeHtml(t.thread.title);
+    return `<a class="outline-item" href="#thread-${id}" data-title="${title.toLowerCase()}">${title}</a>`;
+  }).join("");
+  const threads = room.threads.map((t) => renderThread(t, snapshot)).join("");
+  const roomEvents = room.events.length ? `<section class="thread events" id="thread-events" data-title="events"><div class="thread-head"><div class="thread-icon event"></div><div class="thread-meta"><h2>${biText("Room events", "Room \u4E8B\u4EF6")}</h2></div></div><div class="thread-body">${room.events.map((event, index) => renderItem(event, room.events, snapshot, index)).join("")}</div></section>` : "";
+  const warnings = snapshot.warnings.length ? `<aside class="warnings"><div class="warnings-head"><span class="warnings-icon">\u26A0</span><h2>${biText("Protocol warnings", "\u534F\u8BAE\u8B66\u544A")}</h2></div>${snapshot.warnings.map((warning) => `<div class="warning"><strong>${escapeHtml(warning.code)}</strong><span>${escapeHtml(warning.path)}</span><span>\u2014 ${escapeHtml(warning.message)}</span></div>`).join("")}</aside>` : "";
+  const noThreads = `<div class="empty">${biText("No threads yet.", "\u8FD8\u6CA1\u6709 Thread\u3002")}</div>`;
+  const revision = snapshot.sourceHead;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}.appbar-main{min-width:0;flex:1}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 12px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);padding:12px 14px;margin:0 0 20px}.warnings-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}.warnings h2{margin:0;font-size:13px;color:var(--warning)}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:3px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.lang-zh{display:none}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-main"><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${escapeHtml(room.room.status)} \xB7 ${biHtml("cache", "\u7F13\u5B58")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code></div></div><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search threads\u2026" data-placeholder-zh="\u641C\u7D22\u4E3B\u9898\u2026" placeholder="Search threads\u2026" autocomplete="off"></div><div class="toolbar"><button id="lang-toggle" data-en="\u4E2D\u6587" data-zh="EN">\u4E2D\u6587</button><button id="close" data-en="Close" data-zh="\u5173\u95ED">Close</button></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="\u4E3B\u9898">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Room events", "Room \u4E8B\u4EF6")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="\u6210\u5458">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "\u53EA\u8BFB\u89C6\u56FE\u3002\u5982\u9700\u7EA0\u6B63\uFF0C\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u63D0\u51FA\uFF1B\u6B64\u5904\u4E0D\u4F1A\u4FEE\u6539\u5386\u53F2\u3002")}</p>${warnings}${roomEvents}${threads || noThreads}<div class="search-empty" id="search-empty">${biText("No threads match your search.", "\u6CA1\u6709\u5339\u914D\u7684\u4E3B\u9898\u3002")}</div></main></div><script nonce="agent-forum">const revision="${escapeHtml(revision)}";let lang=navigator.language.startsWith('zh')?'zh':'en';function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();document.getElementById('lang-toggle').addEventListener('click',()=>{lang=lang==='en'?'zh':'en';applyLang();});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));const search=document.getElementById('search');const outlineItems=document.querySelectorAll('.outline-item');const threads=document.querySelectorAll('.thread');const searchEmpty=document.getElementById('search-empty');function runSearch(){const q=(search.value||'').trim().toLowerCase();let visibleCount=0;outlineItems.forEach(item=>{const title=item.dataset.title||'';const match=!q||title.includes(q);item.classList.toggle('hidden',!match);if(match)visibleCount++;});threads.forEach(t=>{const title=t.dataset.title||'';const match=!q||title.includes(q);t.classList.toggle('hidden',!match);});searchEmpty.style.display=visibleCount===0&&q?'block':'none';}if(search)search.addEventListener('input',runSearch);const observer=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const id=e.target.id;outlineItems.forEach(i=>i.classList.toggle('active',i.getAttribute('href')==='#'+id));}});},{rootMargin:'-72px 0px -70% 0px'});threads.forEach(t=>observer.observe(t));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<div style="max-width:600px;margin:80px auto;padding:20px;font-family:system-ui;text-align:center;color:#59636e"><p>Viewer closed.</p></div>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></body></html>`;
 }
 async function startViewerServer(input) {
   const room = input.snapshot.rooms.find(
@@ -14746,6 +15436,7 @@ Usage:
 Commands:
   help, --help       Show this help message
   version, --version Show the CLI version
+  setup              Idempotent onboarding: identity, forum, room, and binding
   forum              Initialize and manage forum repositories
   identity           Create, inspect, or publish Agent identities
   context            Bind Git workspaces and branches to forum rooms
@@ -14789,7 +15480,8 @@ async function runCli(args, io = defaultIo) {
             "inbox",
             "viewer",
             "doctor",
-            "skill"
+            "skill",
+            "setup"
           ]
         })
       );
@@ -14814,10 +15506,10 @@ async function runCli(args, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "inbox" || command === "viewer" || command === "doctor" || command === "skill") {
+  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "inbox" || command === "viewer" || command === "doctor" || command === "skill" || command === "setup") {
     try {
       const subcommandArgs = positional.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : command === "setup" ? await executeSetupCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
       if (json) {
         writeJson(
           io,

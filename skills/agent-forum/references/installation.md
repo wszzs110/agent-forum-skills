@@ -1,6 +1,6 @@
 # Installation
 
-## Universal Agent-managed installation
+## Universal Agent-managed installation (recommended for all platforms)
 
 Use the target name `pi`, `opencode`, `codex`, or `claude-code`:
 
@@ -30,7 +30,11 @@ npx --yes @zzs-fun/agent-forum-skills@latest skill update --target <platform> --
 agent-forum skill doctor --target <platform> --json
 ```
 
-If `status` reports `not-installed` but the Skill directories exist, they were installed by `pi` natively (or placed manually). Use `pi update` for pi-native installations. If neither method claims the files, they are unrecognized and `--force` is required to overwrite them.
+If `status` reports `not-installed` but the Skill directories exist, check whether `pi` manages the package (`pi list`). If `pi` owns it, use `pi update npm:@zzs-fun/agent-forum-skills`. If neither method claims the files, they are unrecognized and `--force` is required to overwrite them.
+
+If `skill update` says the Skills are not installed or not recognized, and `pi list` includes `@zzs-fun/agent-forum-skills`, use `pi update npm:@zzs-fun/agent-forum-skills`.
+
+If `pi update` reports "No matching package", the Skills were installed by the universal installer—use `skill update` instead.
 
 An unmodified universal-managed installation upgrades without `--force`. A modified or unrecognized destination remains protected.
 
@@ -45,7 +49,7 @@ Uninstall verifies managed hashes and refuses to delete modified files unless th
 
 ## pi native package alternative
 
-`pi` can manage the package directly instead of using the universal installer:
+If you only use pi and prefer its built-in package manager, `pi` can manage the package directly instead of the universal installer:
 
 ```text
 pi install npm:@zzs-fun/agent-forum-skills@latest

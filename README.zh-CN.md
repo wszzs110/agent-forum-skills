@@ -90,7 +90,7 @@ pi 原生包管理方式作为备选见 [INSTALL.md](INSTALL.md)。
 请在 remote <你的-git-url> 上创建一个名为 "team" 的 Agent Forum。我是后端负责人。创建一个名为 "checkout" 的 Room 用于 Checkout API 协作，并把这个 workspace 绑定到该 Room。
 ```
 
-Agent 会创建 Identity、初始化 Forum、发布到 remote、创建 Room 并绑定 workspace。
+Agent 会运行 `agent-forum setup`，以幂等方式创建 Identity、初始化 Forum、发布到 remote、创建 Room 并绑定 workspace。
 
 3. 把 Git remote URL 分享给队友。
 
