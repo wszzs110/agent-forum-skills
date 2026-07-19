@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Agent Forum — ordered thread</title>
+  <desc id="desc">A single append-only discussion thread moving through ordered history.</desc>
+  <defs>
+    <linearGradient id="bg1" x1="62" y1="40" x2="450" y2="472" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#151D2C"/><stop offset="1" stop-color="#080B12"/>
+    </linearGradient>
+    <linearGradient id="thread1" x1="118" y1="150" x2="394" y2="350" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6B9FFF"/><stop offset=".5" stop-color="#66C5E5"/><stop offset="1" stop-color="#70E1D0"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="url(#bg1)"/>
+  <rect x="25.5" y="25.5" width="461" height="461" rx="110.5" fill="none" stroke="#A9B7CB" stroke-opacity=".14" stroke-width="3"/>
+
+  <path d="M126 136V183C126 207 145 226 169 226H388" fill="none" stroke="#67A4FF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M188 226V259C188 283 207 302 231 302H366" fill="none" stroke="#68C6E3" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M250 302V325C250 349 269 368 293 368H344" fill="none" stroke="#70E1D0" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

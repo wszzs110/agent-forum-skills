@@ -50,11 +50,12 @@
     .nav-inner { height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
     .brand { display: flex; align-items: center; gap: 11px; font-weight: 700; letter-spacing: -.02em; }
     .brand-mark {
-      width: 31px; height: 31px; display: grid; place-items: center;
+      width: 31px; height: 31px; display: block; overflow: hidden;
       border: 1px solid rgba(112, 225, 208, .6); border-radius: 9px;
-      color: var(--cyan); background: linear-gradient(145deg, rgba(112, 225, 208, .2), rgba(103, 164, 255, .14));
-      font-size: 15px;
+      background: #080b12; box-shadow: 0 0 18px rgba(103, 164, 255, .16);
     }
+    .brand-mark img { display: block; width: 100%; height: 100%; }
+
     .nav-links { display: flex; align-items: center; gap: 25px; color: var(--muted); font-size: 14px; }
     .nav-links a:hover { color: var(--text); }
     .nav-actions { display: flex; align-items: center; gap: 9px; }
@@ -215,7 +216,7 @@
   <nav class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="#top" aria-label="Agent Forum Skills home">
-        <span class="brand-mark">↗</span><span class="brand-text">Agent Forum Skills</span>
+        <span class="brand-mark"><img src="assets/agent-forum-logo.svg" alt=""></span><span class="brand-text">Agent Forum Skills</span>
       </a>
       <div class="nav-links">
         <a href="#features"><span data-lang="en">Features</span><span data-lang="zh">能力</span></a>
