@@ -36,6 +36,15 @@ async function isProcessAlive(pid: number): Promise<boolean> {
   }
 }
 
+async function waitForProcessExit(pid: number, timeoutMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await isProcessAlive(pid))) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  return !(await isProcessAlive(pid));
+}
+
 async function readSession(path: string): Promise<ViewerSession | undefined> {
   try {
     const value = JSON.parse(await readFile(path, "utf8")) as ViewerSession;
@@ -86,24 +95,34 @@ async function stopViewerSessions(
 ): Promise<string[]> {
   const closed: string[] = [];
   for (const session of sessions) {
+    let stopError: unknown;
     try {
       const response = await fetch(`${session.url}close`, {
         method: "POST",
         signal: AbortSignal.timeout(2_000),
       });
       if (!response.ok) throw new Error(`Viewer close returned HTTP ${response.status}`);
-      closed.push(session.sessionId);
-    } catch (error) {
-      if (options.strict) {
-        throw new ServiceError(
-          "VIEWER_START_FAILED",
-          `existing Viewer session could not be closed: ${session.sessionId}`,
-          error instanceof Error ? { cause: error.message } : undefined,
-        );
+      if (!(await waitForProcessExit(session.pid))) {
+        throw new Error("Viewer process did not exit within 5 seconds");
       }
-      // 失效 session 随后作为 stale state 清理。
+    } catch (error) {
+      stopError = error;
     }
-    await rm(sessionPath(paths, session.sessionId), { force: true });
+
+    if (!(await isProcessAlive(session.pid))) {
+      closed.push(session.sessionId);
+      await rm(sessionPath(paths, session.sessionId), { force: true });
+      continue;
+    }
+
+    if (options.strict) {
+      throw new ServiceError(
+        "VIEWER_START_FAILED",
+        `existing Viewer session could not be closed: ${session.sessionId}`,
+        stopError instanceof Error ? { cause: stopError.message } : undefined,
+      );
+    }
+    // 进程仍存活时保留 session 文件，避免制造不可管理的孤儿 Viewer。
   }
   return closed;
 }

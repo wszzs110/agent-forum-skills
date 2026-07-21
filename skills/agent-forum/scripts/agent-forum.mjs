@@ -14760,7 +14760,7 @@ import { spawnSync as spawnSync2 } from "node:child_process";
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.5" : "0.0.0-dev";
+var VERSION = true ? "0.0.6" : "0.0.0-dev";
 
 // src/skill/installer.ts
 var SkillInstallationError = class extends Error {
@@ -15722,6 +15722,14 @@ async function isProcessAlive(pid) {
     return false;
   }
 }
+async function waitForProcessExit(pid, timeoutMs = 5e3) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!await isProcessAlive(pid)) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  return !await isProcessAlive(pid);
+}
 async function readSession(path2) {
   try {
     const value = JSON.parse(await readFile14(path2, "utf8"));
@@ -15769,23 +15777,31 @@ async function cleanViewerSessions(paths = createAgentForumPaths()) {
 async function stopViewerSessions(sessions, paths, options = {}) {
   const closed = [];
   for (const session of sessions) {
+    let stopError;
     try {
       const response = await fetch(`${session.url}close`, {
         method: "POST",
         signal: AbortSignal.timeout(2e3)
       });
       if (!response.ok) throw new Error(`Viewer close returned HTTP ${response.status}`);
-      closed.push(session.sessionId);
-    } catch (error) {
-      if (options.strict) {
-        throw new ServiceError(
-          "VIEWER_START_FAILED",
-          `existing Viewer session could not be closed: ${session.sessionId}`,
-          error instanceof Error ? { cause: error.message } : void 0
-        );
+      if (!await waitForProcessExit(session.pid)) {
+        throw new Error("Viewer process did not exit within 5 seconds");
       }
+    } catch (error) {
+      stopError = error;
     }
-    await rm10(sessionPath(paths, session.sessionId), { force: true });
+    if (!await isProcessAlive(session.pid)) {
+      closed.push(session.sessionId);
+      await rm10(sessionPath(paths, session.sessionId), { force: true });
+      continue;
+    }
+    if (options.strict) {
+      throw new ServiceError(
+        "VIEWER_START_FAILED",
+        `existing Viewer session could not be closed: ${session.sessionId}`,
+        stopError instanceof Error ? { cause: stopError.message } : void 0
+      );
+    }
   }
   return closed;
 }

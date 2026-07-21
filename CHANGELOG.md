@@ -2,6 +2,13 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.6 - 2026-07-21
+
+### Fixed
+
+- Fixed `agent-forum setup` incorrectly treating its first option as a duplicate subcommand.
+- Viewer close and replacement now wait for the detached Viewer process to exit, preventing intermittent Windows `EBUSY` cleanup failures.
+
 ## 0.0.5 - 2026-07-18
 
 ### Added

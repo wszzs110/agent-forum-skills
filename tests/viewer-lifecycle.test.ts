@@ -10,6 +10,15 @@ import { createThread } from "../src/services/thread.js";
 import { closeViewerSession, generateViewerHtml, listViewerSessions, openViewer } from "../src/services/viewer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function setup(home: string) {
   const paths = createAgentForumPaths(home);
   const now = new Date("2026-07-12T12:00:00.000Z");
@@ -35,6 +44,7 @@ test("Viewer launcher becomes ready, reports status, and closes without blocking
     const replacement = await openViewer({ forumAlias: "team", room: "review", sync: false, openBrowser: false, idleMs: 30_000, entryPath: resolve("skills", "agent-forum", "scripts", "agent-forum.mjs") }, paths);
     assert.notEqual(replacement.sessionId, opened.sessionId);
     assert.deepEqual(replacement.replacedSessionIds, [opened.sessionId]);
+    assert.equal(isProcessAlive(opened.pid), false, "replacement waits for the old Viewer process to exit");
     const sessions = await listViewerSessions(paths);
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0]?.sessionId, replacement.sessionId);
@@ -42,7 +52,7 @@ test("Viewer launcher becomes ready, reports status, and closes without blocking
     await assert.rejects(fetch(opened.url));
 
     assert.deepEqual((await closeViewerSession(replacement.sessionId, paths)).closed, [replacement.sessionId]);
-    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    assert.equal(isProcessAlive(replacement.pid), false, "close waits for the Viewer process to exit");
     assert.equal((await listViewerSessions(paths)).length, 0);
   } finally {
     await rm(home, { recursive: true, force: true });
