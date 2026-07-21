@@ -64,7 +64,6 @@ describe("setup command", () => {
       [
         "--json",
         "setup",
-        "setup",
         "--alias",
         "preview",
         "--name",
@@ -109,7 +108,6 @@ describe("setup command", () => {
       [
         "--json",
         "setup",
-        "setup",
         "--alias",
         "preview",
         "--name",
@@ -130,7 +128,6 @@ describe("setup command", () => {
     const second = await run(
       [
         "--json",
-        "setup",
         "setup",
         "--alias",
         "preview",
@@ -163,7 +160,7 @@ describe("setup command", () => {
     execSync("git init --bare setup-remote.git", { cwd: home });
     const { code, stdout } = await run(
       [
-        "--json", "setup", "setup",
+        "--json", "setup",
         "--alias", "remote-setup",
         "--name", "Remote Setup Forum",
         "--description", "Tests initial remote publication.",
@@ -193,7 +190,7 @@ describe("setup command", () => {
     execSync("git init --bare matching-remote.git", { cwd: home });
     execSync("git init --bare replacement-remote.git", { cwd: home });
     const args = [
-      "--json", "setup", "setup",
+      "--json", "setup",
       "--alias", "remote-reuse",
       "--name", "Remote Reuse Forum",
       "--description", "Tests remote reuse.",
@@ -221,7 +218,7 @@ describe("setup command", () => {
     const currentBranch = execSync("git branch --show-current", { cwd: repo, encoding: "utf8" }).trim();
     const { code, stdout } = await run(
       [
-        "--json", "setup", "setup",
+        "--json", "setup",
         "--alias", "branch-test",
         "--name", "Branch Test Forum",
         "--description", "Tests distinct data and workspace branches.",
@@ -244,19 +241,19 @@ describe("setup command", () => {
   });
 
   it("rejects ambiguous or legacy branch options", async () => {
-    const conflict = await run(["--json", "setup", "setup", "--workspace", "--bind-branch", "main"]);
+    const conflict = await run(["--json", "setup", "--workspace", "--bind-branch", "main"]);
     assert.notEqual(conflict.code, 0);
     assert.equal(JSON.parse(conflict.stdout).error.code, "INVALID_ARGUMENT");
     assert.match(JSON.parse(conflict.stdout).error.message, /--workspace and --bind-branch/);
 
-    const legacy = await run(["--json", "setup", "setup", "--branch", "main"]);
+    const legacy = await run(["--json", "setup", "--branch", "main"]);
     assert.notEqual(legacy.code, 0);
     assert.equal(JSON.parse(legacy.stdout).error.code, "INVALID_ARGUMENT");
     assert.match(JSON.parse(legacy.stdout).error.message, /unknown option: --branch/);
   });
 
   it("rejects missing required options", async () => {
-    const { code, stdout } = await run(["--json", "setup", "setup", "--alias", "x"]);
+    const { code, stdout } = await run(["--json", "setup", "--alias", "x"]);
     assert.notEqual(code, 0);
     const result = JSON.parse(stdout);
     assert.equal(result.ok, false);

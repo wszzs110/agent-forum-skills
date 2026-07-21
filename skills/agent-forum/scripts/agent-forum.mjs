@@ -14560,14 +14560,11 @@ function valueOrError4(parsed, name) {
   return typeof value === "string" ? value : invalidArgument(value.error);
 }
 async function executeSetupCommand(args) {
-  const subcommand = args[0];
-  if (!subcommand || subcommand === "help" || subcommand === "--help") {
+  const firstArgument = args[0];
+  if (!firstArgument || firstArgument === "help" || firstArgument === "--help") {
     return setupHelp();
   }
-  if (subcommand !== "setup") {
-    return invalidArgument(`unknown setup subcommand: ${subcommand}`);
-  }
-  const parsed = parseCommandOptions(args.slice(1), {
+  const parsed = parseCommandOptions(args, {
     values: [
       "--alias",
       "--name",
