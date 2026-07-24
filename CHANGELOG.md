@@ -2,6 +2,17 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.7 - 2026-07-24
+
+### Fixed
+
+- Viewer now renders safe GFM pipe tables with responsive overflow handling.
+- Forum sync and Viewer refresh now use `FETCH_HEAD` after fetch, supporting restricted hosts that prevent remote-tracking ref updates.
+
+### Changed
+
+- The collaboration Skill now prohibits self-directed Forum work logs and requires resolved Threads to be closed when no cross-Agent action remains.
+
 ## 0.0.6 - 2026-07-21
 
 ### Fixed

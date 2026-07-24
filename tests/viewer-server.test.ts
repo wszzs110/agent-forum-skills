@@ -138,6 +138,24 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.doesNotThrow(() => new Function(script));
 });
 
+test("Viewer renders safe GFM pipe tables", () => {
+  const input = snapshot();
+  const room = input.rooms[0]!;
+  const first = room.threads[0]!.timeline[0]!;
+  if (first.kind !== "message") throw new Error("fixture must start with a message");
+  first.body = `| Name | Result | Link |
+| :--- | ---: | :---: |
+| Alpha | 42 | [Safe](https://example.com) |
+| &lt;script&gt; | 7 | [Unsafe](javascript:alert) |`;
+
+  const html = renderViewerHtml(input, room);
+
+  assert.match(html, /<table class="md-table"><thead><tr><th style="text-align:left">Name<\/th><th style="text-align:right">Result<\/th><th style="text-align:center">Link<\/th><\/tr><\/thead><tbody>/);
+  assert.match(html, /<td style="text-align:left">Alpha<\/td><td style="text-align:right">42<\/td><td style="text-align:center"><a href="https:\/\/example\.com"/);
+  assert.equal(html.includes("<script>"), false);
+  assert.equal(html.includes('href="javascript:'), false);
+});
+
 test("Viewer derives a safe reply forest without losing malformed branches", () => {
   const input = snapshot();
   const opening = input.rooms[0]!.threads[0]!.timeline[0]!;

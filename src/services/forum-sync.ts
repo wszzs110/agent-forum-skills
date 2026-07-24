@@ -111,6 +111,13 @@ async function validateRebasedForum(
   }
 }
 
+function fetchRemoteHead(repository: string, branch: string): string {
+  // 显式 refspec 始终更新 FETCH_HEAD；部分受限宿主会静默阻止 refs/remotes/ 写入。
+  const fetch = runGit(repository, ["fetch", "--no-tags", "origin", `refs/heads/${branch}`]);
+  if (fetch.status !== 0) throw classifyTransportFailure("fetch", fetch);
+  return requireGit(repository, ["rev-parse", "FETCH_HEAD"]).stdout.trim();
+}
+
 async function fetchAndRebase(
   forumAlias: string,
   forumId: string,
@@ -119,15 +126,11 @@ async function fetchAndRebase(
   originalHead: string,
   originalRemoteHead: string | null,
   paths: AgentForumPaths,
+  fetchedRemoteHead?: string,
 ): Promise<string> {
-  const fetch = runGit(repository, ["fetch", "origin", branch]);
-  if (fetch.status !== 0) throw classifyTransportFailure("fetch", fetch);
-  const remoteHead = requireGit(repository, [
-    "rev-parse",
-    `refs/remotes/origin/${branch}`,
-  ]).stdout.trim();
+  const remoteHead = fetchedRemoteHead ?? fetchRemoteHead(repository, branch);
   const localHead = requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
-  const rebase = runGit(repository, ["rebase", `origin/${branch}`]);
+  const rebase = runGit(repository, ["rebase", remoteHead]);
   if (rebase.status !== 0) {
     const conflicts = conflictPaths(repository);
     runGit(repository, ["rebase", "--abort"]);
@@ -212,11 +215,11 @@ export interface ForumRefreshResult {
   finalHead: string;
 }
 
-function countAhead(repository: string, branch: string): number {
+function countAhead(repository: string, base: string): number {
   const result = requireGit(repository, [
     "rev-list",
     "--count",
-    `origin/${branch}..HEAD`,
+    `${base}..HEAD`,
   ]).stdout.trim();
   return Number(result);
 }
@@ -245,10 +248,11 @@ export async function refreshForumFromRemote(
       "rev-parse",
       `refs/remotes/origin/${registration.dataBranch}`,
     ]);
-    if (tracked.status === 0 && countAhead(registration.path, registration.dataBranch) > 0) {
+    const originalRemoteHead = tracked.status === 0 ? tracked.stdout.trim() : null;
+    const fetchedRemoteHead = fetchRemoteHead(registration.path, registration.dataBranch);
+    if (countAhead(registration.path, fetchedRemoteHead) > 0) {
       return { forumAlias, outcome: "skipped-local-commits", originalHead, finalHead: originalHead };
     }
-    const originalRemoteHead = tracked.status === 0 ? tracked.stdout.trim() : null;
     await fetchAndRebase(
       forumAlias,
       registration.forumId,
@@ -257,6 +261,7 @@ export async function refreshForumFromRemote(
       originalHead,
       originalRemoteHead,
       paths,
+      fetchedRemoteHead,
     );
     const finalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
     return {
@@ -317,7 +322,7 @@ export async function syncForum(
     fetches += 1;
     let integratedRemote = originalRemoteHead !== remoteHead;
 
-    while (countAhead(registration.path, registration.dataBranch) > 0) {
+    while (countAhead(registration.path, remoteHead) > 0) {
       pushAttempts += 1;
       await options.beforePush?.(pushAttempts);
       const push = runGit(registration.path, [

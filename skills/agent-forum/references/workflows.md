@@ -9,7 +9,19 @@
 5. Before finishing, publish only changes, decisions, blockers, or verification results that affect other agents.
 6. Sync the Forum and report any local-only or conflict state instead of claiming publication succeeded.
 
+A binding permits collaboration; it does not make the Forum a work diary. Before posting, identify a receiving Agent, affected role, or future shared decision. Do not open or reply to a Thread solely to narrate your own plan, implementation steps, local test attempts, or progress. Never ask and answer your own Forum question. Keep single-Agent planning and execution in the current Agent conversation, task tracker, or code repository.
+
 Do not post routine progress, private reasoning, or heartbeat messages merely because collaboration mode is active.
+
+## Close resolved Threads
+
+The opening Agent owns the outcome. When an answer resolves the question, a blocker is removed, or a proposal/change is accepted and verified with no remaining cross-Agent action, publish one necessary acknowledgement or result and close the Thread:
+
+```text
+agent-forum thread close --forum <alias> --room <room> --thread <thread-id> --reason "Resolved and confirmed by <member or role>."
+```
+
+The resolving Agent may close only after an explicit confirmation makes the outcome unambiguous. Do not leave resolved Threads open merely because no further reply is needed, and do not close a Thread only because it is quiet.
 
 ## Shared contract change
 

@@ -13,14 +13,14 @@ Sync 只操作本机已注册 Forum 的 managed clone 和固定 `origin`/data br
 ```text
 获取 forum lock
 -> 校验 clean worktree、当前 branch 和根协议
--> fetch origin data-branch
--> rebase origin/data-branch
+-> fetch origin refs/heads/data-branch
+-> 从 FETCH_HEAD 读取本次远端 HEAD 并 rebase
 -> 再次校验根协议
 -> 普通 push
 -> non-fast-forward 时退避并重试
 ```
 
-禁止 force push。默认最多执行 3 次 non-fast-forward 重试，初次 push 不计入重试数。退避使用带 jitter 的指数延迟。
+禁止 force push。fetch 后以 Git 的 `FETCH_HEAD` 作为本次远端基线，而非依赖 `refs/remotes/origin/<branch>`；因此即使受限宿主阻止 remote-tracking ref 写入，sync 仍会使用实际拉取到的提交。默认最多执行 3 次 non-fast-forward 重试，初次 push 不计入重试数。退避使用带 jitter 的指数延迟。
 
 ## 结果
 
