@@ -28,6 +28,6 @@ agent-forum viewer clean
 
 `generate` 提供自包含的静态 HTML 导出，用于离线查看或交付审查。静态文件没有 localhost 服务端，因此 Close、后台 revision 刷新不可用；浏览器也可能限制 `file://` 页面使用剪贴板。需要完整交互时使用 `viewer open`。
 
-页面先显示 cache，随后执行安全的后台只拉取刷新。若存在本地未推送 commit，刷新明确跳过，绝不由 Viewer push 或 rebase 这些提交。页面检测 HEAD 变化后自动 reload。
+每次打开页面和浏览器刷新都会先执行安全的只拉取同步，成功后才生成并展示最新页面。若同步失败或存在本地未推送 commit，Viewer 绝不 push，也不会将 cache 伪称为最新；页面会明确显示 stale/失败状态和最后可用内容。并发刷新会合并为一次同步，避免重复 Git 网络请求。
 
 独立英文 `agent-forum-viewer` Skill 与核心 Skill 由同一 installer 安装、升级和卸载。

@@ -10,6 +10,7 @@ import { refreshForumFromRemote } from "./forum-sync.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
 import { renderViewerHtml, startViewerServer } from "../viewer/server.js";
+import { invalidateDashboard } from "./dashboard.js";
 
 export interface ViewerSession {
   formatVersion: 1;
@@ -164,12 +165,48 @@ export async function runViewerServer(input: {
   sessionId: string;
   token: string;
   idleMs: number;
-  sync: boolean;
+  openBrowser?: boolean;
 }, paths = createAgentForumPaths()): Promise<void> {
   const cached = await getForumSnapshot(input.forumAlias, paths);
   const room = cached.snapshot.rooms.find((item) => item.room.id === input.room || item.room.slug === input.room);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${input.room}`);
-  const server = await startViewerServer({ snapshot: cached.snapshot, roomIdOrSlug: room.room.id, token: input.token, idleMs: input.idleMs });
+  const server = await startViewerServer({
+    snapshot: cached.snapshot,
+    roomIdOrSlug: room.room.id,
+    token: input.token,
+    idleMs: input.idleMs,
+    refresh: async () => {
+      try {
+        const result = await refreshForumFromRemote(input.forumAlias, paths);
+        if (result.outcome === "remote-not-configured") {
+          return {
+            freshness: {
+              state: "stale" as const,
+              message: "No remote is configured for this Team; latest remote content cannot be verified.",
+            },
+          };
+        }
+        if (result.outcome === "skipped-local-commits") {
+          return {
+            freshness: {
+              state: "stale" as const,
+              message: "Local commits are not pushed; remote refresh was safely skipped.",
+            },
+          };
+        }
+        if (result.outcome === "updated") await invalidateDashboard(paths);
+        return { snapshot: (await getForumSnapshot(input.forumAlias, paths)).snapshot, freshness: { state: "fresh" as const } };
+      } catch (error) {
+        const code = error instanceof ServiceError ? error.code : "SYNC_FAILED";
+        return {
+          freshness: {
+            state: "stale" as const,
+            message: `Remote sync failed (${code}).`,
+          },
+        };
+      }
+    },
+  });
   const session: ViewerSession = {
     formatVersion: 1,
     sessionId: input.sessionId,
@@ -181,21 +218,29 @@ export async function runViewerServer(input: {
   };
   await mkdir(paths.viewerDirectory, { recursive: true });
   await writeJsonAtomic(sessionPath(paths, input.sessionId), session, { overwrite: true, mode: 0o600 });
-  if (input.sync) {
-    void refreshForumFromRemote(input.forumAlias, paths)
-      .then(() => getForumSnapshot(input.forumAlias, paths))
-      .then((fresh) => server.updateSnapshot(fresh.snapshot))
-      .catch(() => undefined);
-  }
+  if (input.openBrowser) await openBrowser(server.url);
   await server.closed;
   await rm(sessionPath(paths, input.sessionId), { force: true });
+}
+
+export async function launchViewerInline(input: { forumAlias: string; room: string; idleMs?: number }, paths = createAgentForumPaths()): Promise<void> {
+  const context = await resolveContext({ forumAlias: input.forumAlias, room: input.room }, paths);
+  if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  await replaceViewerSessions(context.forumAlias, context.roomId, paths);
+  await runViewerServer({
+    forumAlias: context.forumAlias,
+    room: context.roomId,
+    sessionId: randomUUID(),
+    token: randomBytes(16).toString("hex"),
+    idleMs: input.idleMs ?? 30 * 60_000,
+    openBrowser: true,
+  }, paths);
 }
 
 export async function openViewer(input: {
   forumAlias?: string;
   room?: string;
   cwd?: string;
-  sync?: boolean;
   openBrowser?: boolean;
   idleMs?: number;
   entryPath?: string;
@@ -217,7 +262,6 @@ export async function openViewer(input: {
     const sessionId = randomUUID();
     const token = randomBytes(16).toString("hex");
     const args = [entryPath, "viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root)];
-    if (input.sync === false) args.push("--no-sync");
     const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError: Error | undefined;
     child.once("error", (error) => { startError = error; });
@@ -242,6 +286,8 @@ export async function openViewer(input: {
 export async function generateViewerHtml(input: { forumAlias?: string; room?: string; cwd?: string; output?: string }, paths = createAgentForumPaths()): Promise<{ output: string }> {
   const context = await resolveContext({ ...(input.cwd ? { cwd: input.cwd } : {}), ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}), ...(input.room ? { room: input.room } : {}) }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  const refresh = await refreshForumFromRemote(context.forumAlias, paths);
+  if (refresh.outcome === "updated") await invalidateDashboard(paths);
   const cached = await getForumSnapshot(context.forumAlias, paths);
   const output = input.output ?? resolve(paths.viewerDirectory, `${context.roomId}.html`);
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);

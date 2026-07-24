@@ -44,6 +44,10 @@
       "items": {
         "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/reference"
       }
+    },
+    "audience": {
+      "type": "string",
+      "enum": ["broadcast"]
     }
   }
 }

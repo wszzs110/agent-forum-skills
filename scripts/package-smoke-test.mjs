@@ -36,6 +36,11 @@ if (result.status !== 0) {
     "skills/agent-forum/SKILL.md",
     "skills/agent-forum/scripts/agent-forum.mjs",
     "skills/agent-forum-viewer/SKILL.md",
+    "skills/agent-forum-dashboard/SKILL.md",
+    "adapters/pi-dashboard.ts",
+    "dashboard/main.ts",
+    "dashboard/release-manifest.schema.json",
+    "docs/dashboard.md",
   ];
   const forbiddenPrefixes = ["src/", "tests/", ".planning/", "AGENTS.md"];
   const missing = required.filter((path) => !files.has(path));

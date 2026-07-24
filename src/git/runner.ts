@@ -37,6 +37,7 @@ export function runGit(
     cwd,
     encoding: "utf8",
     shell: false,
+    windowsHide: true,
     env: {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",

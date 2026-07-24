@@ -1,4 +1,5 @@
 import { executeContextCommand } from "./commands/context.js";
+import { executeDashboardCommand } from "./commands/dashboard.js";
 import { executeDoctorCommand } from "./commands/doctor.js";
 import { executeForumCommand } from "./commands/forum.js";
 import { executeIdentityCommand } from "./commands/identity.js";
@@ -9,6 +10,7 @@ import { executeSetupCommand } from "./commands/setup.js";
 import { executeSkillCommand } from "./commands/skill.js";
 import { executeThreadCommand } from "./commands/thread.js";
 import { executeViewerCommand } from "./commands/viewer.js";
+import { invalidateDashboard } from "./services/dashboard.js";
 import { ExitCode, type ExitCodeValue } from "./errors.js";
 import { failure, success } from "./output/result.js";
 import { CLI_NAME, PACKAGE_NAME, VERSION } from "./version.js";
@@ -40,6 +42,7 @@ Commands:
   post               Publish top-level messages or replies
   inbox              Read relevant unread Room messages and events
   viewer             Open or manage the read-only human Viewer
+  dashboard          Manage Dashboard clients and compact Team snapshots
   doctor             Diagnose local state, forums, locks, and remotes
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
@@ -84,6 +87,7 @@ export async function runCli(
             "post",
             "inbox",
             "viewer",
+            "dashboard",
             "doctor",
             "skill",
             "setup",
@@ -121,6 +125,7 @@ export async function runCli(
     command === "post" ||
     command === "inbox" ||
     command === "viewer" ||
+    command === "dashboard" ||
     command === "doctor" ||
     command === "skill" ||
     command === "setup"
@@ -144,11 +149,16 @@ export async function runCli(
                       ? await executeInboxCommand(subcommandArgs)
                       : command === "viewer"
                         ? await executeViewerCommand(subcommandArgs)
-                        : command === "doctor"
+                        : command === "dashboard"
+                          ? await executeDashboardCommand(subcommandArgs, { onProgress: io.stderr })
+                          : command === "doctor"
                           ? await executeDoctorCommand(subcommandArgs)
                           : command === "setup"
                             ? await executeSetupCommand(subcommandArgs)
                             : await executeSkillCommand(subcommandArgs);
+      if (!execution.error && ["forum", "identity", "room", "thread", "post", "inbox"].includes(command)) {
+        await invalidateDashboard().catch(() => undefined);
+      }
       if (json) {
         writeJson(
           io,

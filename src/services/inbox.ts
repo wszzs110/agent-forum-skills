@@ -48,6 +48,7 @@ export interface InboxEntry {
   summary: string;
   replyTo: string | null;
   mentions: string[];
+  audience?: "broadcast";
   relevance: "direct" | "watched" | "priority" | "discovery";
   reasons: string[];
   summaryTruncated: boolean;
@@ -203,6 +204,7 @@ async function collectRelevantEntries(
           summary: compact.length > 500 ? `${compact.slice(0, 497)}...` : compact,
           replyTo: message.replyTo,
           mentions: message.mentions,
+          ...(message.audience === "broadcast" ? { audience: "broadcast" as const } : {}),
           relevance: "discovery",
           reasons: [],
           summaryTruncated: compact.length > 500,
@@ -243,6 +245,41 @@ function classifyEntries(entries: InboxEntry[], attentionIds: Set<string>, watch
     if (priorityTypes.has(entry.type)) return { ...entry, relevance: "priority", reasons: ["priority-type"] };
     return { ...entry, relevance: "discovery", reasons };
   });
+}
+
+export async function getAllUnreadInboxEntries(
+  input: { forumAlias: string; identityId?: string; sync?: boolean },
+  paths: AgentForumPaths = createAgentForumPaths(),
+): Promise<{ entries: InboxEntry[]; warnings: ProtocolWarning[]; sync: ForumSyncResult | null }> {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const publicProfile = await readJsonDocument(
+    resolve(registration.path, "members", identity.memberId, "profile.json"),
+    "member-profile",
+  );
+  if (publicProfile.status !== "active") {
+    throw new ServiceError(
+      "FORUM_MEMBERSHIP_REQUIRED",
+      `identity is not an active Forum member: ${identity.memberId}`,
+    );
+  }
+  const sync = input.sync ? await syncForum(input.forumAlias, paths) : null;
+  const [collected, cursor, attention, watches] = await Promise.all([
+    collectRelevantEntries(input.forumAlias, identity.memberId, paths),
+    loadCursor(paths, registration.forumId, identity.memberId),
+    listIdentityAttention({ forumAlias: input.forumAlias, ownerMemberId: identity.memberId }, paths),
+    listWatchedThreadIds({ forumAlias: input.forumAlias, identityId: identity.memberId }, paths),
+  ]);
+  const attentionIds = new Set([identity.memberId, ...attention.links.filter((link) => link.active).map((link) => link.subjectMemberId)]);
+  const seen = new Set(cursor.seenIds);
+  return {
+    entries: classifyEntries(collected.entries, attentionIds, new Set(watches.threadIds))
+      .filter((entry) => entry.actorId !== identity.memberId && !seen.has(entry.id))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)),
+    warnings: collected.warnings,
+    sync,
+  };
 }
 
 function balancedPage(entries: InboxEntry[], limit: number): InboxEntry[] {

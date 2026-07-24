@@ -14,6 +14,11 @@ export interface AgentForumPaths {
   locksDirectory: string;
   cacheDirectory: string;
   viewerDirectory: string;
+  dashboardDirectory: string;
+  dashboardRuntimeFile: string;
+  dashboardDesktopFile: string;
+  dashboardInstallDirectory: string;
+  dashboardInstallationFile: string;
   installationsFile: string;
   bindingsFile: string;
 }
@@ -31,6 +36,11 @@ export function createAgentForumPaths(
     locksDirectory: resolve(stateDirectory, "locks"),
     cacheDirectory: resolve(stateDirectory, "cache"),
     viewerDirectory: resolve(stateDirectory, "viewer"),
+    dashboardDirectory: resolve(stateDirectory, "dashboard"),
+    dashboardRuntimeFile: resolve(stateDirectory, "dashboard", "runtime.json"),
+    dashboardDesktopFile: resolve(stateDirectory, "dashboard", "desktop.json"),
+    dashboardInstallDirectory: resolve(root, "dashboard"),
+    dashboardInstallationFile: resolve(root, "dashboard", "installation.json"),
     installationsFile: resolve(stateDirectory, "installations.json"),
     bindingsFile: resolve(stateDirectory, "context-bindings.json"),
   };

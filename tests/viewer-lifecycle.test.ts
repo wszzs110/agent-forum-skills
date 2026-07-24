@@ -33,7 +33,7 @@ test("Viewer launcher becomes ready, reports status, and closes without blocking
   const home = await mkdtemp(join(tmpdir(), "agent-forum-viewer-launch-"));
   try {
     const paths = await setup(home);
-    const opened = await openViewer({ forumAlias: "team", room: "review", sync: false, openBrowser: false, idleMs: 30_000, entryPath: resolve("skills", "agent-forum", "scripts", "agent-forum.mjs") }, paths);
+    const opened = await openViewer({ forumAlias: "team", room: "review", openBrowser: false, idleMs: 30_000, entryPath: resolve("skills", "agent-forum", "scripts", "agent-forum.mjs") }, paths);
     assert.equal(opened.url.startsWith("http://127.0.0.1:"), true);
     assert.equal(opened.browserOpened, false);
     const response = await fetch(opened.url);
@@ -41,7 +41,7 @@ test("Viewer launcher becomes ready, reports status, and closes without blocking
     assert.equal((await response.text()).includes("Visible marker 你好"), true);
     assert.equal((await listViewerSessions(paths)).length, 1);
 
-    const replacement = await openViewer({ forumAlias: "team", room: "review", sync: false, openBrowser: false, idleMs: 30_000, entryPath: resolve("skills", "agent-forum", "scripts", "agent-forum.mjs") }, paths);
+    const replacement = await openViewer({ forumAlias: "team", room: "review", openBrowser: false, idleMs: 30_000, entryPath: resolve("skills", "agent-forum", "scripts", "agent-forum.mjs") }, paths);
     assert.notEqual(replacement.sessionId, opened.sessionId);
     assert.deepEqual(replacement.replacedSessionIds, [opened.sessionId]);
     assert.equal(isProcessAlive(opened.pid), false, "replacement waits for the old Viewer process to exit");

@@ -21,10 +21,11 @@ function postHelp(): CommandExecution {
     command: "post.help",
     data: {
       commands: ["create", "reply"],
+      flags: ["--broadcast"],
       repeatableOptions: ["--mention", "--reference"],
       referenceFormat: "<kind>=<value>",
     },
-    human: `Post messages\n\nUsage:\n  agent-forum post create --forum <alias> --room <id-or-slug> --thread <thread-id> --type <type> --body <markdown> [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]\n  agent-forum post reply --forum <alias> --room <id-or-slug> --thread <thread-id> --reply-to <message-id> --type <type> --body <markdown> [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]\n`,
+    human: `Post messages\n\nUsage:\n  agent-forum post create --forum <alias> --room <id-or-slug> --thread <thread-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]\n  agent-forum post reply --forum <alias> --room <id-or-slug> --thread <thread-id> --reply-to <message-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]\n`,
   };
 }
 
@@ -72,6 +73,7 @@ export async function executePostCommand(
         ...(subcommand === "reply" ? ["--reply-to"] : []),
       ],
       repeatableValues: ["--mention", "--reference"],
+      flags: ["--broadcast"],
     });
     if ("error" in parsed) return invalidArgument(parsed.error);
 
@@ -110,6 +112,7 @@ export async function executePostCommand(
         ? { replyTo: values.get("--reply-to") as string }
         : {}),
       ...(identityId ? { identityId } : {}),
+      ...(parsed.flags.has("--broadcast") ? { broadcast: true } : {}),
     });
     return {
       exitCode: ExitCode.Success,

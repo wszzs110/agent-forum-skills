@@ -12,8 +12,8 @@
 - Context Binding、Forum remote 管理、可靠 sync、冲突恢复与 Doctor；
 - 本机 Inbox 游标、relevance 排序、discovery 保底、完整内容展开与 timeline cache 加速；
 - identity recover、本机 recovery/delegation attention 和 Thread watch；
-- loopback/token 保护的只读 Viewer，以及跨 pi、OpenCode、Codex、Claude Code 的双 Skill 安装；
-- schema、原子写、锁、Git 并发、跨 clone 协作、Viewer 安全和 npm package smoke 测试。
+- loopback/token 保护的只读 Viewer、单实例 Desktop Dashboard Bar，以及跨 pi、OpenCode、Codex、Claude Code 的三 Skill 安装；
+- schema、原子写、锁、Git 并发、跨 clone 协作、Viewer/Dashboard 安全和 npm package smoke 测试。
 
 ## 数据与安全边界
 

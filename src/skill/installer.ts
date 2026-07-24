@@ -119,7 +119,7 @@ function stateFile(homeDirectory: string): string {
 
 function namedSkillDestination(
   target: SkillTarget,
-  skillName: "agent-forum" | "agent-forum-viewer",
+  skillName: "agent-forum" | "agent-forum-viewer" | "agent-forum-dashboard",
   homeDirectory = homedir(),
 ): string {
   if (commonTargets.has(target)) {
@@ -137,6 +137,10 @@ export function skillDestination(target: SkillTarget, homeDirectory = homedir())
 
 export function viewerSkillDestination(target: SkillTarget, homeDirectory = homedir()): string {
   return namedSkillDestination(target, "agent-forum-viewer", homeDirectory);
+}
+
+export function dashboardSkillDestination(target: SkillTarget, homeDirectory = homedir()): string {
+  return namedSkillDestination(target, "agent-forum-dashboard", homeDirectory);
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -291,9 +295,14 @@ export async function installSkill(
   if (!(await pathExists(resolve(viewerSource, "SKILL.md")))) {
     throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-viewer/SKILL.md");
   }
+  const dashboardSource = resolve(dirname(coreSource), "agent-forum-dashboard");
+  if (!(await pathExists(resolve(dashboardSource, "SKILL.md")))) {
+    throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-dashboard/SKILL.md");
+  }
   const payloads = [
     { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
     { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) },
+    { source: dashboardSource, destination: dashboardSkillDestination(options.target, homeDirectory) },
   ];
   const state = await loadState(homeDirectory);
   const inspected = await Promise.all(payloads.map(async (payload) => {
@@ -360,7 +369,7 @@ export async function getSkillStatus(
   homeDirectory = homedir(),
 ): Promise<StatusResult> {
   const destination = skillDestination(target, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(target, homeDirectory)];
+  const destinations = [destination, viewerSkillDestination(target, homeDirectory), dashboardSkillDestination(target, homeDirectory)];
   const state = await loadState(homeDirectory);
   const records = destinations.map((path) => state.installations.find(
     (installation) => installation.path === path && installation.targets.includes(target),
@@ -384,7 +393,7 @@ export async function uninstallSkill(
 ): Promise<UninstallResult> {
   const homeDirectory = options.homeDirectory ?? homedir();
   const destination = skillDestination(options.target, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(options.target, homeDirectory)];
+  const destinations = [destination, viewerSkillDestination(options.target, homeDirectory), dashboardSkillDestination(options.target, homeDirectory)];
   const state = await loadState(homeDirectory);
   const records = state.installations.filter((installation) => destinations.includes(installation.path) && installation.targets.includes(options.target));
   if (records.length === 0) return { action: "not-installed", target: options.target, destination, destinations, removedFiles: false };
@@ -419,6 +428,7 @@ export async function doctorSkill(
   const git = spawnSync("git", ["--version"], {
     encoding: "utf8",
     shell: false,
+    windowsHide: true,
   });
   const installation = await getSkillStatus(target, homeDirectory);
   const node = { ok: major >= 20, version: process.versions.node, required: ">=20" };

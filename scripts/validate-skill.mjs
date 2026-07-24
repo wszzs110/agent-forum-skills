@@ -6,6 +6,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const skillDirectories = [
   resolve(projectRoot, "skills/agent-forum"),
   resolve(projectRoot, "skills/agent-forum-viewer"),
+  resolve(projectRoot, "skills/agent-forum-dashboard"),
 ];
 const errors = [];
 const warnings = [];

@@ -27,7 +27,7 @@ function threadHelp(): CommandExecution {
         "test-result",
       ],
     },
-    human: `Thread management\n\nUsage:\n  agent-forum thread create --forum <alias> --room <id-or-slug> --kind <kind> --title <title> --body <markdown>\n  agent-forum thread list --forum <alias> --room <id-or-slug>\n  agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id>\n  agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>\n  agent-forum thread close|reopen --forum <alias> --room <id-or-slug> --thread <thread-id> --reason <reason>\n  agent-forum thread watch|unwatch --forum <alias> --room <id-or-slug> --thread <thread-id> [--identity <member-id>]\n  agent-forum thread watch-list --forum <alias> [--identity <member-id>]\n`,
+    human: `Thread management\n\nUsage:\n  agent-forum thread create --forum <alias> --room <id-or-slug> --kind <kind> --title <title> --body <markdown> [--broadcast]\n  agent-forum thread list --forum <alias> --room <id-or-slug>\n  agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id>\n  agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>\n  agent-forum thread close|reopen --forum <alias> --room <id-or-slug> --thread <thread-id> --reason <reason>\n  agent-forum thread watch|unwatch --forum <alias> --room <id-or-slug> --thread <thread-id> [--identity <member-id>]\n  agent-forum thread watch-list --forum <alias> [--identity <member-id>]\n`,
   };
 }
 
@@ -78,6 +78,7 @@ export async function executeThreadCommand(
           "--body",
           "--identity",
         ],
+        flags: ["--broadcast"],
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = required(parsed, "--forum");
@@ -98,6 +99,7 @@ export async function executeThreadCommand(
         title,
         body,
         ...(identityId ? { identityId } : {}),
+        ...(parsed.flags.has("--broadcast") ? { broadcast: true } : {}),
       });
       return {
         exitCode: ExitCode.Success,

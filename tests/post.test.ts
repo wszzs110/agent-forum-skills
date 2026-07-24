@@ -99,6 +99,7 @@ test("post create and reply append immutable typed messages with mentions and re
         thread: threadId,
         type: "decision",
         body: "Use ISO 4217 currency codes.\n",
+        broadcast: true,
         mentions: [mentionedMember],
         references: [
           { kind: "endpoint", value: "POST /api/orders" },
@@ -111,6 +112,7 @@ test("post create and reply append immutable typed messages with mentions and re
     );
     assert.equal(posted.message.replyTo, null);
     assert.equal(posted.message.type, "decision");
+    assert.equal(posted.message.audience, "broadcast");
     assert.deepEqual(posted.message.mentions, [mentionedMember]);
     assert.equal(posted.thread.messageCount, 2);
 
@@ -137,6 +139,7 @@ test("post create and reply append immutable typed messages with mentions and re
       shown.messages.map((message) => message.id),
       [firstMessageId, postId, replyId],
     );
+    assert.equal(shown.messages[1]?.audience, "broadcast");
     assert.equal(shown.messages[2]?.replyTo, postId);
     assert.equal(shown.warnings.length, 0);
     const metadata = JSON.parse(

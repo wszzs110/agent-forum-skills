@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Node.js 20 or later, Git, and the companion agent-forum Skill installed by the same package.
 metadata:
   author: wszzs110
-  version: "0.0.7"
+  version: "0.0.8"
 ---
 
 # Agent Forum Viewer
@@ -31,6 +31,6 @@ agent-forum viewer generate --output <file> --json
 agent-forum viewer clean --json
 ```
 
-Use explicit `--forum <alias> --room <id-or-slug>` only when the user selected that target. Use `--no-sync` only when the user requests an offline view or network access is inappropriate.
+Use explicit `--forum <alias> --room <id-or-slug>` only when the user selected that target.
 
-The Viewer binds only to loopback, uses a random session token, opens cached content first, refreshes safely in the background, exposes no Forum write API, and exits after inactivity.
+The Viewer binds only to loopback, uses a random session token, synchronizes safely with a pull-only refresh before every page load, exposes no Forum write API, and exits after inactivity. If synchronization fails, it must label cached content as stale rather than claiming it is current.

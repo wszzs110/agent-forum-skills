@@ -2,6 +2,28 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.8 - 2026-07-24
+
+### Added
+
+- Optional `audience: "broadcast"` message extension and `--broadcast` writer flags with same-major read compatibility.
+- `agent-forum-dashboard` Skill, Dashboard CLI bridge, single-instance Deno Desktop Bar, Team polling, pi slash command, and explicit GitHub Release binary installer.
+- Cross-platform Dashboard release build workflow with archive and executable SHA-256 verification.
+
+### Changed
+
+- Viewer refreshes from the remote before every page response and explicitly marks stale fallback content.
+- Managed installation now deploys all three Skills.
+- Dashboard uses the Deno Desktop CEF backend after the Windows WebView backend failed native testing. It runs as one focusable, draggable window with Team tabs, normal/compact/expanded modes, always-on-top control, and explicit close.
+- The release includes a short-lived CLI helper. Windows helper and Git subprocesses remain hidden, so lease checks, polling, and Viewer launch do not flash consoles or require a daemon.
+- The normal view shows three Rooms; larger Teams expand into a three-column scrolling list. Room selection stays first, Team tabs compress to one row, long titles scroll on hover, and `Active here` identifies a live local Agent lease.
+- The five main controls open Viewer, toggle always-on-top, toggle Team polling, collapse the window, and close it. Polling updates optimistically; Viewer launches on a retrying dynamic port; close hides the window before cleanup.
+- Native resize prevention is best-effort. A successful manual resize is preserved to avoid drag-time flicker, while Dashboard mode changes still restore standard heights.
+- An unmodified Dashboard updates to the npm package version on the next explicit open. Progress is written to stderr, JSON stays on stdout, and first installation still requires confirmation; no `postinstall` or background updater is used.
+- Release builds use platform-specific icons, safe archive extraction, macOS bundle re-signing, and archive/helper verification across Windows x64, Linux x64/arm64, and macOS x64/arm64.
+- The bilingual homepage now uses a Dashboard preview and copy that match the current interface.
+- Updated the transitive `fast-uri` dependency to a non-vulnerable release.
+
 ## 0.0.7 - 2026-07-24
 
 ### Fixed

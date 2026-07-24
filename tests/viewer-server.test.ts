@@ -110,6 +110,53 @@ test("Viewer binds to loopback, requires the token path, escapes content, and cl
   }
 });
 
+test("Viewer refreshes before every page response and coalesces concurrent refreshes", async () => {
+  let refreshes = 0;
+  const fresh = snapshot();
+  fresh.sourceHead = "fedcba9876543210";
+  fresh.rooms[0]!.sourceHead = fresh.sourceHead;
+  const viewer = await startViewerServer({
+    snapshot: snapshot(),
+    roomIdOrSlug: "checkout",
+    token: "abcdefabcdefabcdefabcdefabcdefab",
+    refresh: async () => {
+      refreshes += 1;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+      return { snapshot: fresh, freshness: { state: "fresh" } };
+    },
+  });
+  try {
+    const [first, second] = await Promise.all([fetch(viewer.url), fetch(viewer.url)]);
+    assert.equal(refreshes, 1, "parallel page loads share one sync");
+    assert.match(await first.text(), /fedcba987654/);
+    assert.match(await second.text(), /Remote sync complete/);
+    await fetch(viewer.url);
+    assert.equal(refreshes, 2, "a browser refresh performs a new sync");
+  } finally {
+    await viewer.close();
+  }
+});
+
+test("Viewer renders stale state without claiming cache is current after refresh failure", async () => {
+  const viewer = await startViewerServer({
+    snapshot: snapshot(),
+    roomIdOrSlug: "checkout",
+    token: "1234567890abcdef1234567890abcdef",
+    refresh: async () => ({
+      freshness: { state: "stale", message: "Remote sync failed (SYNC_NETWORK_FAILED)." },
+    }),
+  });
+  try {
+    const response = await fetch(viewer.url);
+    const html = await response.text();
+    assert.match(html, /Content may be stale/);
+    assert.match(html, /SYNC_NETWORK_FAILED/);
+    assert.equal(html.includes("Remote sync complete"), false);
+  } finally {
+    await viewer.close();
+  }
+});
+
 test("Viewer renders safe Markdown and exposes functional client-side controls", () => {
   const input = snapshot();
   const room = input.rooms[0]!;

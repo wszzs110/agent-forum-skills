@@ -14,6 +14,7 @@ import test from "node:test";
 import {
   SkillInstallationError,
   doctorSkill,
+  dashboardSkillDestination,
   getSkillStatus,
   installSkill,
   skillDestination,
@@ -64,7 +65,7 @@ test("common targets share one managed payload and uninstall safely", async () =
     });
     assert.equal(first.action, "installed");
     assert.equal((await getSkillStatus("pi", home)).status, "installed");
-    assert.equal(first.destinations.length, 2);
+    assert.equal(first.destinations.length, 3);
     assert.equal(
       await readFile(resolve(destination, "SKILL.md"), "utf8"),
       await readFile(resolve(sourceDirectory, "SKILL.md"), "utf8"),
@@ -73,6 +74,11 @@ test("common targets share one managed payload and uninstall safely", async () =
     assert.equal(
       await readFile(resolve(viewerSkillDestination("pi", home), "SKILL.md"), "utf8"),
       await readFile(resolve("skills", "agent-forum-viewer", "SKILL.md"), "utf8"),
+    );
+
+    assert.equal(
+      await readFile(resolve(dashboardSkillDestination("pi", home), "SKILL.md"), "utf8"),
+      await readFile(resolve("skills", "agent-forum-dashboard", "SKILL.md"), "utf8"),
     );
 
     const bundledCli = resolve(destination, "scripts", "agent-forum.mjs");
@@ -122,6 +128,7 @@ test("common targets share one managed payload and uninstall safely", async () =
     assert.equal(forced.removedFiles, true);
     assert.equal(await doesNotExist(destination), true);
     assert.equal(await doesNotExist(viewerSkillDestination("codex", home)), true);
+    assert.equal(await doesNotExist(dashboardSkillDestination("codex", home)), true);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -144,6 +151,7 @@ test("Claude Code uses its own discovery directory", async () => {
       result.destinations.includes(resolve(home, ".claude", "skills", "agent-forum-viewer")),
       true,
     );
+    assert.equal(result.destinations.includes(resolve(home, ".claude", "skills", "agent-forum-dashboard")), true);
 
     const removed = await uninstallSkill({
       target: "claude-code",
@@ -155,15 +163,17 @@ test("Claude Code uses its own discovery directory", async () => {
   }
 });
 
-test("all four platform targets discover both Skills and the shared CLI", async () => {
+test("all four platform targets discover all Skills and the shared CLI", async () => {
   for (const target of ["pi", "opencode", "codex", "claude-code"] as const) {
     const home = await mkdtemp(join(tmpdir(), `agent-forum-matrix-${target}-`));
     try {
       const result = await installSkill({ target, homeDirectory: home, sourceDirectory });
-      assert.equal(result.destinations.length, 2);
+      assert.equal(result.destinations.length, 3);
       assert.equal((await getSkillStatus(target, home)).status, "installed");
       const viewer = await readFile(resolve(viewerSkillDestination(target, home), "SKILL.md"), "utf8");
       assert.match(viewer, /name: agent-forum-viewer/u);
+      const dashboard = await readFile(resolve(dashboardSkillDestination(target, home), "SKILL.md"), "utf8");
+      assert.match(dashboard, /name: agent-forum-dashboard/u);
       const cli = spawnSync(process.execPath, [resolve(skillDestination(target, home), "scripts", "agent-forum.mjs"), "viewer", "help", "--json"], { encoding: "utf8", shell: false });
       assert.equal(cli.status, 0, cli.stderr);
       assert.equal(JSON.parse(cli.stdout).command, "viewer.help");
@@ -181,6 +191,7 @@ test("an unmodified managed suite upgrades without force", async () => {
   try {
     await cp(sourceDirectory, coreSource, { recursive: true });
     await cp(resolve("skills", "agent-forum-viewer"), resolve(suite, "agent-forum-viewer"), { recursive: true });
+    await cp(resolve("skills", "agent-forum-dashboard"), resolve(suite, "agent-forum-dashboard"), { recursive: true });
     await installSkill({ target: "pi", homeDirectory: home, sourceDirectory: coreSource });
     await appendFile(resolve(coreSource, "SKILL.md"), "\nUpgrade marker.\n", "utf8");
 

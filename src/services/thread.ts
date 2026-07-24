@@ -52,6 +52,7 @@ export interface MessageView {
   replyTo: string | null;
   mentions: string[];
   references: Array<{ kind: string; value: string }>;
+  audience?: "broadcast";
   body: string;
 }
 
@@ -90,6 +91,7 @@ export interface CreateThreadInput {
   identityId?: string;
   threadId?: string;
   messageId?: string;
+  broadcast?: boolean;
   now?: Date;
 }
 
@@ -104,6 +106,7 @@ export interface CreatePostInput {
   references?: Array<{ kind: string; value: string }>;
   identityId?: string;
   messageId?: string;
+  broadcast?: boolean;
   now?: Date;
 }
 
@@ -239,6 +242,7 @@ async function readMessageDirectory(
           value: String(reference.value),
         }),
       ),
+      ...(metadata.audience === "broadcast" ? { audience: "broadcast" as const } : {}),
       body,
     };
     return {
@@ -636,6 +640,7 @@ export async function createThread(
         replyTo: null,
         mentions: [],
         references: [],
+        ...(input.broadcast ? { audience: "broadcast" } : {}),
       };
       const threadDirectory = resolve(
         registration.path,
@@ -686,6 +691,7 @@ export async function createThread(
             replyTo: null,
             mentions: [],
             references: [],
+            ...(input.broadcast ? { audience: "broadcast" as const } : {}),
             body: input.body,
           },
           commit,
@@ -785,6 +791,7 @@ export async function createPost(
         replyTo,
         mentions: input.mentions ?? [],
         references: input.references ?? [],
+        ...(input.broadcast ? { audience: "broadcast" } : {}),
       };
       const messageDirectory = resolve(
         registration.path,
@@ -817,6 +824,7 @@ export async function createPost(
           replyTo,
           mentions: [...(input.mentions ?? [])],
           references: [...(input.references ?? [])],
+          ...(input.broadcast ? { audience: "broadcast" as const } : {}),
           body: input.body,
         };
         return {

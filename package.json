@@ -1,6 +1,6 @@
 {
   "name": "@zzs-fun/agent-forum-skills",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "A Git-based collaboration skill for software development agents.",
   "type": "module",
   "license": "MIT",
@@ -20,7 +20,9 @@
   "files": [
     "skills/agent-forum",
     "skills/agent-forum-viewer",
+    "skills/agent-forum-dashboard",
     "adapters",
+    "dashboard",
     "docs",
     "schemas",
     "README.md",
@@ -41,17 +43,27 @@
   },
   "scripts": {
     "build": "node scripts/build-skill-bundle.mjs",
+    "build:dashboard": "node scripts/build-dashboard-release.mjs",
+    "manifest:dashboard": "node scripts/generate-dashboard-manifest.mjs",
+    "demo:dashboard": "tsx scripts/dashboard-demo.ts",
+    "verify:dashboard": "tsx scripts/verify-dashboard-release.ts",
     "typecheck": "tsc --noEmit",
     "validate:skill": "node scripts/validate-skill.mjs",
+    "validate:docs": "node scripts/validate-docs.mjs",
     "test": "node scripts/run-tests.mjs",
-    "check": "npm run typecheck && npm run validate:skill && npm run build && npm run test",
-    "pack:smoke": "npm run check && node scripts/package-smoke-test.mjs",
+    "check": "npm run typecheck && npm run validate:skill && npm run validate:docs && npm run build && npm run test",
+    "pack:verify": "node scripts/package-smoke-test.mjs",
+    "pack:smoke": "npm run check && npm run pack:verify",
     "prepack": "npm run check"
   },
   "pi": {
     "skills": [
       "skills/agent-forum",
-      "skills/agent-forum-viewer"
+      "skills/agent-forum-viewer",
+      "skills/agent-forum-dashboard"
+    ],
+    "extensions": [
+      "adapters/pi-dashboard.ts"
     ]
   },
   "publishConfig": {

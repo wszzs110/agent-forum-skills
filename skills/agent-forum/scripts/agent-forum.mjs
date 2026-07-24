@@ -411,6 +411,11 @@ function createAgentForumPaths(homeDirectory = homedir()) {
     locksDirectory: resolve2(stateDirectory, "locks"),
     cacheDirectory: resolve2(stateDirectory, "cache"),
     viewerDirectory: resolve2(stateDirectory, "viewer"),
+    dashboardDirectory: resolve2(stateDirectory, "dashboard"),
+    dashboardRuntimeFile: resolve2(stateDirectory, "dashboard", "runtime.json"),
+    dashboardDesktopFile: resolve2(stateDirectory, "dashboard", "desktop.json"),
+    dashboardInstallDirectory: resolve2(root, "dashboard"),
+    dashboardInstallationFile: resolve2(root, "dashboard", "installation.json"),
     installationsFile: resolve2(stateDirectory, "installations.json"),
     bindingsFile: resolve2(stateDirectory, "context-bindings.json")
   };
@@ -516,23 +521,23 @@ var require_code = __commonJS({
     };
     exports._Code = _Code;
     exports.nil = new _Code("");
-    function _(strs, ...args) {
+    function _(strs, ...args2) {
       const code = [strs[0]];
       let i = 0;
-      while (i < args.length) {
-        addCodeArg(code, args[i]);
+      while (i < args2.length) {
+        addCodeArg(code, args2[i]);
         code.push(strs[++i]);
       }
       return new _Code(code);
     }
     exports._ = _;
     var plus = new _Code("+");
-    function str(strs, ...args) {
+    function str(strs, ...args2) {
       const expr = [safeStringify(strs[0])];
       let i = 0;
-      while (i < args.length) {
+      while (i < args2.length) {
         expr.push(plus);
-        addCodeArg(expr, args[i]);
+        addCodeArg(expr, args2[i]);
         expr.push(plus, safeStringify(strs[++i]));
       }
       optimize(expr);
@@ -1087,10 +1092,10 @@ var require_codegen = __commonJS({
       }
     };
     var Func = class extends BlockNode {
-      constructor(name, args, async) {
+      constructor(name, args2, async) {
         super();
         this.name = name;
-        this.args = args;
+        this.args = args2;
         this.async = async;
       }
       render(opts) {
@@ -1365,8 +1370,8 @@ var require_codegen = __commonJS({
         return this;
       }
       // `function` heading (or definition if funcBody is passed)
-      func(name, args = code_1.nil, async, funcBody) {
-        this._blockNode(new Func(name, args, async));
+      func(name, args2 = code_1.nil, async, funcBody) {
+        this._blockNode(new Func(name, args2, async));
         if (funcBody)
           this.code(funcBody).endFunc();
         return this;
@@ -1460,13 +1465,13 @@ var require_codegen = __commonJS({
     }
     exports.not = not;
     var andCode = mappend(exports.operators.AND);
-    function and(...args) {
-      return args.reduce(andCode);
+    function and(...args2) {
+      return args2.reduce(andCode);
     }
     exports.and = and;
     var orCode = mappend(exports.operators.OR);
-    function or(...args) {
-      return args.reduce(orCode);
+    function or(...args2) {
+      return args2.reduce(orCode);
     }
     exports.or = or;
     function mappend(op) {
@@ -2199,8 +2204,8 @@ var require_code2 = __commonJS({
       ];
       if (it.opts.dynamicRef)
         valCxt.push([names_1.default.dynamicAnchors, names_1.default.dynamicAnchors]);
-      const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
-      return context !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context}, ${args})` : (0, codegen_1._)`${func}(${args})`;
+      const args2 = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
+      return context !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context}, ${args2})` : (0, codegen_1._)`${func}(${args2})`;
     }
     exports.callValidateCode = callValidateCode;
     var newRegExp = (0, codegen_1._)`new RegExp`;
@@ -3410,7 +3415,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve20.call(this, root, ref);
+      let _sch = resolve23.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3437,7 +3442,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve20(root, ref) {
+    function resolve23(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -4068,7 +4073,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve20(baseURI, relativeURI, options) {
+    function resolve23(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -4195,6 +4200,7 @@ var require_fast_uri = __commonJS({
       return uriTokens.join("");
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
+    var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
     function getParseError(parsed, matches) {
       if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
         return 'URI path must start with "/" when authority is present.';
@@ -4223,6 +4229,11 @@ var require_fast_uri = __commonJS({
         } else {
           uri = "//" + uri;
         }
+      }
+      const authorityMatch = uri.match(AUTHORITY_PREFIX);
+      if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
+        parsed.error = "URI authority must not contain a literal backslash.";
+        malformedAuthorityOrPort = true;
       }
       const matches = uri.match(URI_PARSE);
       if (matches) {
@@ -4326,7 +4337,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve20,
+      resolve: resolve23,
       resolveComponent,
       equal,
       serialize,
@@ -8156,6 +8167,10 @@ var init_message_schema = __esm({
           items: {
             $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/reference"
           }
+        },
+        audience: {
+          type: "string",
+          enum: ["broadcast"]
         }
       }
     };
@@ -8774,11 +8789,12 @@ import { spawnSync } from "node:child_process";
 function redactGitOutput(value) {
   return value.replace(/(https?:\/\/)[^/@\s]+@/giu, "$1***@").replace(/(https?:\/\/[^/:\s]+:)[^@\s]+@/giu, "$1***@").replace(/([?&][^=&#\s]+)=([^&#\s]+)/gu, "$1=***").replace(/(https?:\/\/[^#\s]+)#[^\s]+/giu, "$1#***");
 }
-function runGit(cwd, args) {
-  const result = spawnSync("git", [...args], {
+function runGit(cwd, args2) {
+  const result = spawnSync("git", [...args2], {
     cwd,
     encoding: "utf8",
     shell: false,
+    windowsHide: true,
     env: {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",
@@ -8798,12 +8814,12 @@ function runGit(cwd, args) {
     stderr: redactGitOutput(result.stderr ?? "")
   };
 }
-function requireGit(cwd, args) {
-  const result = runGit(cwd, args);
+function requireGit(cwd, args2) {
+  const result = runGit(cwd, args2);
   if (result.status !== 0) {
     throw new GitCommandError(
       "GIT_COMMAND_FAILED",
-      `git ${redactGitOutput(args.join(" "))} failed: ${result.stderr || result.stdout}`,
+      `git ${redactGitOutput(args2.join(" "))} failed: ${result.stderr || result.stdout}`,
       result
     );
   }
@@ -8819,35 +8835,35 @@ function assertGitBranchName(cwd, branch) {
     );
   }
 }
-function assertCleanWorktree(repository) {
-  const status = requireGit(repository, ["status", "--porcelain"]).stdout;
+function assertCleanWorktree(repository2) {
+  const status = requireGit(repository2, ["status", "--porcelain"]).stdout;
   if (status.trim().length > 0) {
     throw new GitCommandError(
       "GIT_DIRTY_WORKTREE",
-      `managed forum worktree is not clean: ${repository}`
+      `managed forum worktree is not clean: ${repository2}`
     );
   }
 }
-function configureForumCommitIdentity(repository, displayName, memberId) {
-  requireGit(repository, [
+function configureForumCommitIdentity(repository2, displayName, memberId) {
+  requireGit(repository2, [
     "-c",
     "core.longpaths=true",
     "config",
     "core.longpaths",
     "true"
   ]);
-  requireGit(repository, ["config", "user.name", displayName]);
-  requireGit(repository, [
+  requireGit(repository2, ["config", "user.name", displayName]);
+  requireGit(repository2, [
     "config",
     "user.email",
     `${memberId}@agent-forum.invalid`
   ]);
-  requireGit(repository, ["config", "core.autocrlf", "false"]);
+  requireGit(repository2, ["config", "core.autocrlf", "false"]);
 }
-function commitPaths(repository, paths, message) {
-  requireGit(repository, ["add", "--", ...paths]);
-  requireGit(repository, ["commit", "-m", message]);
-  return requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
+function commitPaths(repository2, paths, message) {
+  requireGit(repository2, ["add", "--", ...paths]);
+  requireGit(repository2, ["commit", "-m", message]);
+  return requireGit(repository2, ["rev-parse", "HEAD"]).stdout.trim();
 }
 var GitCommandError;
 var init_runner = __esm({
@@ -9422,7 +9438,7 @@ async function readRoomMember(path2) {
     throw error;
   }
 }
-async function commitMutableDocument(repository, path2, schema, value, commitMessage) {
+async function commitMutableDocument(repository2, path2, schema, value, commitMessage) {
   let previous;
   try {
     previous = await readFile4(path2, "utf8");
@@ -9433,9 +9449,9 @@ async function commitMutableDocument(repository, path2, schema, value, commitMes
   }
   try {
     await writeValidatedJsonAtomic(path2, schema, value, { overwrite: true });
-    return commitPaths(repository, [path2], commitMessage);
+    return commitPaths(repository2, [path2], commitMessage);
   } catch (error) {
-    runGit(repository, ["reset", "--", path2]);
+    runGit(repository2, ["reset", "--", path2]);
     if (previous === void 0) await rm3(path2, { force: true });
     else await writeFileAtomic(path2, previous, { overwrite: true });
     throw error;
@@ -10280,15 +10296,15 @@ function invalidArgument(message) {
 }
 
 // src/commands/options.ts
-function parseCommandOptions(args, definitions) {
+function parseCommandOptions(args2, definitions) {
   const valueOptions = new Set(definitions.values);
   const repeatableValueOptions = new Set(definitions.repeatableValues ?? []);
   const flagOptions = new Set(definitions.flags ?? []);
   const values = /* @__PURE__ */ new Map();
   const multiValues = /* @__PURE__ */ new Map();
   const flags = /* @__PURE__ */ new Set();
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
+  for (let index = 0; index < args2.length; index += 1) {
+    const argument = args2[index];
     if (!argument?.startsWith("--")) {
       return { error: `unexpected positional argument: ${argument ?? ""}` };
     }
@@ -10303,7 +10319,7 @@ function parseCommandOptions(args, definitions) {
     if (valueOptions.has(argument) && values.has(argument)) {
       return { error: `duplicate option: ${argument}` };
     }
-    const value = args[index + 1];
+    const value = args2[index + 1];
     if (!value || value.startsWith("--")) {
       return { error: `${argument} requires a value` };
     }
@@ -10342,14 +10358,14 @@ Usage:
 `
   };
 }
-async function executeContextCommand(args) {
-  const subcommand = args[0];
+async function executeContextCommand(args2) {
+  const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return contextHelp();
   }
   try {
     if (subcommand === "bind") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--room", "--cwd", "--branch"],
         flags: ["--workspace", "--force"]
       });
@@ -10382,7 +10398,7 @@ room: ${result.target.roomSlug}
       };
     }
     if (subcommand === "unbind") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--cwd", "--branch"],
         flags: ["--workspace"]
       });
@@ -10406,7 +10422,7 @@ room: ${result.target.roomSlug}
       };
     }
     if (subcommand === "show") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--cwd"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -10423,7 +10439,7 @@ status: ${result.targetStatus}
       };
     }
     if (subcommand === "list") {
-      const parsed = parseCommandOptions(args.slice(1), { values: [] });
+      const parsed = parseCommandOptions(args2.slice(1), { values: [] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const result = await listContextBindings();
       return {
@@ -10437,7 +10453,7 @@ status: ${result.targetStatus}
       };
     }
     if (subcommand === "resolve") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--cwd", "--forum", "--room"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -10471,11 +10487,42 @@ status: ${result.targetStatus}
   }
 }
 
-// src/services/doctor.ts
+// src/commands/dashboard.ts
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { dirname as dirname4, resolve as resolve17 } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// src/version.ts
+var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
+var CLI_NAME = "agent-forum";
+var VERSION = true ? "0.0.8" : "0.0.0-dev";
+
+// src/services/dashboard.ts
 init_local_config();
-import { access, lstat as lstat3, readdir as readdir4 } from "node:fs/promises";
-import { constants } from "node:fs";
-import { resolve as resolve10 } from "node:path";
+init_timestamps();
+init_atomic();
+init_lock();
+init_paths();
+init_errors2();
+import { readFile as readFile12 } from "node:fs/promises";
+import { resolve as resolve15 } from "node:path";
+
+// src/services/inbox.ts
+init_local_config();
+init_timestamps();
+init_validator();
+init_atomic();
+init_errors();
+init_lock();
+init_paths();
+init_errors2();
+import { readFile as readFile11, readdir as readdir7 } from "node:fs/promises";
+import { resolve as resolve14 } from "node:path";
+
+// src/services/forum-sync.ts
+init_local_config();
 init_runner();
 init_lock();
 init_paths();
@@ -10621,605 +10668,12 @@ async function closeConflict(forumAlias, operationId, paths = createAgentForumPa
   }
 }
 
-// src/services/forum-remote.ts
-init_local_config();
-init_timestamps();
-init_runner();
-import { randomUUID as randomUUID4 } from "node:crypto";
-import { lstat as lstat2, mkdir as mkdir3, rename as rename3, rm as rm5 } from "node:fs/promises";
-import { resolve as resolve9 } from "node:path";
-
-// src/git/remote.ts
-init_errors2();
-import { isAbsolute } from "node:path";
-function validateRemoteUrl(value) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new ServiceError("REMOTE_URL_UNSAFE", "remote URL must not be empty");
-  }
-  if (trimmed.startsWith("-")) {
-    throw new ServiceError(
-      "REMOTE_URL_UNSAFE",
-      "remote URL must not begin with a command-line option prefix"
-    );
-  }
-  if (isAbsolute(trimmed) || trimmed.startsWith(".")) {
-    return { value: trimmed, display: "<local-path>", kind: "local" };
-  }
-  try {
-    const url = new URL(trimmed);
-    if (!["http:", "https:", "ssh:", "git:", "file:"].includes(url.protocol)) {
-      throw new ServiceError(
-        "REMOTE_URL_UNSAFE",
-        `unsupported remote URL protocol: ${url.protocol}`
-      );
-    }
-    if (url.search || url.hash) {
-      throw new ServiceError(
-        "REMOTE_URL_UNSAFE",
-        "remote URL must not contain query parameters or fragments; use credential configuration outside the URL"
-      );
-    }
-    if (url.password) {
-      throw new ServiceError(
-        "REMOTE_URL_UNSAFE",
-        "remote URL must not contain a password or token; use a credential helper or SSH agent"
-      );
-    }
-    if ((url.protocol === "http:" || url.protocol === "https:") && url.username) {
-      throw new ServiceError(
-        "REMOTE_URL_UNSAFE",
-        "HTTP(S) remote URL must not contain user information; use a credential helper"
-      );
-    }
-    if (url.protocol === "file:") {
-      return { value: trimmed, display: "<local-path>", kind: "local" };
-    }
-    const display = new URL(url.toString());
-    display.password = "";
-    return { value: trimmed, display: display.toString(), kind: "network" };
-  } catch (error) {
-    if (error instanceof ServiceError) throw error;
-  }
-  const scp = /^(?:([^@\s]+)@)?([^:/\s]+):(.+)$/u.exec(trimmed);
-  if (scp && !/^[a-zA-Z]:[\\/]/u.test(trimmed)) {
-    return { value: trimmed, display: trimmed, kind: "network" };
-  }
-  if (trimmed.endsWith(".git")) {
-    return { value: trimmed, display: "<local-path>", kind: "local" };
-  }
-  throw new ServiceError(
-    "REMOTE_URL_UNSAFE",
-    "remote must be a supported URL, SCP-style SSH remote, or local Git path"
-  );
-}
-function displayRemoteUrl(value) {
-  try {
-    return validateRemoteUrl(value).display;
-  } catch {
-    return "<redacted-remote>";
-  }
-}
-
-// src/services/forum-remote.ts
-init_lock();
-init_paths();
+// src/services/forum-sync.ts
 init_errors2();
 init_room();
-async function pathExists2(path2) {
-  try {
-    await lstat2(path2);
-    return true;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-}
-function remoteBranchFromHead(repository) {
-  const head = runGit(repository, [
-    "symbolic-ref",
-    "--quiet",
-    "--short",
-    "refs/remotes/origin/HEAD"
-  ]);
-  if (head.status !== 0) {
-    throw new ServiceError(
-      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
-      "remote default branch could not be discovered; provide --branch"
-    );
-  }
-  const value = head.stdout.trim();
-  if (!value.startsWith("origin/") || value.length <= "origin/".length) {
-    throw new ServiceError(
-      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
-      "remote HEAD does not name an origin branch"
-    );
-  }
-  return value.slice("origin/".length);
-}
-async function validateClonedForum(repository, branch) {
-  try {
-    const protocol = await readJsonDocument(
-      resolve9(repository, ".forum", "protocol.json"),
-      "protocol"
-    );
-    const forum = await readJsonDocument(
-      resolve9(repository, ".forum", "forum.json"),
-      "forum"
-    );
-    if (protocol.dataBranch !== branch || protocol.forumId !== forum.forumId) {
-      throw new ServiceError(
-        "REMOTE_PROTOCOL_INVALID",
-        "remote forum metadata does not agree on forumId and dataBranch"
-      );
-    }
-    return { forumId: String(protocol.forumId) };
-  } catch (error) {
-    if (error instanceof ServiceError) throw error;
-    throw new ServiceError(
-      "REMOTE_PROTOCOL_INVALID",
-      "remote branch does not contain a valid Agent Forum protocol",
-      error instanceof Error ? error.message : String(error)
-    );
-  }
-}
-async function addRemoteForum(input, paths = createAgentForumPaths()) {
-  assertLocalAlias(input.alias);
-  const safeRemote = validateRemoteUrl(input.remote);
-  const config = await loadLocalConfig(paths);
-  if (config.forums.some((forum) => forum.alias === input.alias)) {
-    throw new ServiceError(
-      "FORUM_ALIAS_EXISTS",
-      `forum alias is already configured: ${input.alias}`
-    );
-  }
-  const destination = forumClonePath(paths, input.alias);
-  if (await pathExists2(destination)) {
-    throw new ServiceError(
-      "FORUM_PATH_EXISTS",
-      `managed forum path already exists: ${destination}`
-    );
-  }
-  await mkdir3(paths.forumsDirectory, { recursive: true });
-  let cloned = false;
-  try {
-    requireGit(paths.forumsDirectory, [
-      "-c",
-      "core.longpaths=true",
-      "clone",
-      "--no-checkout",
-      "--origin",
-      "origin",
-      "--",
-      safeRemote.value,
-      destination
-    ]);
-    cloned = true;
-    requireGit(destination, [
-      "-c",
-      "core.longpaths=true",
-      "config",
-      "core.longpaths",
-      "true"
-    ]);
-    requireGit(destination, ["config", "core.autocrlf", "false"]);
-    const branch = input.branch ?? remoteBranchFromHead(destination);
-    assertGitBranchName(destination, branch);
-    const remoteBranch = runGit(destination, [
-      "show-ref",
-      "--verify",
-      `refs/remotes/origin/${branch}`
-    ]);
-    if (remoteBranch.status !== 0) {
-      throw new ServiceError(
-        "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
-        `remote branch does not exist: ${branch}`
-      );
-    }
-    requireGit(destination, [
-      "checkout",
-      "-B",
-      branch,
-      `origin/${branch}`
-    ]);
-    requireGit(destination, [
-      "branch",
-      "--set-upstream-to",
-      `origin/${branch}`,
-      branch
-    ]);
-    const validated = await validateClonedForum(destination, branch);
-    const registration = {
-      alias: input.alias,
-      forumId: validated.forumId,
-      path: destination,
-      dataBranch: branch,
-      createdAt: currentUtcTimestamp(input.now)
-    };
-    await registerLocalForum(registration, paths);
-    return {
-      alias: input.alias,
-      forumId: validated.forumId,
-      path: destination,
-      dataBranch: branch,
-      remote: safeRemote.display
-    };
-  } catch (error) {
-    if (cloned) await rm5(destination, { recursive: true, force: true });
-    throw error;
-  }
-}
-async function inspectForumOriginRemote(input, paths = createAgentForumPaths()) {
-  const safeExpected = validateRemoteUrl(input.expectedRemote);
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, input.forumAlias);
-  const origin = runGit(registration.path, ["remote", "get-url", "origin"]);
-  if (origin.status !== 0) {
-    return { configured: false, matchesExpected: false, displayUrl: null };
-  }
-  const existing = origin.stdout.trim();
-  return {
-    configured: true,
-    matchesExpected: existing === safeExpected.value,
-    displayUrl: displayRemoteUrl(existing)
-  };
-}
-async function publishLocalForum(input, paths = createAgentForumPaths()) {
-  const safeRemote = validateRemoteUrl(input.remote);
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, input.forumAlias);
-  const lock = await acquireForumLock({
-    lockPath: forumLockPath(paths, registration.forumId),
-    command: "forum publish"
-  });
-  try {
-    await openForum(input.forumAlias, paths, { requireClean: true });
-    const existing = runGit(registration.path, ["remote", "get-url", "origin"]);
-    if (existing.status === 0 && existing.stdout.trim() !== safeRemote.value) {
-      throw new ServiceError(
-        "REMOTE_ALREADY_CONFIGURED",
-        `origin is already configured as ${displayRemoteUrl(existing.stdout.trim())}`
-      );
-    }
-    if (existing.status !== 0) {
-      requireGit(registration.path, [
-        "remote",
-        "add",
-        "origin",
-        safeRemote.value
-      ]);
-    }
-    requireGit(registration.path, [
-      "push",
-      "--set-upstream",
-      "origin",
-      registration.dataBranch
-    ]);
-    return {
-      forumAlias: input.forumAlias,
-      remote: safeRemote.display,
-      branch: registration.dataBranch,
-      commit: requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim()
-    };
-  } finally {
-    await lock.release();
-  }
-}
-function parseAheadBehind(value) {
-  const parts = value.trim().split(/\s+/u).map(Number);
-  if (parts.length !== 2 || parts.some((part) => !Number.isSafeInteger(part))) {
-    return void 0;
-  }
-  return { ahead: parts[0], behind: parts[1] };
-}
-async function getForumRemoteStatus(forumAlias, paths = createAgentForumPaths()) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, forumAlias);
-  const problems = [];
-  if (!await pathExists2(registration.path)) {
-    return {
-      alias: registration.alias,
-      forumId: registration.forumId,
-      path: registration.path,
-      expectedBranch: registration.dataBranch,
-      currentBranch: null,
-      head: null,
-      dirty: null,
-      protocolValid: false,
-      remote: {
-        configured: false,
-        displayUrl: null,
-        upstream: null,
-        ahead: null,
-        behind: null
-      },
-      health: "unavailable",
-      problems: ["managed clone path does not exist"]
-    };
-  }
-  const branchResult = runGit(registration.path, ["branch", "--show-current"]);
-  const currentBranch = branchResult.status === 0 ? branchResult.stdout.trim() || null : null;
-  if (currentBranch !== registration.dataBranch) {
-    problems.push(
-      `current branch is ${currentBranch ?? "detached"}, expected ${registration.dataBranch}`
-    );
-  }
-  const headResult = runGit(registration.path, ["rev-parse", "HEAD"]);
-  const head = headResult.status === 0 ? headResult.stdout.trim() : null;
-  const statusResult = runGit(registration.path, ["status", "--porcelain"]);
-  const dirty = statusResult.status === 0 ? statusResult.stdout.trim().length > 0 : null;
-  if (dirty) problems.push("managed clone has uncommitted changes");
-  let protocolValid = false;
-  try {
-    const protocol = await readJsonDocument(
-      resolve9(registration.path, ".forum", "protocol.json"),
-      "protocol"
-    );
-    protocolValid = protocol.forumId === registration.forumId && protocol.dataBranch === registration.dataBranch;
-    if (!protocolValid) problems.push("protocol does not match local registration");
-  } catch (error) {
-    problems.push(error instanceof Error ? error.message : String(error));
-  }
-  const remoteResult = runGit(registration.path, ["remote", "get-url", "origin"]);
-  const remoteConfigured = remoteResult.status === 0;
-  const displayUrl = remoteConfigured ? displayRemoteUrl(remoteResult.stdout.trim()) : null;
-  const upstreamResult = runGit(registration.path, [
-    "rev-parse",
-    "--abbrev-ref",
-    "--symbolic-full-name",
-    "@{upstream}"
-  ]);
-  const upstream = upstreamResult.status === 0 ? upstreamResult.stdout.trim() : null;
-  let ahead = null;
-  let behind = null;
-  if (upstream) {
-    const counts = runGit(registration.path, [
-      "rev-list",
-      "--left-right",
-      "--count",
-      `HEAD...${upstream}`
-    ]);
-    if (counts.status === 0) {
-      const parsed = parseAheadBehind(counts.stdout);
-      if (parsed) {
-        ahead = parsed.ahead;
-        behind = parsed.behind;
-      }
-    }
-  }
-  if (!remoteConfigured) problems.push("origin is not configured");
-  else if (!upstream) problems.push("current branch has no upstream");
-  const health = !protocolValid ? "protocol-error" : dirty ? "dirty" : !remoteConfigured || !upstream ? "local-only" : problems.length > 0 ? "unavailable" : "ready";
-  return {
-    alias: registration.alias,
-    forumId: registration.forumId,
-    path: registration.path,
-    expectedBranch: registration.dataBranch,
-    currentBranch,
-    head,
-    dirty,
-    protocolValid,
-    remote: {
-      configured: remoteConfigured,
-      displayUrl,
-      upstream,
-      ahead,
-      behind
-    },
-    health,
-    problems
-  };
-}
-async function listRemoteForums(paths = createAgentForumPaths()) {
-  const config = await loadLocalConfig(paths);
-  const forums = await Promise.all(
-    config.forums.map((forum) => getForumRemoteStatus(forum.alias, paths))
-  );
-  forums.sort((left, right) => left.alias.localeCompare(right.alias));
-  return { forums };
-}
-async function removeLocalForum(input, paths = createAgentForumPaths()) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, input.forumAlias);
-  const lock = await acquireForumLock({
-    lockPath: forumLockPath(paths, registration.forumId),
-    command: "forum remove"
-  });
-  try {
-    if (input.keepClone) {
-      await unregisterLocalForum(input.forumAlias, paths);
-      return { forumAlias: input.forumAlias, clone: "kept", path: registration.path };
-    }
-    const status = await getForumRemoteStatus(input.forumAlias, paths);
-    if (status.dirty) assertCleanWorktree(registration.path);
-    if (!status.remote.configured || !status.remote.upstream || status.remote.ahead === null || status.remote.ahead > 0) {
-      throw new ServiceError(
-        "LOCAL_COMMITS_NOT_PUSHED",
-        "managed clone has no verified upstream or contains local-only commits; use --keep-clone"
-      );
-    }
-    const temporary = `${registration.path}.removing-${randomUUID4()}`;
-    await rename3(registration.path, temporary);
-    try {
-      await unregisterLocalForum(input.forumAlias, paths);
-    } catch (error) {
-      await rename3(temporary, registration.path);
-      throw error;
-    }
-    try {
-      await rm5(temporary, { recursive: true, force: true });
-    } catch (error) {
-      throw new ServiceError(
-        "LOCAL_CLONE_CLEANUP_FAILED",
-        "forum was unregistered but the renamed local clone could not be deleted",
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-    return { forumAlias: input.forumAlias, clone: "deleted", path: registration.path };
-  } finally {
-    await lock.release();
-  }
-}
 
-// src/services/doctor.ts
-async function exists(path2) {
-  try {
-    await lstat3(path2);
-    return true;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return false;
-    throw error;
-  }
-}
-async function diagnoseAgentForum(input = {}, paths = createAgentForumPaths()) {
-  const checks = [];
-  const repaired = [];
-  const nodeMajor = Number(process.versions.node.split(".")[0]);
-  checks.push({
-    id: "node.version",
-    status: nodeMajor >= 20 ? "ok" : "error",
-    message: `Node.js ${process.versions.node}`
-  });
-  const git = runGit(process.cwd(), ["--version"]);
-  checks.push({
-    id: "git.version",
-    status: git.status === 0 ? "ok" : "error",
-    message: git.status === 0 ? git.stdout.trim() : "Git is unavailable"
-  });
-  let config;
-  try {
-    config = await loadLocalConfig(paths);
-    checks.push({ id: "config", status: "ok", message: `${config.forums.length} forum(s) configured` });
-  } catch (error) {
-    checks.push({ id: "config", status: "error", message: error instanceof Error ? error.message : String(error) });
-    return { healthy: false, checks, repaired };
-  }
-  try {
-    const bindings = await loadContextBindingState(paths);
-    checks.push({ id: "context.bindings", status: "ok", message: `${bindings.bindings.length} binding(s)` });
-  } catch (error) {
-    checks.push({ id: "context.bindings", status: "error", message: error instanceof Error ? error.message : String(error) });
-  }
-  if (await exists(paths.root)) {
-    try {
-      await access(paths.root, constants.R_OK | constants.W_OK);
-      checks.push({ id: "storage.permissions", status: "ok", message: "Agent Forum root is readable and writable" });
-    } catch {
-      checks.push({ id: "storage.permissions", status: "error", message: "Agent Forum root is not readable and writable" });
-    }
-  } else {
-    checks.push({ id: "storage.permissions", status: "warning", message: "Agent Forum root does not exist yet" });
-  }
-  const registrations = input.forumAlias ? config.forums.filter((forum) => forum.alias === input.forumAlias) : config.forums;
-  if (input.forumAlias && registrations.length === 0) {
-    checks.push({ id: "forum.selection", status: "error", message: `forum is not configured: ${input.forumAlias}` });
-  }
-  for (const forum of registrations) {
-    const prefix = `forum.${forum.alias}`;
-    try {
-      const status = await getForumRemoteStatus(forum.alias, paths);
-      checks.push({
-        id: `${prefix}.status`,
-        status: status.health === "ready" ? "ok" : status.health === "local-only" ? "warning" : "error",
-        message: `forum health: ${status.health}`,
-        details: status
-      });
-      const gitPath = runGit(forum.path, ["rev-parse", "--git-path", "rebase-merge"]);
-      const applyPath = runGit(forum.path, ["rev-parse", "--git-path", "rebase-apply"]);
-      const rebasePresent = gitPath.status === 0 && await exists(resolve10(forum.path, gitPath.stdout.trim())) || applyPath.status === 0 && await exists(resolve10(forum.path, applyPath.stdout.trim()));
-      checks.push({
-        id: `${prefix}.rebase`,
-        status: rebasePresent ? "error" : "ok",
-        message: rebasePresent ? "an interrupted rebase is present" : "no interrupted rebase"
-      });
-      try {
-        const journals = await listConflicts(forum.alias, paths);
-        let missingRefs = 0;
-        for (const journal of journals.conflicts) {
-          if (runGit(forum.path, ["rev-parse", "--verify", journal.recoveryRef]).status !== 0) missingRefs += 1;
-        }
-        checks.push({
-          id: `${prefix}.conflicts`,
-          status: missingRefs > 0 ? "error" : journals.conflicts.length > 0 ? "warning" : "ok",
-          message: `${journals.conflicts.length} conflict journal(s), ${missingRefs} missing recovery ref(s)`
-        });
-      } catch (error) {
-        checks.push({ id: `${prefix}.conflicts`, status: "error", message: error instanceof Error ? error.message : String(error) });
-      }
-      if (input.network && status.remote.configured) {
-        const remote = runGit(forum.path, ["ls-remote", "--exit-code", "origin", forum.dataBranch]);
-        checks.push({
-          id: `${prefix}.network`,
-          status: remote.status === 0 ? "ok" : "error",
-          message: remote.status === 0 ? "remote branch is reachable" : "remote branch is not reachable"
-        });
-      }
-    } catch (error) {
-      checks.push({ id: `${prefix}.status`, status: "error", message: error instanceof Error ? error.message : String(error) });
-    }
-    const lockPath = forumLockPath(paths, forum.forumId);
-    if (await exists(lockPath)) {
-      if (input.repairStaleLocks) {
-        try {
-          if (await clearStaleForumLock({ lockPath })) {
-            repaired.push(lockPath);
-            checks.push({ id: `${prefix}.lock`, status: "ok", message: "stale lock was removed" });
-          }
-        } catch (error) {
-          checks.push({ id: `${prefix}.lock`, status: "warning", message: error instanceof Error ? error.message : String(error) });
-        }
-      } else {
-        checks.push({ id: `${prefix}.lock`, status: "warning", message: "forum lock exists; use --repair-stale-locks only after review" });
-      }
-    } else {
-      checks.push({ id: `${prefix}.lock`, status: "ok", message: "no forum lock" });
-    }
-  }
-  if (await exists(paths.locksDirectory)) {
-    const known = new Set(config.forums.map((forum) => `${forum.forumId}.lock`));
-    const entries = await readdir4(paths.locksDirectory, { withFileTypes: true });
-    const orphaned = entries.filter((entry) => entry.isDirectory() && entry.name.endsWith(".lock") && !known.has(entry.name));
-    if (orphaned.length > 0) {
-      checks.push({ id: "locks.orphaned", status: "warning", message: `${orphaned.length} orphaned lock(s) require review` });
-    }
-  }
-  return {
-    healthy: !checks.some((check) => check.status === "error"),
-    checks,
-    repaired
-  };
-}
-
-// src/commands/doctor.ts
-async function executeDoctorCommand(args) {
-  const parsed = parseCommandOptions(args, {
-    values: ["--forum"],
-    flags: ["--network", "--repair-stale-locks"]
-  });
-  if ("error" in parsed) return invalidArgument(parsed.error);
-  try {
-    const forumAlias = parsed.values.get("--forum");
-    const result = await diagnoseAgentForum({
-      ...forumAlias ? { forumAlias } : {},
-      network: parsed.flags.has("--network"),
-      repairStaleLocks: parsed.flags.has("--repair-stale-locks")
-    });
-    return {
-      exitCode: result.healthy ? ExitCode.Success : ExitCode.Unexpected,
-      command: "doctor",
-      data: result,
-      human: `${result.healthy ? "healthy" : "unhealthy"}
-${result.checks.map((check) => `${check.status}	${check.id}	${check.message}`).join("\n")}
-`
-    };
-  } catch (error) {
-    const handled = commandError("doctor", error);
-    if (handled) return handled;
-    throw error;
-  }
-}
+// src/services/semantic-validation.ts
+init_runner();
 
 // src/services/forum-lifecycle.ts
 init_ids();
@@ -11232,11 +10686,11 @@ init_paths();
 init_protocol_store();
 init_errors2();
 init_room();
-import { readFile as readFile6, readdir as readdir5, rm as rm6 } from "node:fs/promises";
-import { resolve as resolve11 } from "node:path";
+import { readFile as readFile6, readdir as readdir4, rm as rm5 } from "node:fs/promises";
+import { resolve as resolve9 } from "node:path";
 async function readForumView(forumAlias, paths) {
   const { registration } = await openForum(forumAlias, paths);
-  const basePath = resolve11(registration.path, ".forum", "forum.json");
+  const basePath = resolve9(registration.path, ".forum", "forum.json");
   const base = await readJsonDocument(basePath, "forum");
   if (base.forumId !== registration.forumId) {
     throw new ServiceError("FORUM_PROTOCOL_MISMATCH", "forum metadata ID does not match registration");
@@ -11250,18 +10704,18 @@ async function readForumView(forumAlias, paths) {
   };
   let lastActivityAt = String(base.createdAt);
   const warnings = [];
-  const eventsDirectory = resolve11(registration.path, ".forum", "events");
+  const eventsDirectory = resolve9(registration.path, ".forum", "events");
   let entries = [];
   try {
-    entries = await readdir5(eventsDirectory, { withFileTypes: true });
+    entries = await readdir4(eventsDirectory, { withFileTypes: true });
   } catch (error) {
     if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
   }
   const events = [];
   for (const entry of entries) {
-    const eventPath = resolve11(eventsDirectory, entry.name, "event.json");
+    const eventPath = resolve9(eventsDirectory, entry.name, "event.json");
     if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
-      warnings.push({ code: "INVALID_EVENT_PATH", path: resolve11(eventsDirectory, entry.name), message: "forum event path is invalid" });
+      warnings.push({ code: "INVALID_EVENT_PATH", path: resolve9(eventsDirectory, entry.name), message: "forum event path is invalid" });
       continue;
     }
     try {
@@ -11276,7 +10730,7 @@ async function readForumView(forumAlias, paths) {
   }
   events.sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id)));
   for (const event of events) {
-    const eventPath = resolve11(eventsDirectory, String(event.id), "event.json");
+    const eventPath = resolve9(eventsDirectory, String(event.id), "event.json");
     if (!isKnownLifecycleEventType(String(event.type))) {
       warnings.push({ code: "UNKNOWN_EVENT_TYPE", path: eventPath, message: `unknown forum event type: ${String(event.type)}` });
       continue;
@@ -11335,7 +10789,7 @@ async function createForumEvent(input, paths = createAgentForumPaths()) {
       },
       event
     );
-    const directory = resolve11(registration.path, ".forum", "events", eventId);
+    const directory = resolve9(registration.path, ".forum", "events", eventId);
     let created = false;
     try {
       await createImmutableEvent(directory, event);
@@ -11348,14 +10802,14 @@ async function createForumEvent(input, paths = createAgentForumPaths()) {
       };
     } catch (error) {
       runGit(registration.path, ["reset", "--", directory]);
-      if (created) await rm6(directory, { recursive: true, force: true });
+      if (created) await rm5(directory, { recursive: true, force: true });
       throw error;
     }
   });
 }
 async function leaveForum(forumAlias, identityId, paths = createAgentForumPaths(), now = /* @__PURE__ */ new Date()) {
   return withForumWrite(forumAlias, identityId, paths, "identity leave", async (registration, identity) => {
-    const profilePath = resolve11(registration.path, "members", identity.memberId, "profile.json");
+    const profilePath = resolve9(registration.path, "members", identity.memberId, "profile.json");
     const previous = await readFile6(profilePath, "utf8");
     const profile = await readJsonDocument(profilePath, "member-profile");
     const next = { ...profile, status: "left", updatedAt: currentUtcTimestamp(now) };
@@ -11371,24 +10825,15 @@ async function leaveForum(forumAlias, identityId, paths = createAgentForumPaths(
   });
 }
 
-// src/services/forum-sync.ts
-init_local_config();
-init_runner();
-init_lock();
-init_paths();
-init_errors2();
-init_room();
-
 // src/services/semantic-validation.ts
-init_runner();
 init_room();
 
 // src/services/thread.ts
 init_ids();
 init_message_types();
 init_state_transitions();
-import { readFile as readFile7, readdir as readdir6, rm as rm7 } from "node:fs/promises";
-import { basename as basename2, resolve as resolve12 } from "node:path";
+import { readFile as readFile7, readdir as readdir5, rm as rm6 } from "node:fs/promises";
+import { basename as basename2, resolve as resolve10 } from "node:path";
 
 // src/domain/thread-kinds.ts
 var knownThreadKinds = [
@@ -11419,7 +10864,7 @@ function structuralWarning(code, path2, message) {
   return { code, path: path2, message };
 }
 async function readThreadEvents(registration, roomId, threadId) {
-  const directory = resolve12(
+  const directory = resolve10(
     registration.path,
     "rooms",
     roomId,
@@ -11429,7 +10874,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   );
   let entries;
   try {
-    entries = await readdir6(directory, { withFileTypes: true });
+    entries = await readdir5(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { events: [], warnings: [] };
@@ -11439,12 +10884,12 @@ async function readThreadEvents(registration, roomId, threadId) {
   const events = [];
   const warnings = [];
   for (const entry of entries) {
-    const eventPath = resolve12(directory, entry.name, "event.json");
+    const eventPath = resolve10(directory, entry.name, "event.json");
     if (!entry.isDirectory() || !isEntityId(entry.name, "event")) {
       warnings.push(
         structuralWarning(
           "INVALID_EVENT_PATH",
-          resolve12(directory, entry.name),
+          resolve10(directory, entry.name),
           "thread event path is not a valid event ID directory"
         )
       );
@@ -11470,7 +10915,7 @@ async function readThreadEvents(registration, roomId, threadId) {
   return { events, warnings };
 }
 async function readMessageDirectory(directory, threadId) {
-  const metadataPath = resolve12(directory, "message.json");
+  const metadataPath = resolve10(directory, "message.json");
   if (!isEntityId(basename2(directory), "message")) {
     return {
       warnings: [
@@ -11497,11 +10942,11 @@ async function readMessageDirectory(directory, threadId) {
         `message threadId does not match its parent thread: ${metadataPath}`
       );
     }
-    const body = await readFile7(resolve12(directory, "body.md"), "utf8");
+    const body = await readFile7(resolve10(directory, "body.md"), "utf8");
     if (body.trim().length === 0 || body.includes("\0")) {
       throw new StorageError(
         "INVALID_MESSAGE_BODY",
-        `message body is empty or contains NUL: ${resolve12(directory, "body.md")}`
+        `message body is empty or contains NUL: ${resolve10(directory, "body.md")}`
       );
     }
     const message = {
@@ -11518,6 +10963,7 @@ async function readMessageDirectory(directory, threadId) {
           value: String(reference.value)
         })
       ),
+      ...metadata.audience === "broadcast" ? { audience: "broadcast" } : {},
       body
     };
     return {
@@ -11535,7 +10981,7 @@ async function readMessageDirectory(directory, threadId) {
   }
 }
 async function readThreadMessages(registration, roomId, threadId) {
-  const directory = resolve12(
+  const directory = resolve10(
     registration.path,
     "rooms",
     roomId,
@@ -11545,7 +10991,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   );
   let entries;
   try {
-    entries = await readdir6(directory, { withFileTypes: true });
+    entries = await readdir5(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return { messages: [], warnings: [] };
@@ -11555,7 +11001,7 @@ async function readThreadMessages(registration, roomId, threadId) {
   const messages = [];
   const warnings = [];
   for (const entry of entries) {
-    const path2 = resolve12(directory, entry.name);
+    const path2 = resolve10(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -11577,14 +11023,14 @@ async function readThreadMessages(registration, roomId, threadId) {
   return { messages, warnings };
 }
 async function readThreadDirectory(registration, roomId, threadDirectoryName) {
-  const directory = resolve12(
+  const directory = resolve10(
     registration.path,
     "rooms",
     roomId,
     "threads",
     threadDirectoryName
   );
-  const threadPath = resolve12(directory, "thread.json");
+  const threadPath = resolve10(directory, "thread.json");
   if (!isEntityId(threadDirectoryName, "thread")) {
     return {
       messages: [],
@@ -11632,7 +11078,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "MESSAGE_SELF_REPLY",
-          resolve12(directory, "messages", message.id, "message.json"),
+          resolve10(directory, "messages", message.id, "message.json"),
           "message replyTo cannot reference itself"
         )
       );
@@ -11640,7 +11086,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "REPLY_TARGET_MISSING",
-          resolve12(directory, "messages", message.id, "message.json"),
+          resolve10(directory, "messages", message.id, "message.json"),
           `reply target is missing or damaged: ${message.replyTo}`
         )
       );
@@ -11662,7 +11108,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_TYPE_MISMATCH",
-          resolve12(directory, "messages", firstMessage.id, "message.json"),
+          resolve10(directory, "messages", firstMessage.id, "message.json"),
           "first message type does not match thread kind"
         )
       );
@@ -11671,7 +11117,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_AUTHOR_MISMATCH",
-          resolve12(directory, "messages", firstMessage.id, "message.json"),
+          resolve10(directory, "messages", firstMessage.id, "message.json"),
           "first message author does not match thread creator"
         )
       );
@@ -11680,7 +11126,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
       warnings.push(
         structuralWarning(
           "FIRST_MESSAGE_REPLY_INVALID",
-          resolve12(directory, "messages", firstMessage.id, "message.json"),
+          resolve10(directory, "messages", firstMessage.id, "message.json"),
           "first message replyTo must be null"
         )
       );
@@ -11703,7 +11149,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
   );
   warnings.push(...eventResult.warnings);
   for (const event of eventResult.events) {
-    const eventPath = resolve12(
+    const eventPath = resolve10(
       directory,
       "events",
       String(event.id),
@@ -11753,7 +11199,7 @@ async function readThreadDirectory(registration, roomId, threadDirectoryName) {
 async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const roomResult = await showRoom(forumAlias, room, paths);
   const { registration } = await openForum(forumAlias, paths);
-  const directory = resolve12(
+  const directory = resolve10(
     registration.path,
     "rooms",
     roomResult.room.id,
@@ -11761,7 +11207,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   );
   let entries;
   try {
-    entries = await readdir6(directory, { withFileTypes: true });
+    entries = await readdir5(directory, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       return {
@@ -11775,7 +11221,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
   const threads = [];
   const warnings = [...roomResult.warnings];
   for (const entry of entries) {
-    const path2 = resolve12(directory, entry.name);
+    const path2 = resolve10(directory, entry.name);
     if (!entry.isDirectory()) {
       warnings.push(
         structuralWarning(
@@ -11873,9 +11319,10 @@ async function createThread(input, paths = createAgentForumPaths()) {
         createdAt: timestamp,
         replyTo: null,
         mentions: [],
-        references: []
+        references: [],
+        ...input.broadcast ? { audience: "broadcast" } : {}
       };
-      const threadDirectory = resolve12(
+      const threadDirectory = resolve10(
         registration.path,
         "rooms",
         roomResult.room.id,
@@ -11886,12 +11333,12 @@ async function createThread(input, paths = createAgentForumPaths()) {
       try {
         await createImmutableDirectory(threadDirectory, async (temporary) => {
           await writeValidatedJsonAtomic(
-            resolve12(temporary, "thread.json"),
+            resolve10(temporary, "thread.json"),
             "thread",
             thread
           );
           await createImmutableMessage(
-            resolve12(temporary, "messages", messageId),
+            resolve10(temporary, "messages", messageId),
             metadata,
             input.body
           );
@@ -11924,6 +11371,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
             replyTo: null,
             mentions: [],
             references: [],
+            ...input.broadcast ? { audience: "broadcast" } : {},
             body: input.body
           },
           commit
@@ -11931,7 +11379,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", threadDirectory]);
         if (directoryCreated) {
-          await rm7(threadDirectory, { recursive: true, force: true });
+          await rm6(threadDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -12005,9 +11453,10 @@ async function createPost(input, paths = createAgentForumPaths()) {
         createdAt: timestamp,
         replyTo,
         mentions: input.mentions ?? [],
-        references: input.references ?? []
+        references: input.references ?? [],
+        ...input.broadcast ? { audience: "broadcast" } : {}
       };
-      const messageDirectory = resolve12(
+      const messageDirectory = resolve10(
         registration.path,
         "rooms",
         detail.room.id,
@@ -12038,6 +11487,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
           replyTo,
           mentions: [...input.mentions ?? []],
           references: [...input.references ?? []],
+          ...input.broadcast ? { audience: "broadcast" } : {},
           body: input.body
         };
         return {
@@ -12052,7 +11502,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", messageDirectory]);
         if (messageCreated) {
-          await rm7(messageDirectory, { recursive: true, force: true });
+          await rm6(messageDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -12107,7 +11557,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
         },
         event
       );
-      const eventDirectory = resolve12(
+      const eventDirectory = resolve10(
         registration.path,
         "rooms",
         detail.room.id,
@@ -12138,7 +11588,7 @@ async function createThreadEvent(input, paths = createAgentForumPaths()) {
       } catch (error) {
         runGit(registration.path, ["reset", "--", eventDirectory]);
         if (eventCreated) {
-          await rm7(eventDirectory, { recursive: true, force: true });
+          await rm6(eventDirectory, { recursive: true, force: true });
         }
         throw error;
       }
@@ -12163,9 +11613,9 @@ function isImmutableProtocolPath(path2) {
   if (/^rooms\/[^/]+\/threads\/[^/]+\/messages\/[^/]+\/(?:message\.json|body\.md)$/u.test(normalized)) return true;
   return false;
 }
-function modifiedImmutablePaths(repository, from, to) {
+function modifiedImmutablePaths(repository2, from, to) {
   if (from === to) return [];
-  const result = runGit(repository, [
+  const result = runGit(repository2, [
     "log",
     "--format=",
     "--name-only",
@@ -12238,13 +11688,13 @@ function eventCategory(type) {
   if (type.endsWith("-archived") || type.endsWith("-restored") || type.endsWith("-closed") || type.endsWith("-reopened")) return "status";
   return void 0;
 }
-function addedEvents(repository, from, to) {
+function addedEvents(repository2, from, to) {
   if (from === to) return [];
-  const diff = runGit(repository, ["diff", "--name-only", "--diff-filter=A", `${from}..${to}`]);
+  const diff = runGit(repository2, ["diff", "--name-only", "--diff-filter=A", `${from}..${to}`]);
   if (diff.status !== 0) return [];
   const events = [];
   for (const path2 of lines(diff.stdout).filter((item) => item.endsWith("/event.json"))) {
-    const shown = runGit(repository, ["show", `${to}:${path2}`]);
+    const shown = runGit(repository2, ["show", `${to}:${path2}`]);
     if (shown.status !== 0) continue;
     try {
       const event = JSON.parse(shown.stdout);
@@ -12257,10 +11707,10 @@ function addedEvents(repository, from, to) {
   }
   return events;
 }
-function concurrentEventIssues(repository, originalRemoteHead, remoteHead, localHead) {
+function concurrentEventIssues(repository2, originalRemoteHead, remoteHead, localHead) {
   if (!originalRemoteHead) return [];
-  const remoteEvents = addedEvents(repository, originalRemoteHead, remoteHead);
-  const localEvents = addedEvents(repository, remoteHead, localHead);
+  const remoteEvents = addedEvents(repository2, originalRemoteHead, remoteHead);
+  const localEvents = addedEvents(repository2, remoteHead, localHead);
   const issues = [];
   for (const local of localEvents) {
     const remote = remoteEvents.find(
@@ -12324,14 +11774,14 @@ function classifyTransportFailure(operation, result) {
     `${operation} failed: ${text || "Git returned a non-zero status"}`
   );
 }
-function conflictPaths(repository) {
-  return runGit(repository, ["diff", "--name-only", "--diff-filter=U"]).stdout.split(/\r?\n/u).filter(Boolean);
+function conflictPaths(repository2) {
+  return runGit(repository2, ["diff", "--name-only", "--diff-filter=U"]).stdout.split(/\r?\n/u).filter(Boolean);
 }
-async function validateRebasedForum(forumAlias, repository, originalHead, paths) {
+async function validateRebasedForum(forumAlias, repository2, originalHead, paths) {
   try {
     await openForum(forumAlias, paths, { requireClean: true });
   } catch (error) {
-    runGit(repository, ["reset", "--hard", originalHead]);
+    runGit(repository2, ["reset", "--hard", originalHead]);
     throw new ServiceError(
       "SYNC_PROTOCOL_FAILED",
       "rebased forum failed protocol validation; the original local HEAD was restored",
@@ -12339,21 +11789,21 @@ async function validateRebasedForum(forumAlias, repository, originalHead, paths)
     );
   }
 }
-function fetchRemoteHead(repository, branch) {
-  const fetch2 = runGit(repository, ["fetch", "--no-tags", "origin", `refs/heads/${branch}`]);
+function fetchRemoteHead(repository2, branch) {
+  const fetch2 = runGit(repository2, ["fetch", "--no-tags", "origin", `refs/heads/${branch}`]);
   if (fetch2.status !== 0) throw classifyTransportFailure("fetch", fetch2);
-  return requireGit(repository, ["rev-parse", "FETCH_HEAD"]).stdout.trim();
+  return requireGit(repository2, ["rev-parse", "FETCH_HEAD"]).stdout.trim();
 }
-async function fetchAndRebase(forumAlias, forumId, repository, branch, originalHead, originalRemoteHead, paths, fetchedRemoteHead) {
-  const remoteHead = fetchedRemoteHead ?? fetchRemoteHead(repository, branch);
-  const localHead = requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
-  const rebase = runGit(repository, ["rebase", remoteHead]);
+async function fetchAndRebase(forumAlias, forumId, repository2, branch, originalHead, originalRemoteHead, paths, fetchedRemoteHead) {
+  const remoteHead = fetchedRemoteHead ?? fetchRemoteHead(repository2, branch);
+  const localHead = requireGit(repository2, ["rev-parse", "HEAD"]).stdout.trim();
+  const rebase = runGit(repository2, ["rebase", remoteHead]);
   if (rebase.status !== 0) {
-    const conflicts = conflictPaths(repository);
-    runGit(repository, ["rebase", "--abort"]);
+    const conflicts = conflictPaths(repository2);
+    runGit(repository2, ["rebase", "--abort"]);
     if (conflicts.length > 0) {
       const journal = await recordSyncConflict({
-        repository,
+        repository: repository2,
         forumId,
         forumAlias,
         branch,
@@ -12383,14 +11833,14 @@ async function fetchAndRebase(forumAlias, forumId, repository, branch, originalH
   }
   await validateRebasedForum(
     forumAlias,
-    repository,
+    repository2,
     originalHead,
     paths
   );
-  const rebasedHead = requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
+  const rebasedHead = requireGit(repository2, ["rev-parse", "HEAD"]).stdout.trim();
   const validation = await validateSynchronizedForum({
     forumAlias,
-    repository,
+    repository: repository2,
     originalRemoteHead,
     remoteHead,
     localHead: rebasedHead,
@@ -12399,7 +11849,7 @@ async function fetchAndRebase(forumAlias, forumId, repository, branch, originalH
   const issues = validation.immutableIssues.length > 0 ? validation.immutableIssues : validation.semanticIssues;
   if (issues.length > 0) {
     const journal = await recordSyncConflict({
-      repository,
+      repository: repository2,
       forumId,
       forumAlias,
       branch,
@@ -12409,7 +11859,7 @@ async function fetchAndRebase(forumAlias, forumId, repository, branch, originalH
       conflicts: issues.map((issue) => issue.path ?? issue.targetId ?? issue.code),
       paths
     });
-    runGit(repository, ["reset", "--hard", originalHead]);
+    runGit(repository2, ["reset", "--hard", originalHead]);
     throw new ServiceError(
       validation.immutableIssues.length > 0 ? "IMMUTABLE_HISTORY_MODIFIED" : "SEMANTIC_CONFLICT",
       validation.immutableIssues.length > 0 ? "sync detected modified or deleted immutable protocol history" : "sync detected a protocol semantic conflict",
@@ -12418,8 +11868,8 @@ async function fetchAndRebase(forumAlias, forumId, repository, branch, originalH
   }
   return remoteHead;
 }
-function countAhead(repository, base) {
-  const result = requireGit(repository, [
+function countAhead(repository2, base) {
+  const result = requireGit(repository2, [
     "rev-list",
     "--count",
     `${base}..HEAD`
@@ -12571,6 +12021,1946 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
   }
 }
 
+// src/services/identity-attention.ts
+init_local_config();
+init_timestamps();
+init_validator();
+init_atomic();
+init_errors();
+init_lock();
+init_paths();
+init_room();
+init_errors2();
+import { readFile as readFile8 } from "node:fs/promises";
+import { resolve as resolve11 } from "node:path";
+function attentionPath(paths, forumId, ownerMemberId) {
+  return resolve11(forumStatePath(paths, forumId), "attention", `${ownerMemberId}.json`);
+}
+function isActiveLink(link2, now) {
+  return link2.expiresAt === void 0 || new Date(link2.expiresAt).valueOf() > now.valueOf();
+}
+async function loadState(forumId, ownerMemberId, paths) {
+  const path2 = attentionPath(paths, forumId, ownerMemberId);
+  try {
+    const value = JSON.parse(await readFile8(path2, "utf8"));
+    const validation = validateProtocolDocument("identity-attention", value);
+    if (!validation.ok || value.forumId !== forumId || value.ownerMemberId !== ownerMemberId) {
+      throw new StorageError("SCHEMA_VALIDATION_FAILED", `identity attention state is invalid: ${path2}`);
+    }
+    const state2 = value;
+    if (new Set(state2.links.map((link2) => link2.subjectMemberId)).size !== state2.links.length) {
+      throw new StorageError("SCHEMA_VALIDATION_FAILED", `identity attention state has duplicate subjects: ${path2}`);
+    }
+    return state2;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return {
+        schemaVersion: "1.0",
+        forumId,
+        ownerMemberId,
+        links: [],
+        updatedAt: currentUtcTimestamp()
+      };
+    }
+    throw error;
+  }
+}
+async function resolveOwner(forumAlias, ownerMemberId, paths) {
+  const config = await loadLocalConfig(paths);
+  const forum = findForum(config, forumAlias);
+  return {
+    forumId: forum.forumId,
+    forumPath: forum.path,
+    owner: findIdentity(config, ownerMemberId)
+  };
+}
+async function recoverIdentity(input, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const forum = findForum(config, input.forumAlias);
+  const profile = await readJsonDocument(
+    resolve11(forum.path, "members", input.memberId, "profile.json"),
+    "member-profile"
+  );
+  if (profile.memberId !== input.memberId) {
+    throw new ServiceError("IDENTITY_RECOVERY_FAILED", "remote profile memberId does not match requested memberId");
+  }
+  const existing = config.identities.find((identity) => identity.memberId === input.memberId);
+  if (existing) {
+    if (input.setDefault && config.defaultIdentityId !== existing.memberId) {
+      const { updateLocalIdentity: updateLocalIdentity2 } = await Promise.resolve().then(() => (init_local_config(), local_config_exports));
+      const result2 = await updateLocalIdentity2({ memberId: existing.memberId, setDefault: true }, paths);
+      return { action: "unchanged", identity: result2.identity, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
+    }
+    return { action: "unchanged", identity: existing, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
+  }
+  const result = await createLocalIdentity({
+    memberId: input.memberId,
+    displayName: String(profile.displayName),
+    role: String(profile.role),
+    responsibility: String(profile.responsibility),
+    ...typeof profile.client === "string" ? { client: profile.client } : {},
+    setDefault: input.setDefault ?? true
+  }, paths);
+  return { action: "recovered", identity: result.identity, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
+}
+async function listIdentityAttention(input, paths = createAgentForumPaths()) {
+  const { forumId, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
+  const state2 = await loadState(forumId, owner.memberId, paths);
+  const now = /* @__PURE__ */ new Date();
+  const links = state2.links.map((link2) => ({ ...link2, active: isActiveLink(link2, now) })).filter((link2) => input.includeExpired || link2.active);
+  return { ownerMemberId: owner.memberId, links };
+}
+async function addIdentityAttention(input, paths = createAgentForumPaths()) {
+  if (input.mode === "delegation" && !input.expiresAt) {
+    throw new ServiceError("ATTENTION_EXPIRY_REQUIRED", "delegation attention requires --until UTC timestamp");
+  }
+  if (input.expiresAt && !isCanonicalUtcTimestamp(input.expiresAt)) {
+    throw new ServiceError("ATTENTION_EXPIRY_INVALID", "attention expiry must use canonical UTC milliseconds timestamp");
+  }
+  if (input.expiresAt && new Date(input.expiresAt).valueOf() <= Date.now()) {
+    throw new ServiceError("ATTENTION_EXPIRY_INVALID", "attention expiry must be in the future");
+  }
+  const { forumId, forumPath, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
+  if (owner.memberId === input.subjectMemberId) {
+    throw new ServiceError("ATTENTION_SELF_REFERENCE", "identity attention subject must differ from owner");
+  }
+  const profile = await readJsonDocument(
+    resolve11(forumPath, "members", input.subjectMemberId, "profile.json"),
+    "member-profile"
+  );
+  if (profile.memberId !== input.subjectMemberId) {
+    throw new ServiceError("ATTENTION_SUBJECT_NOT_FOUND", "attention subject profile does not match requested memberId");
+  }
+  const lock = await acquireForumLock({
+    lockPath: resolve11(paths.locksDirectory, `attention-${forumId}-${owner.memberId}.lock`),
+    command: "identity attention add"
+  });
+  try {
+    const state2 = await loadState(forumId, owner.memberId, paths);
+    const timestamp = currentUtcTimestamp();
+    const link2 = {
+      subjectMemberId: input.subjectMemberId,
+      mode: input.mode,
+      reason: input.reason,
+      createdAt: state2.links.find((item) => item.subjectMemberId === input.subjectMemberId)?.createdAt ?? timestamp,
+      ...input.expiresAt ? { expiresAt: input.expiresAt } : {}
+    };
+    const existing = state2.links.find((item) => item.subjectMemberId === input.subjectMemberId);
+    const links = existing ? state2.links.map((item) => item.subjectMemberId === input.subjectMemberId ? link2 : item) : [...state2.links, link2];
+    await writeValidatedJsonAtomic(attentionPath(paths, forumId, owner.memberId), "identity-attention", {
+      ...state2,
+      links,
+      updatedAt: timestamp
+    }, { overwrite: true, mode: 384 });
+    return { action: existing ? "updated" : "added", ownerMemberId: owner.memberId, link: link2 };
+  } finally {
+    await lock.release();
+  }
+}
+async function removeIdentityAttention(input, paths = createAgentForumPaths()) {
+  const { forumId, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
+  const lock = await acquireForumLock({
+    lockPath: resolve11(paths.locksDirectory, `attention-${forumId}-${owner.memberId}.lock`),
+    command: "identity attention remove"
+  });
+  try {
+    const state2 = await loadState(forumId, owner.memberId, paths);
+    const links = state2.links.filter((link2) => link2.subjectMemberId !== input.subjectMemberId);
+    const removed = links.length !== state2.links.length;
+    if (removed) {
+      await writeValidatedJsonAtomic(attentionPath(paths, forumId, owner.memberId), "identity-attention", {
+        ...state2,
+        links,
+        updatedAt: currentUtcTimestamp()
+      }, { overwrite: true, mode: 384 });
+    }
+    return { removed, ownerMemberId: owner.memberId };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/thread-watch.ts
+init_local_config();
+init_timestamps();
+init_validator();
+init_atomic();
+init_errors();
+init_lock();
+init_paths();
+import { readFile as readFile9 } from "node:fs/promises";
+import { resolve as resolve12 } from "node:path";
+function path(paths, forumId, memberId) {
+  return resolve12(forumStatePath(paths, forumId), "watches", `${memberId}.json`);
+}
+async function state(paths, forumId, memberId) {
+  try {
+    const value = JSON.parse(await readFile9(path(paths, forumId, memberId), "utf8"));
+    const valid = validateProtocolDocument("thread-watch", value);
+    if (!valid.ok || value.forumId !== forumId || value.memberId !== memberId) throw new StorageError("SCHEMA_VALIDATION_FAILED", "thread watch state is invalid");
+    return value;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { schemaVersion: "1.0", forumId, memberId, threadIds: [], updatedAt: currentUtcTimestamp() };
+    throw error;
+  }
+}
+async function target(forumAlias, identityId, paths) {
+  const config = await loadLocalConfig(paths);
+  const forum = findForum(config, forumAlias);
+  const identity = findIdentity(config, identityId);
+  return { forumId: forum.forumId, memberId: identity.memberId };
+}
+async function listWatchedThreadIds(input, paths = createAgentForumPaths()) {
+  const item = await target(input.forumAlias, input.identityId, paths);
+  return { ...item, threadIds: (await state(paths, item.forumId, item.memberId)).threadIds };
+}
+async function setThreadWatch(input, paths = createAgentForumPaths()) {
+  const item = await target(input.forumAlias, input.identityId, paths);
+  const lock = await acquireForumLock({ lockPath: resolve12(paths.locksDirectory, `watch-${item.forumId}-${item.memberId}.lock`), command: input.watch ? "thread watch" : "thread unwatch" });
+  try {
+    const existing = await state(paths, item.forumId, item.memberId);
+    const contains = existing.threadIds.includes(input.threadId);
+    const threadIds = input.watch ? contains ? existing.threadIds : [...existing.threadIds, input.threadId] : existing.threadIds.filter((id) => id !== input.threadId);
+    if (contains === input.watch) return { changed: false, ...item, threadIds };
+    await writeValidatedJsonAtomic(path(paths, item.forumId, item.memberId), "thread-watch", { ...existing, threadIds, updatedAt: currentUtcTimestamp() }, { overwrite: true, mode: 384 });
+    return { changed: true, ...item, threadIds };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/timeline-cache.ts
+init_local_config();
+init_runner();
+init_atomic();
+init_lock();
+init_paths();
+import { readFile as readFile10, readdir as readdir6 } from "node:fs/promises";
+import { relative, resolve as resolve13 } from "node:path";
+init_room();
+function cachePath(paths, forumId) {
+  return resolve13(forumStatePath(paths, forumId), "cache", "snapshot.json");
+}
+function sanitizeWarnings(repository2, warnings) {
+  return warnings.map((warning) => {
+    const local = relative(repository2, warning.path).replaceAll("\\", "/");
+    return {
+      ...warning,
+      path: local && !local.startsWith("..") ? local : "<outside-forum>"
+    };
+  });
+}
+async function readEventDirectory(directory) {
+  let names;
+  try {
+    names = await readdir6(directory);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
+    throw error;
+  }
+  const events = [];
+  for (const name of names) {
+    try {
+      const event = await readJsonDocument(resolve13(directory, name, "event.json"), "event");
+      events.push({
+        id: String(event.id),
+        kind: "event",
+        type: String(event.type),
+        actorId: String(event.actorId),
+        createdAt: String(event.createdAt),
+        reason: String(event.reason),
+        data: event.data
+      });
+    } catch {
+    }
+  }
+  return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}
+async function readRoomMembers(repository2, roomId) {
+  const members = {};
+  const directory = resolve13(repository2, "rooms", roomId, "members");
+  let names = [];
+  try {
+    names = await readdir6(directory);
+  } catch {
+    return members;
+  }
+  for (const name of names) {
+    try {
+      const membership = await readJsonDocument(resolve13(directory, name, "membership.json"), "room-member");
+      members[name] = {
+        role: String(membership.role),
+        responsibility: String(membership.responsibility),
+        status: String(membership.status)
+      };
+    } catch {
+    }
+  }
+  return members;
+}
+async function buildRoom(forumAlias, repository2, room, head, paths) {
+  const threads = await listThreads(forumAlias, room.id, paths);
+  const cachedThreads = [];
+  const warnings = [...threads.warnings];
+  for (const thread of threads.threads) {
+    const detail = await showThread(forumAlias, room.id, thread.id, paths);
+    warnings.push(...detail.warnings);
+    const events = await readEventDirectory(
+      resolve13(repository2, "rooms", room.id, "threads", thread.id, "events")
+    );
+    const timeline = [
+      ...detail.messages.map((message) => ({ ...message, kind: "message" })),
+      ...events
+    ].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    cachedThreads.push({ thread: detail.thread, timeline });
+  }
+  cachedThreads.sort(
+    (a, b) => b.thread.lastActivityAt.localeCompare(a.thread.lastActivityAt) || a.thread.id.localeCompare(b.thread.id)
+  );
+  return {
+    cached: {
+      room,
+      sourceHead: head,
+      members: await readRoomMembers(repository2, room.id),
+      events: await readEventDirectory(resolve13(repository2, "rooms", room.id, "events")),
+      threads: cachedThreads
+    },
+    warnings
+  };
+}
+async function readMembers(repository2) {
+  const members = {};
+  const directory = resolve13(repository2, "members");
+  let names = [];
+  try {
+    names = await readdir6(directory);
+  } catch {
+    return members;
+  }
+  for (const name of names) {
+    try {
+      const profile = await readJsonDocument(resolve13(directory, name, "profile.json"), "member-profile");
+      members[name] = {
+        displayName: String(profile.displayName),
+        role: String(profile.role),
+        responsibility: String(profile.responsibility),
+        status: String(profile.status)
+      };
+    } catch {
+    }
+  }
+  return members;
+}
+async function loadCache(path2) {
+  try {
+    const value = JSON.parse(await readFile10(path2, "utf8"));
+    const compatible = value.formatVersion === 1 && typeof value.sourceHead === "string" && Array.isArray(value.rooms) && value.rooms.every((room) => room && typeof room === "object" && "members" in room) && value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
+    return compatible ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function affectedRooms(repository2, oldHead, newHead) {
+  const diff = runGit(repository2, ["diff", "--name-only", `${oldHead}..${newHead}`]);
+  if (diff.status !== 0) return void 0;
+  const ids = /* @__PURE__ */ new Set();
+  for (const path2 of diff.stdout.split(/\r?\n/u)) {
+    const match = /^rooms\/([^/]+)\//u.exec(path2.replaceAll("\\", "/"));
+    if (match?.[1]) ids.add(match[1]);
+  }
+  return ids;
+}
+async function getForumSnapshot(forumAlias, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const head = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
+  const path2 = cachePath(paths, registration.forumId);
+  const existing = await loadCache(path2);
+  if (existing?.sourceHead === head) return { snapshot: existing, cache: "hit" };
+  const lock = await acquireForumLock({
+    lockPath: resolve13(paths.locksDirectory, `${registration.forumId}-cache.lock`),
+    command: "cache rebuild"
+  });
+  try {
+    const latest = await loadCache(path2);
+    if (latest?.sourceHead === head) return { snapshot: latest, cache: "hit" };
+    const affected = latest ? affectedRooms(registration.path, latest.sourceHead, head) : void 0;
+    const [forum, rooms] = await Promise.all([
+      showForum(forumAlias, paths),
+      listRooms(forumAlias, paths)
+    ]);
+    const oldRooms = new Map((latest?.rooms ?? []).map((room) => [room.room.id, room]));
+    const cachedRooms = [];
+    const warnings = [...forum.warnings, ...rooms.warnings];
+    for (const room of rooms.rooms) {
+      const preserved = affected && !affected.has(room.id) ? oldRooms.get(room.id) : void 0;
+      if (preserved) cachedRooms.push(preserved);
+      else {
+        const built = await buildRoom(forumAlias, registration.path, room, head, paths);
+        cachedRooms.push(built.cached);
+        warnings.push(...built.warnings);
+      }
+    }
+    cachedRooms.sort((a, b) => a.room.slug.localeCompare(b.room.slug));
+    const snapshot = {
+      formatVersion: 1,
+      forumAlias,
+      forumId: registration.forumId,
+      sourceHead: head,
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      forum: forum.forum,
+      members: await readMembers(registration.path),
+      rooms: cachedRooms,
+      warnings: sanitizeWarnings(registration.path, warnings)
+    };
+    await writeJsonAtomic(path2, snapshot, { overwrite: true, mode: 384 });
+    return { snapshot, cache: latest && affected ? "incremental" : "rebuilt" };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/inbox.ts
+init_room();
+function cursorPath(paths, forumId, memberId) {
+  return resolve14(forumStatePath(paths, forumId), "cursors", `${memberId}.json`);
+}
+async function loadCursor(paths, forumId, memberId) {
+  const path2 = cursorPath(paths, forumId, memberId);
+  try {
+    const value = JSON.parse(await readFile11(path2, "utf8"));
+    const validation = validateProtocolDocument("inbox-cursor", value);
+    if (!validation.ok || value.forumId !== forumId || value.memberId !== memberId) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `inbox cursor is invalid: ${path2}`,
+        validation.ok ? void 0 : validation.issues
+      );
+    }
+    return value;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return {
+        formatVersion: 1,
+        forumId,
+        memberId,
+        seenIds: [],
+        updatedAt: currentUtcTimestamp()
+      };
+    }
+    if (error instanceof StorageError) throw error;
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `inbox cursor contains invalid JSON: ${path2}`
+    );
+  }
+}
+async function readEvents(directory, roomId, roomSlug, threadId, actorId, activeSince) {
+  let names;
+  try {
+    names = await readdir7(directory);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return { entries: [], warnings: [] };
+    }
+    throw error;
+  }
+  const entries = [];
+  const warnings = [];
+  for (const name of names) {
+    const path2 = resolve14(directory, name, "event.json");
+    try {
+      const event = await readJsonDocument(path2, "event");
+      if (String(event.createdAt) >= activeSince) {
+        entries.push({
+          id: String(event.id),
+          kind: "event",
+          roomId,
+          roomSlug,
+          threadId,
+          type: String(event.type),
+          actorId: String(event.actorId),
+          createdAt: String(event.createdAt),
+          summary: String(event.reason),
+          replyTo: null,
+          mentions: [],
+          relevance: "discovery",
+          reasons: [],
+          summaryTruncated: false
+        });
+      }
+    } catch (error) {
+      warnings.push(protocolWarning(path2, error));
+    }
+  }
+  return { entries, warnings };
+}
+async function collectRelevantEntries(forumAlias, memberId, paths) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const rooms = await listRooms(forumAlias, paths);
+  const entries = [];
+  const warnings = [...rooms.warnings];
+  for (const room of rooms.rooms) {
+    const membershipPath = resolve14(
+      registration.path,
+      "rooms",
+      room.id,
+      "members",
+      `${memberId}.json`
+    );
+    let membership;
+    try {
+      membership = await readJsonDocument(membershipPath, "room-member");
+    } catch (error) {
+      if (error instanceof StorageError && typeof error.details === "string" && error.details.includes("ENOENT")) continue;
+      warnings.push(protocolWarning(membershipPath, error));
+      continue;
+    }
+    if (membership.status !== "active") continue;
+    const activeSince = String(membership.updatedAt);
+    const roomEvents = await readEvents(
+      resolve14(registration.path, "rooms", room.id, "events"),
+      room.id,
+      room.slug,
+      null,
+      memberId,
+      activeSince
+    );
+    entries.push(...roomEvents.entries);
+    warnings.push(...roomEvents.warnings);
+    const threads = await listThreads(forumAlias, room.id, paths);
+    warnings.push(...threads.warnings);
+    for (const thread of threads.threads) {
+      const detail = await showThread(forumAlias, room.id, thread.id, paths);
+      warnings.push(...detail.warnings);
+      for (const message of detail.messages) {
+        if (message.createdAt < activeSince) continue;
+        const compact = message.body.replace(/\s+/gu, " ").trim();
+        entries.push({
+          id: message.id,
+          kind: "message",
+          roomId: room.id,
+          roomSlug: room.slug,
+          threadId: thread.id,
+          type: message.type,
+          actorId: message.authorId,
+          createdAt: message.createdAt,
+          summary: compact.length > 500 ? `${compact.slice(0, 497)}...` : compact,
+          replyTo: message.replyTo,
+          mentions: message.mentions,
+          ...message.audience === "broadcast" ? { audience: "broadcast" } : {},
+          relevance: "discovery",
+          reasons: [],
+          summaryTruncated: compact.length > 500
+        });
+      }
+      const threadEvents = await readEvents(
+        resolve14(
+          registration.path,
+          "rooms",
+          room.id,
+          "threads",
+          thread.id,
+          "events"
+        ),
+        room.id,
+        room.slug,
+        thread.id,
+        memberId,
+        activeSince
+      );
+      entries.push(...threadEvents.entries);
+      warnings.push(...threadEvents.warnings);
+    }
+  }
+  const unique = new Map(entries.map((entry) => [entry.id, entry]));
+  return { entries: [...unique.values()], warnings };
+}
+function classifyEntries(entries, attentionIds, watchedIds) {
+  const authorByMessageId = new Map(entries.filter((entry) => entry.kind === "message").map((entry) => [entry.id, entry.actorId]));
+  const priorityTypes = /* @__PURE__ */ new Set(["blocker", "question", "proposal", "decision", "objection", "thread-closed", "thread-reopened"]);
+  return entries.map((entry) => {
+    const reasons = [];
+    if (entry.kind === "message" && entry.mentions.some((id) => attentionIds.has(id))) reasons.push("mention");
+    if (entry.replyTo && attentionIds.has(authorByMessageId.get(entry.replyTo) ?? "")) reasons.push("reply-to-attention");
+    if (reasons.length > 0) return { ...entry, relevance: "direct", reasons };
+    if (entry.threadId && watchedIds.has(entry.threadId)) return { ...entry, relevance: "watched", reasons: ["watched-thread"] };
+    if (priorityTypes.has(entry.type)) return { ...entry, relevance: "priority", reasons: ["priority-type"] };
+    return { ...entry, relevance: "discovery", reasons };
+  });
+}
+async function getAllUnreadInboxEntries(input, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const publicProfile2 = await readJsonDocument(
+    resolve14(registration.path, "members", identity.memberId, "profile.json"),
+    "member-profile"
+  );
+  if (publicProfile2.status !== "active") {
+    throw new ServiceError(
+      "FORUM_MEMBERSHIP_REQUIRED",
+      `identity is not an active Forum member: ${identity.memberId}`
+    );
+  }
+  const sync = input.sync ? await syncForum(input.forumAlias, paths) : null;
+  const [collected, cursor, attention, watches] = await Promise.all([
+    collectRelevantEntries(input.forumAlias, identity.memberId, paths),
+    loadCursor(paths, registration.forumId, identity.memberId),
+    listIdentityAttention({ forumAlias: input.forumAlias, ownerMemberId: identity.memberId }, paths),
+    listWatchedThreadIds({ forumAlias: input.forumAlias, identityId: identity.memberId }, paths)
+  ]);
+  const attentionIds = /* @__PURE__ */ new Set([identity.memberId, ...attention.links.filter((link2) => link2.active).map((link2) => link2.subjectMemberId)]);
+  const seen = new Set(cursor.seenIds);
+  return {
+    entries: classifyEntries(collected.entries, attentionIds, new Set(watches.threadIds)).filter((entry) => entry.actorId !== identity.memberId && !seen.has(entry.id)).sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)),
+    warnings: collected.warnings,
+    sync
+  };
+}
+function balancedPage(entries, limit) {
+  const ordered = [...entries].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+  if (limit < 3) return ordered.slice(0, limit);
+  const discoveryQuota = Math.min(Math.max(2, Math.ceil(limit * 0.2)), limit - 1);
+  const discovery = ordered.filter((entry) => entry.relevance === "discovery").slice(0, discoveryQuota);
+  const selected = new Set(discovery.map((entry) => entry.id));
+  return [...ordered.filter((entry) => !selected.has(entry.id)).slice(0, limit - discovery.length), ...discovery].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+}
+async function showInboxEntry(input, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const profile = await readJsonDocument(resolve14(registration.path, "members", identity.memberId, "profile.json"), "member-profile");
+  if (profile.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
+  const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
+  const entry = collected.entries.find((item) => item.id === input.id);
+  if (!entry) throw new ServiceError("MESSAGE_NOT_FOUND", `inbox entry was not found or is outside active Room membership: ${input.id}`);
+  try {
+    const cached = await getForumSnapshot(input.forumAlias, paths);
+    const item = cached.snapshot.rooms.flatMap((room) => [...room.events, ...room.threads.flatMap((thread) => thread.timeline)]).find((candidate) => candidate.id === entry.id);
+    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache };
+    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache };
+  } catch {
+  }
+  if (entry.kind === "message" && entry.threadId) {
+    const detail = await showThread(input.forumAlias, entry.roomId, entry.threadId, paths);
+    const message = detail.messages.find((item) => item.id === entry.id);
+    if (!message) throw new ServiceError("MESSAGE_NOT_FOUND", `message was not found: ${entry.id}`);
+    return { entry, content: { body: message.body }, cache: "fallback" };
+  }
+  const eventPath = entry.threadId ? resolve14(registration.path, "rooms", entry.roomId, "threads", entry.threadId, "events", entry.id, "event.json") : resolve14(registration.path, "rooms", entry.roomId, "events", entry.id, "event.json");
+  const event = await readJsonDocument(eventPath, "event");
+  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback" };
+}
+async function getInbox(input, paths = createAgentForumPaths()) {
+  const limit = input.limit ?? 20;
+  const summaryChars = input.summaryChars ?? 180;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new StorageError("SCHEMA_VALIDATION_FAILED", "inbox limit must be between 1 and 100");
+  }
+  if (!Number.isInteger(summaryChars) || summaryChars < 0 || summaryChars > 500) {
+    throw new StorageError("SCHEMA_VALIDATION_FAILED", "inbox summaryChars must be between 0 and 500");
+  }
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const publicProfile2 = await readJsonDocument(
+    resolve14(registration.path, "members", identity.memberId, "profile.json"),
+    "member-profile"
+  );
+  if (publicProfile2.status !== "active") {
+    throw new ServiceError(
+      "FORUM_MEMBERSHIP_REQUIRED",
+      `identity is not an active Forum member: ${identity.memberId}`
+    );
+  }
+  const syncResult = input.sync ? await syncForum(input.forumAlias, paths) : null;
+  const [collected, cursor, attention, watches] = await Promise.all([
+    collectRelevantEntries(input.forumAlias, identity.memberId, paths),
+    loadCursor(paths, registration.forumId, identity.memberId),
+    listIdentityAttention({ forumAlias: input.forumAlias, ownerMemberId: identity.memberId }, paths),
+    listWatchedThreadIds({ forumAlias: input.forumAlias, identityId: identity.memberId }, paths)
+  ]);
+  const seen = new Set(cursor.seenIds);
+  const attentionIds = /* @__PURE__ */ new Set([identity.memberId, ...attention.links.filter((link2) => link2.active).map((link2) => link2.subjectMemberId)]);
+  const unread = classifyEntries(collected.entries, attentionIds, new Set(watches.threadIds)).filter((entry) => entry.actorId !== identity.memberId && !seen.has(entry.id)).sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+  const page = balancedPage(unread, limit);
+  const idsToMark = input.markAllRead ? unread.map((entry) => entry.id) : input.markRead ? page.map((entry) => entry.id) : [];
+  if (idsToMark.length > 0) {
+    const lock = await acquireForumLock({
+      lockPath: resolve14(
+        paths.locksDirectory,
+        `${registration.forumId}-${identity.memberId}-cursor.lock`
+      ),
+      command: "inbox mark read"
+    });
+    try {
+      const latest = await loadCursor(paths, registration.forumId, identity.memberId);
+      const nextSeen = [.../* @__PURE__ */ new Set([...latest.seenIds, ...idsToMark])];
+      await writeValidatedJsonAtomic(
+        cursorPath(paths, registration.forumId, identity.memberId),
+        "inbox-cursor",
+        {
+          formatVersion: 1,
+          forumId: registration.forumId,
+          memberId: identity.memberId,
+          seenIds: nextSeen,
+          updatedAt: currentUtcTimestamp()
+        },
+        { overwrite: true, mode: 384 }
+      );
+    } finally {
+      await lock.release();
+    }
+  }
+  const relevanceCounts = { direct: 0, watched: 0, priority: 0, discovery: 0 };
+  for (const entry of unread) relevanceCounts[entry.relevance] += 1;
+  const displayed = page.map((entry) => {
+    const truncated = entry.summary.length > summaryChars;
+    return {
+      ...entry,
+      summary: summaryChars === 0 ? "" : truncated ? `${entry.summary.slice(0, Math.max(0, summaryChars - 3))}...` : entry.summary,
+      summaryTruncated: entry.summaryTruncated || truncated
+    };
+  });
+  return {
+    entries: input.markAllRead ? [] : displayed,
+    totalUnread: unread.length,
+    relevanceCounts,
+    hasMore: unread.length > page.length,
+    markedRead: idsToMark.length,
+    warnings: collected.warnings,
+    sync: syncResult
+  };
+}
+
+// src/services/dashboard.ts
+var clientIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+var clientTypes = /* @__PURE__ */ new Set(["pi", "opencode", "codex", "claude-code"]);
+function emptyRuntime() {
+  return { formatVersion: 1, clients: [], pollingForumIds: [], pinnedRoomIds: [], revision: 0, updatedAt: currentUtcTimestamp() };
+}
+function validClient(value) {
+  if (!value || typeof value !== "object") return false;
+  const item = value;
+  return typeof item.clientId === "string" && clientIdPattern.test(item.clientId) && typeof item.clientType === "string" && clientTypes.has(item.clientType) && typeof item.forumAlias === "string" && typeof item.forumId === "string" && typeof item.roomId === "string" && typeof item.identityId === "string" && typeof item.expiresAt === "string" && !Number.isNaN(Date.parse(item.expiresAt));
+}
+async function loadRuntime(paths) {
+  try {
+    const value = JSON.parse(await readFile12(paths.dashboardRuntimeFile, "utf8"));
+    if (value.formatVersion !== 1 || !Array.isArray(value.clients) || !value.clients.every(validClient) || !Array.isArray(value.pollingForumIds) || !value.pollingForumIds.every((id) => typeof id === "string") || !Array.isArray(value.pinnedRoomIds) || !value.pinnedRoomIds.every((id) => typeof id === "string")) {
+      throw new ServiceError("PROTOCOL_DATA_DAMAGED", "Dashboard runtime state is invalid");
+    }
+    return { formatVersion: 1, clients: value.clients, pollingForumIds: value.pollingForumIds, pinnedRoomIds: value.pinnedRoomIds, revision: Number.isSafeInteger(value.revision) && value.revision >= 0 ? value.revision : 0, updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : currentUtcTimestamp() };
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return emptyRuntime();
+    throw error;
+  }
+}
+function active(runtime, now = Date.now()) {
+  return runtime.clients.filter((client) => Date.parse(client.expiresAt) > now);
+}
+async function mutateRuntime(command, paths, mutate) {
+  const lock = await acquireForumLock({ lockPath: resolve15(paths.locksDirectory, "dashboard.lock"), command });
+  try {
+    const runtime = await loadRuntime(paths);
+    const activeClients = active(runtime);
+    if (activeClients.length !== runtime.clients.length) runtime.revision += 1;
+    runtime.clients = activeClients;
+    const result = mutate(runtime);
+    runtime.updatedAt = currentUtcTimestamp();
+    await writeJsonAtomic(paths.dashboardRuntimeFile, runtime, { overwrite: true, mode: 384 });
+    return result;
+  } finally {
+    await lock.release();
+  }
+}
+async function attachDashboardClient(input, paths = createAgentForumPaths()) {
+  if (!clientIdPattern.test(input.clientId) || !clientTypes.has(input.clientType)) throw new ServiceError("PROTOCOL_DATA_DAMAGED", "invalid Dashboard client identity");
+  const leaseMs = input.leaseMs ?? 45e3;
+  if (!Number.isInteger(leaseMs) || leaseMs < 5e3 || leaseMs > 5 * 6e4) throw new ServiceError("PROTOCOL_DATA_DAMAGED", "Dashboard lease must be between 5 seconds and 5 minutes");
+  const config = await loadLocalConfig(paths);
+  const forum = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const client = { clientId: input.clientId, clientType: input.clientType, forumAlias: forum.alias, forumId: forum.forumId, roomId: input.roomId, identityId: identity.memberId, expiresAt: new Date(Date.now() + leaseMs).toISOString() };
+  return mutateRuntime("dashboard attach", paths, (runtime) => {
+    const previous = runtime.clients.find((item) => item.clientId === client.clientId);
+    runtime.clients = [...runtime.clients.filter((item) => item.clientId !== client.clientId), client];
+    if (!previous || previous.clientType !== client.clientType || previous.forumId !== client.forumId || previous.roomId !== client.roomId || previous.identityId !== client.identityId) runtime.revision += 1;
+    return { client, activeClients: runtime.clients.length };
+  });
+}
+async function detachDashboardClient(clientId, paths = createAgentForumPaths()) {
+  return mutateRuntime("dashboard detach", paths, (runtime) => {
+    const before = runtime.clients.length;
+    runtime.clients = runtime.clients.filter((item) => item.clientId !== clientId);
+    if (before !== runtime.clients.length) runtime.revision += 1;
+    return { detached: before !== runtime.clients.length, activeClients: runtime.clients.length };
+  });
+}
+async function dashboardStatus(paths = createAgentForumPaths()) {
+  const runtime = await loadRuntime(paths);
+  const activeClients = active(runtime);
+  if (activeClients.length !== runtime.clients.length) {
+    return mutateRuntime("dashboard status", paths, (current) => ({ clients: current.clients, pollingForumIds: current.pollingForumIds, pinnedRoomIds: current.pinnedRoomIds, revision: current.revision }));
+  }
+  return { clients: activeClients, pollingForumIds: runtime.pollingForumIds, pinnedRoomIds: runtime.pinnedRoomIds, revision: runtime.revision };
+}
+async function invalidateDashboard(paths = createAgentForumPaths()) {
+  await mutateRuntime("dashboard invalidate", paths, (runtime) => {
+    if (runtime.clients.length > 0) runtime.revision += 1;
+  });
+}
+async function setDashboardForumPolling(forumId, enabled, paths = createAgentForumPaths()) {
+  return mutateRuntime("dashboard polling", paths, (runtime) => {
+    runtime.pollingForumIds = enabled ? [.../* @__PURE__ */ new Set([...runtime.pollingForumIds, forumId])] : runtime.pollingForumIds.filter((id) => id !== forumId);
+    runtime.revision += 1;
+    return { forumId, enabled };
+  });
+}
+async function setDashboardRoomPinned(roomId, pinned, paths = createAgentForumPaths()) {
+  return mutateRuntime("dashboard pin", paths, (runtime) => {
+    runtime.pinnedRoomIds = pinned ? [.../* @__PURE__ */ new Set([...runtime.pinnedRoomIds, roomId])] : runtime.pinnedRoomIds.filter((id) => id !== roomId);
+    runtime.revision += 1;
+    return { roomId, pinned };
+  });
+}
+async function getDashboardSnapshot(paths = createAgentForumPaths()) {
+  const runtime = await dashboardStatus(paths);
+  const teams = /* @__PURE__ */ new Map();
+  for (const client of runtime.clients) teams.set(client.forumId, [...teams.get(client.forumId) ?? [], client]);
+  const result = [];
+  for (const [forumId, clients] of teams) {
+    const alias = clients[0].forumAlias;
+    const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
+    const seen = /* @__PURE__ */ new Set();
+    for (const identityId of new Set(clients.map((client) => client.identityId))) {
+      const inbox = await getAllUnreadInboxEntries({ forumAlias: alias, identityId }, paths);
+      for (const entry of inbox.entries) {
+        if (seen.has(entry.id)) continue;
+        seen.add(entry.id);
+        const room = byRoom.get(entry.roomId);
+        if (!room) continue;
+        if (entry.relevance === "direct" || entry.relevance === "watched") room.counts.related += 1;
+        else if (entry.audience === "broadcast") room.counts.broadcast += 1;
+        else if (!entry.threadId || room.threads.get(entry.threadId) === "open") room.counts.other += 1;
+      }
+    }
+    const allRooms = [...byRoom.values()].map(({ status: _status, threads: _threads, ...room }) => room);
+    const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other }), { related: 0, broadcast: 0, other: 0 });
+    const rooms = allRooms.sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.activeLocalAgents - left.activeLocalAgents || right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
+    result.push({ forumId, forumAlias: alias, polling: runtime.pollingForumIds.includes(forumId), counts, rooms });
+  }
+  return { revision: runtime.revision, teams: result.sort((a, b) => a.forumAlias.localeCompare(b.forumAlias)), activeClients: runtime.clients.length };
+}
+
+// src/services/dashboard-installer.ts
+import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import { chmod, mkdir as mkdir3, mkdtemp, open as open2, readFile as readFile13, readdir as readdir8, rename as rename3, rm as rm7, stat as stat3 } from "node:fs/promises";
+init_atomic();
+init_lock();
+init_paths();
+import { basename as basename3, dirname as dirname3, resolve as resolve16, sep as sep2 } from "node:path";
+init_errors2();
+var repository = "wszzs110/agent-forum-skills";
+var sha256Pattern = /^[a-f0-9]{64}$/u;
+var versionPattern = /^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/u;
+var fileNamePattern = /^[A-Za-z0-9._-]+$/u;
+var executablePattern = /^[A-Za-z0-9._/-]+$/u;
+var maximumAssetSize = 512 * 1024 * 1024;
+function defaultManifestUrl(packageVersion = VERSION) {
+  if (packageVersion === "0.0.0-dev") {
+    throw new ServiceError("DASHBOARD_RELEASE_UNAVAILABLE", "development builds require --manifest-url or AGENT_FORUM_DASHBOARD_MANIFEST_URL");
+  }
+  return `https://github.com/${repository}/releases/download/v${packageVersion}/dashboard-manifest.json`;
+}
+function safeExecutable(root, relative3) {
+  if (!executablePattern.test(relative3) || relative3.startsWith("/") || relative3.includes("..") || relative3.includes("\\")) {
+    throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `unsafe Dashboard executable path: ${relative3}`);
+  }
+  const normalizedRoot = resolve16(root);
+  const target2 = resolve16(normalizedRoot, relative3);
+  if (target2 !== normalizedRoot && !target2.startsWith(`${normalizedRoot}${sep2}`)) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard executable escapes its installation directory");
+  return target2;
+}
+function parseManifest(value) {
+  if (!value || typeof value !== "object") throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release manifest must be an object");
+  const manifest = value;
+  const topLevelKeys = Object.keys(manifest).sort();
+  if (topLevelKeys.length !== 3 || topLevelKeys[0] !== "assets" || topLevelKeys[1] !== "formatVersion" || topLevelKeys[2] !== "version") throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release manifest contains missing or unknown fields");
+  if (manifest.formatVersion !== 1 || typeof manifest.version !== "string" || !versionPattern.test(manifest.version) || !Array.isArray(manifest.assets) || manifest.assets.length === 0) {
+    throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release manifest has invalid top-level fields");
+  }
+  const assets = manifest.assets.map((unknownAsset) => {
+    if (!unknownAsset || typeof unknownAsset !== "object") throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release asset must be an object");
+    const asset = unknownAsset;
+    const keys = Object.keys(asset).sort();
+    const expected = ["arch", "archiveFormat", "executable", "executableSha256", "fileName", "platform", "sha256", "size", "url"].sort();
+    if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release asset contains missing or unknown fields");
+    if (asset.platform !== "win32" && asset.platform !== "darwin" && asset.platform !== "linux" || asset.arch !== "x64" && asset.arch !== "arm64" || asset.archiveFormat !== "tar.gz" || typeof asset.fileName !== "string" || !fileNamePattern.test(asset.fileName) || typeof asset.executable !== "string" || typeof asset.executableSha256 !== "string" || !sha256Pattern.test(asset.executableSha256) || typeof asset.sha256 !== "string" || !sha256Pattern.test(asset.sha256) || !Number.isSafeInteger(asset.size) || Number(asset.size) <= 0 || Number(asset.size) > maximumAssetSize || typeof asset.url !== "string") {
+      throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release asset contains invalid fields");
+    }
+    safeExecutable("/dashboard", asset.executable);
+    let url;
+    try {
+      url = new URL(asset.url);
+    } catch {
+      throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release asset URL is invalid");
+    }
+    if (url.protocol !== "https:" || url.username || url.password) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release asset URL must use credential-free HTTPS");
+    return asset;
+  });
+  const targets2 = /* @__PURE__ */ new Set();
+  for (const asset of assets) {
+    const target2 = `${asset.platform}-${asset.arch}`;
+    if (targets2.has(target2)) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `duplicate Dashboard release target: ${target2}`);
+    targets2.add(target2);
+  }
+  return { formatVersion: 1, version: manifest.version, assets };
+}
+async function sha256File(path2) {
+  const hash = createHash("sha256");
+  const handle = await open2(path2, "r");
+  try {
+    for await (const chunk of handle.readableWebStream()) hash.update(chunk);
+  } finally {
+    await handle.close().catch(() => void 0);
+  }
+  return hash.digest("hex");
+}
+async function collectInstalledFiles(root, directory = root) {
+  const files = {};
+  for (const entry of await readdir8(directory, { withFileTypes: true })) {
+    if (directory === root && entry.name === "installation.json") continue;
+    const path2 = resolve16(directory, entry.name);
+    if (entry.isDirectory()) Object.assign(files, await collectInstalledFiles(root, path2));
+    else if (entry.isFile()) files[relativePath(root, path2)] = await sha256File(path2);
+    else throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsupported filesystem entry");
+  }
+  return files;
+}
+function relativePath(root, path2) {
+  return path2.slice(resolve16(root).length + 1).split(sep2).join("/");
+}
+function sameFileSet(left, right) {
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
+}
+async function fetchJson(url, fetcher) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(3e4) });
+      if (!response.ok) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", `Dashboard release manifest returned HTTP ${response.status}`);
+      try {
+        return await response.json();
+      } catch {
+        throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard release manifest is not valid JSON");
+      }
+    } catch (error) {
+      if (error instanceof ServiceError && error.code === "DASHBOARD_MANIFEST_INVALID") throw error;
+      lastError = error;
+      if (attempt < 3) await new Promise((resolveWait) => setTimeout(resolveWait, attempt * 200));
+    }
+  }
+  throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release manifest", { cause: lastError instanceof Error ? lastError.message : String(lastError) });
+}
+async function inspectDashboardRelease(options = {}) {
+  const packageVersion = options.packageVersion ?? VERSION;
+  const configuredManifestUrl = options.manifestUrl ?? process.env.AGENT_FORUM_DASHBOARD_MANIFEST_URL;
+  const manifestUrl = configuredManifestUrl ?? defaultManifestUrl(packageVersion);
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(manifestUrl);
+  } catch {
+    throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL is invalid");
+  }
+  if (parsedUrl.protocol !== "https:" && parsedUrl.hostname !== "127.0.0.1" && parsedUrl.hostname !== "localhost" || parsedUrl.username || parsedUrl.password) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL must use credential-free HTTPS");
+  const manifest = parseManifest(await fetchJson(manifestUrl, options.fetcher ?? fetch));
+  if (!configuredManifestUrl && packageVersion !== "0.0.0-dev" && manifest.version !== packageVersion) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `Dashboard manifest version ${manifest.version} does not match package version ${packageVersion}`);
+  const platform = options.platform ?? process.platform;
+  const arch = options.arch ?? process.arch;
+  const asset = manifest.assets.find((candidate) => candidate.platform === platform && candidate.arch === arch);
+  if (!asset) throw new ServiceError("DASHBOARD_PLATFORM_UNSUPPORTED", `no Dashboard release for ${platform}-${arch}`);
+  return { manifestUrl, version: manifest.version, asset };
+}
+async function downloadAssetOnce(asset, destination, fetcher, onProgress, attempt = 1) {
+  let response;
+  try {
+    response = await fetcher(asset.url, { redirect: "follow", signal: AbortSignal.timeout(12e4) });
+  } catch (error) {
+    throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release asset", { cause: error instanceof Error ? error.message : String(error) });
+  }
+  if (!response.ok || !response.body) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", `Dashboard release asset returned HTTP ${response.status}`);
+  const declared = response.headers.get("content-length");
+  if (declared && Number(declared) !== asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset size does not match the manifest");
+  const handle = await open2(destination, "wx", 384);
+  const hash = createHash("sha256");
+  let received = 0;
+  try {
+    const reader = response.body.getReader();
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      received += result.value.byteLength;
+      if (received > asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset exceeds the declared size");
+      hash.update(result.value);
+      await handle.write(result.value);
+      onProgress?.(received, asset.size, attempt);
+    }
+    await handle.sync();
+  } finally {
+    await handle.close().catch(() => void 0);
+  }
+  if (received !== asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset is incomplete");
+  if (hash.digest("hex") !== asset.sha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard release asset failed SHA-256 verification");
+}
+async function downloadAsset(asset, destination, fetcher, onProgress) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await rm7(destination, { force: true });
+    try {
+      await downloadAssetOnce(asset, destination, fetcher, onProgress, attempt);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof ServiceError && error.code === "DASHBOARD_CHECKSUM_MISMATCH") throw error;
+      if (attempt < 3) await new Promise((resolveWait) => setTimeout(resolveWait, attempt * 200));
+    }
+  }
+  throw lastError;
+}
+async function runTar(args2) {
+  return new Promise((resolveTar, reject) => {
+    const child = spawn("tar", args2, { shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => reject(new ServiceError("DASHBOARD_INSTALL_FAILED", "could not start the system tar extractor", { cause: error.message })));
+    child.on("close", (code) => code === 0 ? resolveTar(stdout) : reject(new ServiceError("DASHBOARD_INSTALL_FAILED", "could not inspect or extract the Dashboard release asset", { cause: stderr.trim() })));
+  });
+}
+async function extractArchive(archive2, destination) {
+  const entries = (await runTar(["-tzf", archive2])).split(/\r?\n/u).filter(Boolean);
+  const verboseEntries = (await runTar(["-tvzf", archive2])).split(/\r?\n/u).filter(Boolean);
+  if (entries.length === 0 || verboseEntries.length !== entries.length || entries.some((entry) => entry.startsWith("/") || entry.startsWith("\\") || entry.split(/[\\/]/u).includes("..")) || verboseEntries.some((entry) => entry[0] !== "-" && entry[0] !== "d")) {
+    throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains unsafe paths or links");
+  }
+  await mkdir3(destination, { recursive: true });
+  await runTar(["-xzf", archive2, "-C", destination]);
+}
+async function getDashboardInstallationStatus(paths = createAgentForumPaths()) {
+  let installation;
+  try {
+    installation = JSON.parse(await readFile13(paths.dashboardInstallationFile, "utf8"));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { status: "not-installed" };
+    return { status: "damaged" };
+  }
+  if (installation.formatVersion !== 1 || !versionPattern.test(installation.version) || !sha256Pattern.test(installation.executableSha256) || !installation.files || typeof installation.files !== "object" || Object.values(installation.files).some((hash) => !sha256Pattern.test(hash))) return { status: "damaged" };
+  let executable;
+  try {
+    executable = safeExecutable(paths.dashboardInstallDirectory, installation.executable);
+    await stat3(executable);
+  } catch {
+    return { status: "damaged", installation };
+  }
+  try {
+    const actual = await sha256File(executable);
+    const files = await collectInstalledFiles(paths.dashboardInstallDirectory);
+    return { status: actual === installation.executableSha256 && sameFileSet(files, installation.files) ? "installed" : "modified", installation, executable };
+  } catch {
+    return { status: "damaged", installation, executable };
+  }
+}
+async function installDashboardUnlocked(options = {}, paths = createAgentForumPaths()) {
+  const release = await inspectDashboardRelease(options);
+  const current = await getDashboardInstallationStatus(paths);
+  if (current.status === "installed" && current.installation?.version === release.version) return { action: "unchanged", installation: current.installation, executable: current.executable };
+  if (current.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
+  if ((current.status === "modified" || current.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
+  await mkdir3(dirname3(paths.dashboardInstallDirectory), { recursive: true });
+  const staging = await mkdtemp(resolve16(dirname3(paths.dashboardInstallDirectory), ".dashboard-install-"));
+  const archive2 = resolve16(staging, basename3(release.asset.fileName));
+  const payload = resolve16(staging, "payload");
+  try {
+    await downloadAsset(release.asset, archive2, options.fetcher ?? fetch, options.onProgress);
+    await extractArchive(archive2, payload);
+    const stagedExecutable = safeExecutable(payload, release.asset.executable);
+    await stat3(stagedExecutable);
+    if (await sha256File(stagedExecutable) !== release.asset.executableSha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "extracted Dashboard executable failed SHA-256 verification");
+    const stagedHelper = resolve16(dirname3(stagedExecutable), release.asset.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli");
+    try {
+      await stat3(stagedHelper);
+    } catch {
+      throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release does not contain its CLI helper");
+    }
+    if (process.platform !== "win32") {
+      await chmod(stagedExecutable, 448);
+      await chmod(stagedHelper, 448);
+    }
+    const files = await collectInstalledFiles(payload);
+    const installation = { formatVersion: 1, version: release.version, platform: release.asset.platform, arch: release.asset.arch, executable: release.asset.executable, executableSha256: release.asset.executableSha256, files, sourceUrl: release.asset.url, installedAt: (options.now ?? /* @__PURE__ */ new Date()).toISOString() };
+    await writeJsonAtomic(resolve16(payload, "installation.json"), installation, { overwrite: true });
+    const backup = resolve16(dirname3(paths.dashboardInstallDirectory), `.dashboard-backup-${Date.now()}`);
+    let backedUp = false;
+    try {
+      if (current.status !== "not-installed") {
+        await rename3(paths.dashboardInstallDirectory, backup);
+        backedUp = true;
+      }
+      await rename3(payload, paths.dashboardInstallDirectory);
+      if (backedUp) await rm7(backup, { recursive: true, force: true });
+    } catch (error) {
+      if (backedUp) await rename3(backup, paths.dashboardInstallDirectory).catch(() => void 0);
+      throw error;
+    }
+    return { action: current.status === "not-installed" ? "installed" : "updated", installation, executable: safeExecutable(paths.dashboardInstallDirectory, installation.executable) };
+  } finally {
+    await rm7(staging, { recursive: true, force: true });
+  }
+}
+async function installDashboard(options = {}, paths = createAgentForumPaths()) {
+  const lock = await acquireForumLock({ lockPath: resolve16(paths.locksDirectory, "dashboard-install.lock"), command: "dashboard install" });
+  try {
+    return await installDashboardUnlocked(options, paths);
+  } finally {
+    await lock.release();
+  }
+}
+async function uninstallDashboard(options = {}, paths = createAgentForumPaths()) {
+  const lock = await acquireForumLock({ lockPath: resolve16(paths.locksDirectory, "dashboard-install.lock"), command: "dashboard uninstall" });
+  try {
+    const status = await getDashboardInstallationStatus(paths);
+    if (status.status === "not-installed") return { action: "not-installed" };
+    if ((status.status === "modified" || status.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat uninstall with --force");
+    await rm7(paths.dashboardInstallDirectory, { recursive: true, force: true });
+    return { action: "uninstalled" };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/dashboard-desktop.ts
+init_paths();
+import { readFile as readFile14, rm as rm8 } from "node:fs/promises";
+async function readDesktop(paths) {
+  try {
+    const value = JSON.parse(await readFile14(paths.dashboardDesktopFile, "utf8"));
+    return value.formatVersion === 1 && Number.isSafeInteger(value.pid) && value.pid > 0 && Number.isSafeInteger(value.port) && value.port > 0 && value.port <= 65535 && typeof value.token === "string" && /^[a-f0-9-]{36}$/u.test(value.token) ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function requestDesktop(pathname, body, paths) {
+  const runtime = await readDesktop(paths);
+  if (!runtime) return false;
+  try {
+    const response = await fetch(`http://127.0.0.1:${runtime.port}${pathname}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${runtime.token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(2e3)
+    });
+    if (response.ok) return true;
+  } catch {
+  }
+  await rm8(paths.dashboardDesktopFile, { force: true });
+  return false;
+}
+async function attachExistingDashboardDesktop(input, paths = createAgentForumPaths()) {
+  return requestDesktop("/attach", input, paths);
+}
+async function detachExistingDashboardDesktop(clientId, paths = createAgentForumPaths()) {
+  return requestDesktop("/detach", { clientId }, paths);
+}
+async function closeExistingDashboardDesktop(paths = createAgentForumPaths()) {
+  const requested = await requestDesktop("/close", {}, paths);
+  if (!requested) return false;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (!await readDesktop(paths)) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  return false;
+}
+
+// src/commands/dashboard.ts
+async function executeDashboardCommand(args2, options = {}) {
+  const subcommand = args2[0];
+  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <install|update|uninstall|open|attach|heartbeat|detach|status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
+  try {
+    if (subcommand === "status") {
+      if (args2.length !== 1) return invalidArgument("dashboard status accepts no options");
+      const [result, installation] = await Promise.all([dashboardStatus(), getDashboardInstallationStatus()]);
+      return { exitCode: ExitCode.Success, command: "dashboard.status", data: { ...result, installation }, human: `Desktop: ${installation.status}; ${result.clients.length} active Dashboard client(s).
+` };
+    }
+    if (subcommand === "install" || subcommand === "update") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--manifest-url"], flags: ["--yes", "--force"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const manifestUrl = parsed.values.get("--manifest-url");
+      if (!parsed.flags.has("--yes")) {
+        const release = await inspectDashboardRelease({ ...manifestUrl ? { manifestUrl } : {} });
+        return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: { action: "confirmation-required", version: release.version, platform: release.asset.platform, arch: release.asset.arch, size: release.asset.size, source: release.asset.url, sha256: release.asset.sha256 }, human: `Dashboard ${release.version} for ${release.asset.platform}-${release.asset.arch}
+Source: ${release.asset.url}
+Size: ${release.asset.size} bytes
+SHA-256: ${release.asset.sha256}
+Run again with --yes to confirm the download.
+` };
+      }
+      if (subcommand === "update") await closeExistingDashboardDesktop().catch(() => false);
+      let lastPercent = -1;
+      const result = await installDashboard({ ...manifestUrl ? { manifestUrl } : {}, update: subcommand === "update", force: parsed.flags.has("--force"), ...options.onProgress ? { onProgress: (received, total, attempt) => {
+        const percent = Math.floor(received * 100 / total);
+        if (percent !== lastPercent) {
+          lastPercent = percent;
+          options.onProgress(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`);
+        }
+      } } : {} });
+      options.onProgress?.("\n");
+      return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: result, human: `Dashboard ${result.action}: ${result.installation.version}
+` };
+    }
+    if (subcommand === "uninstall") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: [], flags: ["--force"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      await closeExistingDashboardDesktop().catch(() => false);
+      const result = await uninstallDashboard({ force: parsed.flags.has("--force") });
+      return { exitCode: ExitCode.Success, command: "dashboard.uninstall", data: result, human: `Dashboard ${result.action}.
+` };
+    }
+    if (subcommand === "snapshot") {
+      if (args2.length !== 1) return invalidArgument("dashboard snapshot accepts no options");
+      const result = await getDashboardSnapshot();
+      return { exitCode: ExitCode.Success, command: "dashboard.snapshot", data: result, human: `${result.teams.length} active Team(s).
+` };
+    }
+    if (subcommand === "detach") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--client-id"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const clientId = requireOption(parsed, "--client-id");
+      if (typeof clientId !== "string") return invalidArgument(clientId.error);
+      const result = await detachDashboardClient(clientId);
+      await detachExistingDashboardDesktop(clientId).catch(() => false);
+      return { exitCode: ExitCode.Success, command: "dashboard.detach", data: result, human: `${result.detached ? "Detached" : "Not attached"}: ${clientId}
+` };
+    }
+    if (subcommand === "polling") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--forum-id", "--enabled"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumId = requireOption(parsed, "--forum-id");
+      const enabled = requireOption(parsed, "--enabled");
+      if (typeof forumId !== "string") return invalidArgument(forumId.error);
+      if (typeof enabled !== "string") return invalidArgument(enabled.error);
+      if (enabled !== "true" && enabled !== "false") return invalidArgument("--enabled must be true or false");
+      const result = await setDashboardForumPolling(forumId, enabled === "true");
+      return { exitCode: ExitCode.Success, command: "dashboard.polling", data: result, human: `Polling ${result.enabled ? "enabled" : "disabled"}: ${forumId}
+` };
+    }
+    if (subcommand === "open") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--client-id", "--client-type", "--forum", "--room", "--identity", "--cwd"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const clientId = requireOption(parsed, "--client-id");
+      const clientType = requireOption(parsed, "--client-type");
+      if (typeof clientId !== "string" || typeof clientType !== "string") return invalidArgument("dashboard open requires --client-id and --client-type");
+      const explicitForum = parsed.values.get("--forum");
+      const explicitRoom = parsed.values.get("--room");
+      const cwd = parsed.values.get("--cwd");
+      if (Boolean(explicitForum) !== Boolean(explicitRoom)) return invalidArgument("--forum and --room must be provided together");
+      const context = explicitForum && explicitRoom ? await resolveContext({ forumAlias: explicitForum, room: explicitRoom, ...cwd ? { cwd } : {} }) : await resolveContext({ ...cwd ? { cwd } : {} });
+      const forum = context.forumAlias;
+      const room = context.roomId;
+      if (!forum || context.targetStatus !== "active") return invalidArgument("Dashboard requires an active bound Forum Room");
+      const identity = parsed.values.get("--identity");
+      let installed = await getDashboardInstallationStatus();
+      let automaticallyUpdated = false;
+      if (installed.status === "installed" && VERSION !== "0.0.0-dev" && installed.installation?.version !== VERSION) {
+        await closeExistingDashboardDesktop().catch(() => false);
+        let lastPercent = -1;
+        const update = await installDashboard({ update: true, ...options.onProgress ? { onProgress: (received, total, attempt) => {
+          const percent = Math.floor(received * 100 / total);
+          if (percent !== lastPercent) {
+            lastPercent = percent;
+            options.onProgress(`Updating Dashboard: ${percent}% (attempt ${attempt}/3)\r`);
+          }
+        } } : {} });
+        options.onProgress?.("\n");
+        automaticallyUpdated = update.action === "updated";
+        installed = await getDashboardInstallationStatus();
+      }
+      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${VERSION}; ` : ""}Dashboard already running; client attached.
+` };
+      const moduleDirectory = dirname4(fileURLToPath(import.meta.url));
+      const entrypoint = [resolve17(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve17(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
+      const deno = process.platform === "win32" ? resolve17(homedir2(), ".deno", "bin", "deno.exe") : "deno";
+      const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && entrypoint && (process.platform !== "win32" || existsSync(deno));
+      if (installed.status !== "installed" && !developmentFallback) return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard install" : `Dashboard installation is ${installed.status}; run agent-forum dashboard update --yes`);
+      const executable = installed.status === "installed" ? installed.executable : deno;
+      const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve17(dirname4(entrypoint), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint];
+      const dashboardCli = installed.status === "installed" ? resolve17(dirname4(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
+      if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard update --yes");
+      const child = spawn2(executable, executableArgs, { detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve17(dirname4(executable), "AppIcon.ico") : resolve17(dirname4(entrypoint), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });
+      child.unref();
+      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${VERSION}; ` : ""}Dashboard started.
+` };
+    }
+    if (subcommand === "pin") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--room-id", "--enabled"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const roomId = requireOption(parsed, "--room-id");
+      const enabled = requireOption(parsed, "--enabled");
+      if (typeof roomId !== "string") return invalidArgument(roomId.error);
+      if (typeof enabled !== "string") return invalidArgument(enabled.error);
+      if (enabled !== "true" && enabled !== "false") return invalidArgument("--enabled must be true or false");
+      const result = await setDashboardRoomPinned(roomId, enabled === "true");
+      return { exitCode: ExitCode.Success, command: "dashboard.pin", data: result, human: `Pin ${result.pinned ? "enabled" : "disabled"}: ${roomId}
+` };
+    }
+    if (subcommand === "attach" || subcommand === "heartbeat") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--client-id", "--client-type", "--forum", "--room", "--identity", "--lease-ms"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const clientId = requireOption(parsed, "--client-id");
+      const clientType = requireOption(parsed, "--client-type");
+      if (typeof clientId !== "string") return invalidArgument(clientId.error);
+      if (typeof clientType !== "string") return invalidArgument(clientType.error);
+      const forumAlias = parsed.values.get("--forum");
+      const roomId = parsed.values.get("--room");
+      if (Boolean(forumAlias) !== Boolean(roomId)) return invalidArgument("--forum and --room must be provided together");
+      if (!forumAlias || !roomId) return invalidArgument("Dashboard attach currently requires explicit --forum and --room");
+      const leaseText = parsed.values.get("--lease-ms");
+      const leaseMs = leaseText === void 0 ? void 0 : Number(leaseText);
+      if (leaseText !== void 0 && !Number.isInteger(leaseMs)) return invalidArgument("--lease-ms must be an integer");
+      const identityId = parsed.values.get("--identity");
+      const result = await attachDashboardClient({ clientId, clientType, forumAlias, roomId, ...identityId ? { identityId } : {}, ...leaseMs !== void 0 ? { leaseMs } : {} });
+      return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: result, human: `Attached Dashboard client ${result.client.clientId}.
+` };
+    }
+    return invalidArgument(`unknown dashboard subcommand: ${subcommand}`);
+  } catch (error) {
+    const handled = commandError(`dashboard.${subcommand}`, error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
+// src/services/doctor.ts
+init_local_config();
+import { access, lstat as lstat3, readdir as readdir9 } from "node:fs/promises";
+import { constants } from "node:fs";
+import { resolve as resolve19 } from "node:path";
+init_runner();
+init_lock();
+init_paths();
+
+// src/services/forum-remote.ts
+init_local_config();
+init_timestamps();
+init_runner();
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { lstat as lstat2, mkdir as mkdir4, rename as rename4, rm as rm9 } from "node:fs/promises";
+import { resolve as resolve18 } from "node:path";
+
+// src/git/remote.ts
+init_errors2();
+import { isAbsolute } from "node:path";
+function validateRemoteUrl(value) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new ServiceError("REMOTE_URL_UNSAFE", "remote URL must not be empty");
+  }
+  if (trimmed.startsWith("-")) {
+    throw new ServiceError(
+      "REMOTE_URL_UNSAFE",
+      "remote URL must not begin with a command-line option prefix"
+    );
+  }
+  if (isAbsolute(trimmed) || trimmed.startsWith(".")) {
+    return { value: trimmed, display: "<local-path>", kind: "local" };
+  }
+  try {
+    const url = new URL(trimmed);
+    if (!["http:", "https:", "ssh:", "git:", "file:"].includes(url.protocol)) {
+      throw new ServiceError(
+        "REMOTE_URL_UNSAFE",
+        `unsupported remote URL protocol: ${url.protocol}`
+      );
+    }
+    if (url.search || url.hash) {
+      throw new ServiceError(
+        "REMOTE_URL_UNSAFE",
+        "remote URL must not contain query parameters or fragments; use credential configuration outside the URL"
+      );
+    }
+    if (url.password) {
+      throw new ServiceError(
+        "REMOTE_URL_UNSAFE",
+        "remote URL must not contain a password or token; use a credential helper or SSH agent"
+      );
+    }
+    if ((url.protocol === "http:" || url.protocol === "https:") && url.username) {
+      throw new ServiceError(
+        "REMOTE_URL_UNSAFE",
+        "HTTP(S) remote URL must not contain user information; use a credential helper"
+      );
+    }
+    if (url.protocol === "file:") {
+      return { value: trimmed, display: "<local-path>", kind: "local" };
+    }
+    const display = new URL(url.toString());
+    display.password = "";
+    return { value: trimmed, display: display.toString(), kind: "network" };
+  } catch (error) {
+    if (error instanceof ServiceError) throw error;
+  }
+  const scp = /^(?:([^@\s]+)@)?([^:/\s]+):(.+)$/u.exec(trimmed);
+  if (scp && !/^[a-zA-Z]:[\\/]/u.test(trimmed)) {
+    return { value: trimmed, display: trimmed, kind: "network" };
+  }
+  if (trimmed.endsWith(".git")) {
+    return { value: trimmed, display: "<local-path>", kind: "local" };
+  }
+  throw new ServiceError(
+    "REMOTE_URL_UNSAFE",
+    "remote must be a supported URL, SCP-style SSH remote, or local Git path"
+  );
+}
+function displayRemoteUrl(value) {
+  try {
+    return validateRemoteUrl(value).display;
+  } catch {
+    return "<redacted-remote>";
+  }
+}
+
+// src/services/forum-remote.ts
+init_lock();
+init_paths();
+init_errors2();
+init_room();
+async function pathExists2(path2) {
+  try {
+    await lstat2(path2);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+function remoteBranchFromHead(repository2) {
+  const head = runGit(repository2, [
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    "refs/remotes/origin/HEAD"
+  ]);
+  if (head.status !== 0) {
+    throw new ServiceError(
+      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
+      "remote default branch could not be discovered; provide --branch"
+    );
+  }
+  const value = head.stdout.trim();
+  if (!value.startsWith("origin/") || value.length <= "origin/".length) {
+    throw new ServiceError(
+      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
+      "remote HEAD does not name an origin branch"
+    );
+  }
+  return value.slice("origin/".length);
+}
+async function validateClonedForum(repository2, branch) {
+  try {
+    const protocol = await readJsonDocument(
+      resolve18(repository2, ".forum", "protocol.json"),
+      "protocol"
+    );
+    const forum = await readJsonDocument(
+      resolve18(repository2, ".forum", "forum.json"),
+      "forum"
+    );
+    if (protocol.dataBranch !== branch || protocol.forumId !== forum.forumId) {
+      throw new ServiceError(
+        "REMOTE_PROTOCOL_INVALID",
+        "remote forum metadata does not agree on forumId and dataBranch"
+      );
+    }
+    return { forumId: String(protocol.forumId) };
+  } catch (error) {
+    if (error instanceof ServiceError) throw error;
+    throw new ServiceError(
+      "REMOTE_PROTOCOL_INVALID",
+      "remote branch does not contain a valid Agent Forum protocol",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+async function addRemoteForum(input, paths = createAgentForumPaths()) {
+  assertLocalAlias(input.alias);
+  const safeRemote = validateRemoteUrl(input.remote);
+  const config = await loadLocalConfig(paths);
+  if (config.forums.some((forum) => forum.alias === input.alias)) {
+    throw new ServiceError(
+      "FORUM_ALIAS_EXISTS",
+      `forum alias is already configured: ${input.alias}`
+    );
+  }
+  const destination = forumClonePath(paths, input.alias);
+  if (await pathExists2(destination)) {
+    throw new ServiceError(
+      "FORUM_PATH_EXISTS",
+      `managed forum path already exists: ${destination}`
+    );
+  }
+  await mkdir4(paths.forumsDirectory, { recursive: true });
+  let cloned = false;
+  try {
+    requireGit(paths.forumsDirectory, [
+      "-c",
+      "core.longpaths=true",
+      "clone",
+      "--no-checkout",
+      "--origin",
+      "origin",
+      "--",
+      safeRemote.value,
+      destination
+    ]);
+    cloned = true;
+    requireGit(destination, [
+      "-c",
+      "core.longpaths=true",
+      "config",
+      "core.longpaths",
+      "true"
+    ]);
+    requireGit(destination, ["config", "core.autocrlf", "false"]);
+    const branch = input.branch ?? remoteBranchFromHead(destination);
+    assertGitBranchName(destination, branch);
+    const remoteBranch = runGit(destination, [
+      "show-ref",
+      "--verify",
+      `refs/remotes/origin/${branch}`
+    ]);
+    if (remoteBranch.status !== 0) {
+      throw new ServiceError(
+        "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
+        `remote branch does not exist: ${branch}`
+      );
+    }
+    requireGit(destination, [
+      "checkout",
+      "-B",
+      branch,
+      `origin/${branch}`
+    ]);
+    requireGit(destination, [
+      "branch",
+      "--set-upstream-to",
+      `origin/${branch}`,
+      branch
+    ]);
+    const validated = await validateClonedForum(destination, branch);
+    const registration = {
+      alias: input.alias,
+      forumId: validated.forumId,
+      path: destination,
+      dataBranch: branch,
+      createdAt: currentUtcTimestamp(input.now)
+    };
+    await registerLocalForum(registration, paths);
+    return {
+      alias: input.alias,
+      forumId: validated.forumId,
+      path: destination,
+      dataBranch: branch,
+      remote: safeRemote.display
+    };
+  } catch (error) {
+    if (cloned) await rm9(destination, { recursive: true, force: true });
+    throw error;
+  }
+}
+async function inspectForumOriginRemote(input, paths = createAgentForumPaths()) {
+  const safeExpected = validateRemoteUrl(input.expectedRemote);
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const origin = runGit(registration.path, ["remote", "get-url", "origin"]);
+  if (origin.status !== 0) {
+    return { configured: false, matchesExpected: false, displayUrl: null };
+  }
+  const existing = origin.stdout.trim();
+  return {
+    configured: true,
+    matchesExpected: existing === safeExpected.value,
+    displayUrl: displayRemoteUrl(existing)
+  };
+}
+async function publishLocalForum(input, paths = createAgentForumPaths()) {
+  const safeRemote = validateRemoteUrl(input.remote);
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "forum publish"
+  });
+  try {
+    await openForum(input.forumAlias, paths, { requireClean: true });
+    const existing = runGit(registration.path, ["remote", "get-url", "origin"]);
+    if (existing.status === 0 && existing.stdout.trim() !== safeRemote.value) {
+      throw new ServiceError(
+        "REMOTE_ALREADY_CONFIGURED",
+        `origin is already configured as ${displayRemoteUrl(existing.stdout.trim())}`
+      );
+    }
+    if (existing.status !== 0) {
+      requireGit(registration.path, [
+        "remote",
+        "add",
+        "origin",
+        safeRemote.value
+      ]);
+    }
+    requireGit(registration.path, [
+      "push",
+      "--set-upstream",
+      "origin",
+      registration.dataBranch
+    ]);
+    return {
+      forumAlias: input.forumAlias,
+      remote: safeRemote.display,
+      branch: registration.dataBranch,
+      commit: requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim()
+    };
+  } finally {
+    await lock.release();
+  }
+}
+function parseAheadBehind(value) {
+  const parts = value.trim().split(/\s+/u).map(Number);
+  if (parts.length !== 2 || parts.some((part) => !Number.isSafeInteger(part))) {
+    return void 0;
+  }
+  return { ahead: parts[0], behind: parts[1] };
+}
+async function getForumRemoteStatus(forumAlias, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const problems = [];
+  if (!await pathExists2(registration.path)) {
+    return {
+      alias: registration.alias,
+      forumId: registration.forumId,
+      path: registration.path,
+      expectedBranch: registration.dataBranch,
+      currentBranch: null,
+      head: null,
+      dirty: null,
+      protocolValid: false,
+      remote: {
+        configured: false,
+        displayUrl: null,
+        upstream: null,
+        ahead: null,
+        behind: null
+      },
+      health: "unavailable",
+      problems: ["managed clone path does not exist"]
+    };
+  }
+  const branchResult = runGit(registration.path, ["branch", "--show-current"]);
+  const currentBranch = branchResult.status === 0 ? branchResult.stdout.trim() || null : null;
+  if (currentBranch !== registration.dataBranch) {
+    problems.push(
+      `current branch is ${currentBranch ?? "detached"}, expected ${registration.dataBranch}`
+    );
+  }
+  const headResult = runGit(registration.path, ["rev-parse", "HEAD"]);
+  const head = headResult.status === 0 ? headResult.stdout.trim() : null;
+  const statusResult = runGit(registration.path, ["status", "--porcelain"]);
+  const dirty = statusResult.status === 0 ? statusResult.stdout.trim().length > 0 : null;
+  if (dirty) problems.push("managed clone has uncommitted changes");
+  let protocolValid = false;
+  try {
+    const protocol = await readJsonDocument(
+      resolve18(registration.path, ".forum", "protocol.json"),
+      "protocol"
+    );
+    protocolValid = protocol.forumId === registration.forumId && protocol.dataBranch === registration.dataBranch;
+    if (!protocolValid) problems.push("protocol does not match local registration");
+  } catch (error) {
+    problems.push(error instanceof Error ? error.message : String(error));
+  }
+  const remoteResult = runGit(registration.path, ["remote", "get-url", "origin"]);
+  const remoteConfigured = remoteResult.status === 0;
+  const displayUrl = remoteConfigured ? displayRemoteUrl(remoteResult.stdout.trim()) : null;
+  const upstreamResult = runGit(registration.path, [
+    "rev-parse",
+    "--abbrev-ref",
+    "--symbolic-full-name",
+    "@{upstream}"
+  ]);
+  const upstream = upstreamResult.status === 0 ? upstreamResult.stdout.trim() : null;
+  let ahead = null;
+  let behind = null;
+  if (upstream) {
+    const counts = runGit(registration.path, [
+      "rev-list",
+      "--left-right",
+      "--count",
+      `HEAD...${upstream}`
+    ]);
+    if (counts.status === 0) {
+      const parsed = parseAheadBehind(counts.stdout);
+      if (parsed) {
+        ahead = parsed.ahead;
+        behind = parsed.behind;
+      }
+    }
+  }
+  if (!remoteConfigured) problems.push("origin is not configured");
+  else if (!upstream) problems.push("current branch has no upstream");
+  const health = !protocolValid ? "protocol-error" : dirty ? "dirty" : !remoteConfigured || !upstream ? "local-only" : problems.length > 0 ? "unavailable" : "ready";
+  return {
+    alias: registration.alias,
+    forumId: registration.forumId,
+    path: registration.path,
+    expectedBranch: registration.dataBranch,
+    currentBranch,
+    head,
+    dirty,
+    protocolValid,
+    remote: {
+      configured: remoteConfigured,
+      displayUrl,
+      upstream,
+      ahead,
+      behind
+    },
+    health,
+    problems
+  };
+}
+async function listRemoteForums(paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const forums = await Promise.all(
+    config.forums.map((forum) => getForumRemoteStatus(forum.alias, paths))
+  );
+  forums.sort((left, right) => left.alias.localeCompare(right.alias));
+  return { forums };
+}
+async function removeLocalForum(input, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const lock = await acquireForumLock({
+    lockPath: forumLockPath(paths, registration.forumId),
+    command: "forum remove"
+  });
+  try {
+    if (input.keepClone) {
+      await unregisterLocalForum(input.forumAlias, paths);
+      return { forumAlias: input.forumAlias, clone: "kept", path: registration.path };
+    }
+    const status = await getForumRemoteStatus(input.forumAlias, paths);
+    if (status.dirty) assertCleanWorktree(registration.path);
+    if (!status.remote.configured || !status.remote.upstream || status.remote.ahead === null || status.remote.ahead > 0) {
+      throw new ServiceError(
+        "LOCAL_COMMITS_NOT_PUSHED",
+        "managed clone has no verified upstream or contains local-only commits; use --keep-clone"
+      );
+    }
+    const temporary = `${registration.path}.removing-${randomUUID4()}`;
+    await rename4(registration.path, temporary);
+    try {
+      await unregisterLocalForum(input.forumAlias, paths);
+    } catch (error) {
+      await rename4(temporary, registration.path);
+      throw error;
+    }
+    try {
+      await rm9(temporary, { recursive: true, force: true });
+    } catch (error) {
+      throw new ServiceError(
+        "LOCAL_CLONE_CLEANUP_FAILED",
+        "forum was unregistered but the renamed local clone could not be deleted",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    return { forumAlias: input.forumAlias, clone: "deleted", path: registration.path };
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/doctor.ts
+async function exists(path2) {
+  try {
+    await lstat3(path2);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+async function diagnoseAgentForum(input = {}, paths = createAgentForumPaths()) {
+  const checks = [];
+  const repaired = [];
+  const nodeMajor = Number(process.versions.node.split(".")[0]);
+  checks.push({
+    id: "node.version",
+    status: nodeMajor >= 20 ? "ok" : "error",
+    message: `Node.js ${process.versions.node}`
+  });
+  const git = runGit(process.cwd(), ["--version"]);
+  checks.push({
+    id: "git.version",
+    status: git.status === 0 ? "ok" : "error",
+    message: git.status === 0 ? git.stdout.trim() : "Git is unavailable"
+  });
+  let config;
+  try {
+    config = await loadLocalConfig(paths);
+    checks.push({ id: "config", status: "ok", message: `${config.forums.length} forum(s) configured` });
+  } catch (error) {
+    checks.push({ id: "config", status: "error", message: error instanceof Error ? error.message : String(error) });
+    return { healthy: false, checks, repaired };
+  }
+  try {
+    const bindings = await loadContextBindingState(paths);
+    checks.push({ id: "context.bindings", status: "ok", message: `${bindings.bindings.length} binding(s)` });
+  } catch (error) {
+    checks.push({ id: "context.bindings", status: "error", message: error instanceof Error ? error.message : String(error) });
+  }
+  if (await exists(paths.root)) {
+    try {
+      await access(paths.root, constants.R_OK | constants.W_OK);
+      checks.push({ id: "storage.permissions", status: "ok", message: "Agent Forum root is readable and writable" });
+    } catch {
+      checks.push({ id: "storage.permissions", status: "error", message: "Agent Forum root is not readable and writable" });
+    }
+  } else {
+    checks.push({ id: "storage.permissions", status: "warning", message: "Agent Forum root does not exist yet" });
+  }
+  const registrations = input.forumAlias ? config.forums.filter((forum) => forum.alias === input.forumAlias) : config.forums;
+  if (input.forumAlias && registrations.length === 0) {
+    checks.push({ id: "forum.selection", status: "error", message: `forum is not configured: ${input.forumAlias}` });
+  }
+  for (const forum of registrations) {
+    const prefix = `forum.${forum.alias}`;
+    try {
+      const status = await getForumRemoteStatus(forum.alias, paths);
+      checks.push({
+        id: `${prefix}.status`,
+        status: status.health === "ready" ? "ok" : status.health === "local-only" ? "warning" : "error",
+        message: `forum health: ${status.health}`,
+        details: status
+      });
+      const gitPath = runGit(forum.path, ["rev-parse", "--git-path", "rebase-merge"]);
+      const applyPath = runGit(forum.path, ["rev-parse", "--git-path", "rebase-apply"]);
+      const rebasePresent = gitPath.status === 0 && await exists(resolve19(forum.path, gitPath.stdout.trim())) || applyPath.status === 0 && await exists(resolve19(forum.path, applyPath.stdout.trim()));
+      checks.push({
+        id: `${prefix}.rebase`,
+        status: rebasePresent ? "error" : "ok",
+        message: rebasePresent ? "an interrupted rebase is present" : "no interrupted rebase"
+      });
+      try {
+        const journals = await listConflicts(forum.alias, paths);
+        let missingRefs = 0;
+        for (const journal of journals.conflicts) {
+          if (runGit(forum.path, ["rev-parse", "--verify", journal.recoveryRef]).status !== 0) missingRefs += 1;
+        }
+        checks.push({
+          id: `${prefix}.conflicts`,
+          status: missingRefs > 0 ? "error" : journals.conflicts.length > 0 ? "warning" : "ok",
+          message: `${journals.conflicts.length} conflict journal(s), ${missingRefs} missing recovery ref(s)`
+        });
+      } catch (error) {
+        checks.push({ id: `${prefix}.conflicts`, status: "error", message: error instanceof Error ? error.message : String(error) });
+      }
+      if (input.network && status.remote.configured) {
+        const remote = runGit(forum.path, ["ls-remote", "--exit-code", "origin", forum.dataBranch]);
+        checks.push({
+          id: `${prefix}.network`,
+          status: remote.status === 0 ? "ok" : "error",
+          message: remote.status === 0 ? "remote branch is reachable" : "remote branch is not reachable"
+        });
+      }
+    } catch (error) {
+      checks.push({ id: `${prefix}.status`, status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+    const lockPath = forumLockPath(paths, forum.forumId);
+    if (await exists(lockPath)) {
+      if (input.repairStaleLocks) {
+        try {
+          if (await clearStaleForumLock({ lockPath })) {
+            repaired.push(lockPath);
+            checks.push({ id: `${prefix}.lock`, status: "ok", message: "stale lock was removed" });
+          }
+        } catch (error) {
+          checks.push({ id: `${prefix}.lock`, status: "warning", message: error instanceof Error ? error.message : String(error) });
+        }
+      } else {
+        checks.push({ id: `${prefix}.lock`, status: "warning", message: "forum lock exists; use --repair-stale-locks only after review" });
+      }
+    } else {
+      checks.push({ id: `${prefix}.lock`, status: "ok", message: "no forum lock" });
+    }
+  }
+  if (await exists(paths.locksDirectory)) {
+    const known = new Set(config.forums.map((forum) => `${forum.forumId}.lock`));
+    const entries = await readdir9(paths.locksDirectory, { withFileTypes: true });
+    const orphaned = entries.filter((entry) => entry.isDirectory() && entry.name.endsWith(".lock") && !known.has(entry.name));
+    if (orphaned.length > 0) {
+      checks.push({ id: "locks.orphaned", status: "warning", message: `${orphaned.length} orphaned lock(s) require review` });
+    }
+  }
+  return {
+    healthy: !checks.some((check) => check.status === "error"),
+    checks,
+    repaired
+  };
+}
+
+// src/commands/doctor.ts
+async function executeDoctorCommand(args2) {
+  const parsed = parseCommandOptions(args2, {
+    values: ["--forum"],
+    flags: ["--network", "--repair-stale-locks"]
+  });
+  if ("error" in parsed) return invalidArgument(parsed.error);
+  try {
+    const forumAlias = parsed.values.get("--forum");
+    const result = await diagnoseAgentForum({
+      ...forumAlias ? { forumAlias } : {},
+      network: parsed.flags.has("--network"),
+      repairStaleLocks: parsed.flags.has("--repair-stale-locks")
+    });
+    return {
+      exitCode: result.healthy ? ExitCode.Success : ExitCode.Unexpected,
+      command: "doctor",
+      data: result,
+      human: `${result.healthy ? "healthy" : "unhealthy"}
+${result.checks.map((check) => `${check.status}	${check.id}	${check.message}`).join("\n")}
+`
+    };
+  } catch (error) {
+    const handled = commandError("doctor", error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
 // src/services/local-forum.ts
 init_local_config();
 init_ids();
@@ -12583,17 +13973,17 @@ init_lock();
 init_paths();
 init_errors2();
 import {
-  mkdir as mkdir4,
-  readFile as readFile8,
-  rename as rename4,
-  rm as rm8,
-  stat as stat3
+  mkdir as mkdir5,
+  readFile as readFile15,
+  rename as rename5,
+  rm as rm10,
+  stat as stat4
 } from "node:fs/promises";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { resolve as resolve13 } from "node:path";
+import { resolve as resolve20 } from "node:path";
 async function pathExists3(path2) {
   try {
-    await stat3(path2);
+    await stat4(path2);
     return true;
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
@@ -12621,14 +14011,14 @@ function samePublishedIdentity(existing, identity) {
 async function initLocalForum(input, paths = createAgentForumPaths()) {
   assertLocalAlias(input.alias);
   const dataBranch = input.dataBranch ?? "main";
-  await mkdir4(paths.forumsDirectory, { recursive: true });
+  await mkdir5(paths.forumsDirectory, { recursive: true });
   assertGitBranchName(paths.forumsDirectory, dataBranch);
   const configLock = await acquireForumLock({
-    lockPath: resolve13(paths.locksDirectory, "config.lock"),
+    lockPath: resolve20(paths.locksDirectory, "config.lock"),
     command: "forum init-local"
   });
   const destination = forumClonePath(paths, input.alias);
-  const staging = resolve13(
+  const staging = resolve20(
     paths.forumsDirectory,
     `.agent-forum-tmp-${randomUUID5()}`
   );
@@ -12664,11 +14054,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       identity.memberId
     );
     await writeFileAtomic(
-      resolve13(staging, ".gitattributes"),
+      resolve20(staging, ".gitattributes"),
       "*.json text eol=lf\n*.md text eol=lf\n"
     );
     await writeValidatedJsonAtomic(
-      resolve13(staging, ".forum", "protocol.json"),
+      resolve20(staging, ".forum", "protocol.json"),
       "protocol",
       {
         protocolVersion: "1.0",
@@ -12679,7 +14069,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve13(staging, ".forum", "forum.json"),
+      resolve20(staging, ".forum", "forum.json"),
       "forum",
       {
         schemaVersion: "1.0",
@@ -12691,7 +14081,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve13(staging, "members", identity.memberId, "profile.json"),
+      resolve20(staging, "members", identity.memberId, "profile.json"),
       "member-profile",
       publicProfile(identity, timestamp)
     );
@@ -12700,7 +14090,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       [".gitattributes", ".forum", "members"],
       `Initialize forum ${input.alias}`
     );
-    await rename4(staging, destination);
+    await rename5(staging, destination);
     destinationCreated = true;
     await saveLocalConfig(paths, {
       ...config,
@@ -12724,9 +14114,9 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       commit
     };
   } catch (error) {
-    await rm8(staging, { recursive: true, force: true });
+    await rm10(staging, { recursive: true, force: true });
     if (destinationCreated) {
-      await rm8(destination, { recursive: true, force: true });
+      await rm10(destination, { recursive: true, force: true });
     }
     throw error;
   } finally {
@@ -12741,7 +14131,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     lockPath: forumLockPath(paths, registration.forumId),
     command: "identity publish"
   });
-  const profilePath = resolve13(
+  const profilePath = resolve20(
     registration.path,
     "members",
     identity.memberId,
@@ -12770,8 +14160,8 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       );
     }
     const protocol = JSON.parse(
-      await readFile8(
-        resolve13(registration.path, ".forum", "protocol.json"),
+      await readFile15(
+        resolve20(registration.path, ".forum", "protocol.json"),
         "utf8"
       )
     );
@@ -12788,7 +14178,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     let previous;
     let existing;
     try {
-      previous = await readFile8(profilePath, "utf8");
+      previous = await readFile15(profilePath, "utf8");
       existing = JSON.parse(previous);
       const validation = validateProtocolDocument("member-profile", existing, {
         mode: "read"
@@ -12862,7 +14252,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     } catch (error) {
       runGit(registration.path, ["reset", "--", profilePath]);
       if (previous === void 0) {
-        await rm8(profilePath, { force: true });
+        await rm10(profilePath, { force: true });
       } else {
         await writeFileAtomic(profilePath, previous, { overwrite: true });
       }
@@ -12917,14 +14307,14 @@ function valueOrError(parsed, name) {
   const value = requireOption(parsed, name);
   return typeof value === "string" ? value : invalidArgument(value.error);
 }
-async function executeForumCommand(args) {
-  const subcommand = args[0];
+async function executeForumCommand(args2) {
+  const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return forumHelp();
   }
   try {
     if (subcommand === "init-local") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--alias", "--name", "--description", "--branch", "--identity"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -12954,7 +14344,7 @@ commit: ${result.commit}
       };
     }
     if (subcommand === "add") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--alias", "--remote", "--branch"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -12980,7 +14370,7 @@ remote: ${result.remote}
       };
     }
     if (subcommand === "publish") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--remote"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -13001,7 +14391,7 @@ commit: ${result.commit}
       };
     }
     if (subcommand === "list") {
-      const parsed = parseCommandOptions(args.slice(1), { values: [] });
+      const parsed = parseCommandOptions(args2.slice(1), { values: [] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const result = await listRemoteForums();
       return {
@@ -13015,7 +14405,7 @@ commit: ${result.commit}
       };
     }
     if (subcommand === "status") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -13036,7 +14426,7 @@ behind: ${result.remote.behind ?? "unknown"}
       };
     }
     if (subcommand === "show") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum"] });
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--forum"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = valueOrError(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
@@ -13052,7 +14442,7 @@ ${result.forum.description}
       };
     }
     if (["rename", "set-description", "archive", "restore"].includes(subcommand)) {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--name", "--description", "--reason", "--identity"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -13084,7 +14474,7 @@ commit: ${result.commit}
       };
     }
     if (subcommand === "sync") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -13104,11 +14494,11 @@ push attempts: ${result.pushAttempts}
       };
     }
     if (subcommand === "conflict") {
-      const action = args[1];
+      const action = args2[1];
       if (!action || !["list", "show", "retry", "prepare-reissue", "close"].includes(action)) {
         return invalidArgument("forum conflict requires list, show, retry, prepare-reissue, or close");
       }
-      const parsed = parseCommandOptions(args.slice(2), {
+      const parsed = parseCommandOptions(args2.slice(2), {
         values: ["--forum", "--id"],
         flags: ["--confirm"]
       });
@@ -13165,7 +14555,7 @@ outcome: ${result2.outcome}
       };
     }
     if (subcommand === "remove") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum"],
         flags: ["--keep-clone"]
       });
@@ -13196,167 +14586,6 @@ remote: unchanged
 
 // src/commands/identity.ts
 init_local_config();
-
-// src/services/identity-attention.ts
-init_local_config();
-init_timestamps();
-init_validator();
-init_atomic();
-init_errors();
-init_lock();
-init_paths();
-init_room();
-init_errors2();
-import { readFile as readFile9 } from "node:fs/promises";
-import { resolve as resolve14 } from "node:path";
-function attentionPath(paths, forumId, ownerMemberId) {
-  return resolve14(forumStatePath(paths, forumId), "attention", `${ownerMemberId}.json`);
-}
-function isActiveLink(link2, now) {
-  return link2.expiresAt === void 0 || new Date(link2.expiresAt).valueOf() > now.valueOf();
-}
-async function loadState(forumId, ownerMemberId, paths) {
-  const path2 = attentionPath(paths, forumId, ownerMemberId);
-  try {
-    const value = JSON.parse(await readFile9(path2, "utf8"));
-    const validation = validateProtocolDocument("identity-attention", value);
-    if (!validation.ok || value.forumId !== forumId || value.ownerMemberId !== ownerMemberId) {
-      throw new StorageError("SCHEMA_VALIDATION_FAILED", `identity attention state is invalid: ${path2}`);
-    }
-    const state2 = value;
-    if (new Set(state2.links.map((link2) => link2.subjectMemberId)).size !== state2.links.length) {
-      throw new StorageError("SCHEMA_VALIDATION_FAILED", `identity attention state has duplicate subjects: ${path2}`);
-    }
-    return state2;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return {
-        schemaVersion: "1.0",
-        forumId,
-        ownerMemberId,
-        links: [],
-        updatedAt: currentUtcTimestamp()
-      };
-    }
-    throw error;
-  }
-}
-async function resolveOwner(forumAlias, ownerMemberId, paths) {
-  const config = await loadLocalConfig(paths);
-  const forum = findForum(config, forumAlias);
-  return {
-    forumId: forum.forumId,
-    forumPath: forum.path,
-    owner: findIdentity(config, ownerMemberId)
-  };
-}
-async function recoverIdentity(input, paths = createAgentForumPaths()) {
-  const config = await loadLocalConfig(paths);
-  const forum = findForum(config, input.forumAlias);
-  const profile = await readJsonDocument(
-    resolve14(forum.path, "members", input.memberId, "profile.json"),
-    "member-profile"
-  );
-  if (profile.memberId !== input.memberId) {
-    throw new ServiceError("IDENTITY_RECOVERY_FAILED", "remote profile memberId does not match requested memberId");
-  }
-  const existing = config.identities.find((identity) => identity.memberId === input.memberId);
-  if (existing) {
-    if (input.setDefault && config.defaultIdentityId !== existing.memberId) {
-      const { updateLocalIdentity: updateLocalIdentity2 } = await Promise.resolve().then(() => (init_local_config(), local_config_exports));
-      const result2 = await updateLocalIdentity2({ memberId: existing.memberId, setDefault: true }, paths);
-      return { action: "unchanged", identity: result2.identity, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
-    }
-    return { action: "unchanged", identity: existing, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
-  }
-  const result = await createLocalIdentity({
-    memberId: input.memberId,
-    displayName: String(profile.displayName),
-    role: String(profile.role),
-    responsibility: String(profile.responsibility),
-    ...typeof profile.client === "string" ? { client: profile.client } : {},
-    setDefault: input.setDefault ?? true
-  }, paths);
-  return { action: "recovered", identity: result.identity, forumAlias: input.forumAlias, profileStatus: String(profile.status) };
-}
-async function listIdentityAttention(input, paths = createAgentForumPaths()) {
-  const { forumId, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
-  const state2 = await loadState(forumId, owner.memberId, paths);
-  const now = /* @__PURE__ */ new Date();
-  const links = state2.links.map((link2) => ({ ...link2, active: isActiveLink(link2, now) })).filter((link2) => input.includeExpired || link2.active);
-  return { ownerMemberId: owner.memberId, links };
-}
-async function addIdentityAttention(input, paths = createAgentForumPaths()) {
-  if (input.mode === "delegation" && !input.expiresAt) {
-    throw new ServiceError("ATTENTION_EXPIRY_REQUIRED", "delegation attention requires --until UTC timestamp");
-  }
-  if (input.expiresAt && !isCanonicalUtcTimestamp(input.expiresAt)) {
-    throw new ServiceError("ATTENTION_EXPIRY_INVALID", "attention expiry must use canonical UTC milliseconds timestamp");
-  }
-  if (input.expiresAt && new Date(input.expiresAt).valueOf() <= Date.now()) {
-    throw new ServiceError("ATTENTION_EXPIRY_INVALID", "attention expiry must be in the future");
-  }
-  const { forumId, forumPath, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
-  if (owner.memberId === input.subjectMemberId) {
-    throw new ServiceError("ATTENTION_SELF_REFERENCE", "identity attention subject must differ from owner");
-  }
-  const profile = await readJsonDocument(
-    resolve14(forumPath, "members", input.subjectMemberId, "profile.json"),
-    "member-profile"
-  );
-  if (profile.memberId !== input.subjectMemberId) {
-    throw new ServiceError("ATTENTION_SUBJECT_NOT_FOUND", "attention subject profile does not match requested memberId");
-  }
-  const lock = await acquireForumLock({
-    lockPath: resolve14(paths.locksDirectory, `attention-${forumId}-${owner.memberId}.lock`),
-    command: "identity attention add"
-  });
-  try {
-    const state2 = await loadState(forumId, owner.memberId, paths);
-    const timestamp = currentUtcTimestamp();
-    const link2 = {
-      subjectMemberId: input.subjectMemberId,
-      mode: input.mode,
-      reason: input.reason,
-      createdAt: state2.links.find((item) => item.subjectMemberId === input.subjectMemberId)?.createdAt ?? timestamp,
-      ...input.expiresAt ? { expiresAt: input.expiresAt } : {}
-    };
-    const existing = state2.links.find((item) => item.subjectMemberId === input.subjectMemberId);
-    const links = existing ? state2.links.map((item) => item.subjectMemberId === input.subjectMemberId ? link2 : item) : [...state2.links, link2];
-    await writeValidatedJsonAtomic(attentionPath(paths, forumId, owner.memberId), "identity-attention", {
-      ...state2,
-      links,
-      updatedAt: timestamp
-    }, { overwrite: true, mode: 384 });
-    return { action: existing ? "updated" : "added", ownerMemberId: owner.memberId, link: link2 };
-  } finally {
-    await lock.release();
-  }
-}
-async function removeIdentityAttention(input, paths = createAgentForumPaths()) {
-  const { forumId, owner } = await resolveOwner(input.forumAlias, input.ownerMemberId, paths);
-  const lock = await acquireForumLock({
-    lockPath: resolve14(paths.locksDirectory, `attention-${forumId}-${owner.memberId}.lock`),
-    command: "identity attention remove"
-  });
-  try {
-    const state2 = await loadState(forumId, owner.memberId, paths);
-    const links = state2.links.filter((link2) => link2.subjectMemberId !== input.subjectMemberId);
-    const removed = links.length !== state2.links.length;
-    if (removed) {
-      await writeValidatedJsonAtomic(attentionPath(paths, forumId, owner.memberId), "identity-attention", {
-        ...state2,
-        links,
-        updatedAt: currentUtcTimestamp()
-      }, { overwrite: true, mode: 384 });
-    }
-    return { removed, ownerMemberId: owner.memberId };
-  } finally {
-    await lock.release();
-  }
-}
-
-// src/commands/identity.ts
 function identityHelp() {
   return {
     exitCode: ExitCode.Success,
@@ -13383,14 +14612,14 @@ function valueOrError2(parsed, name) {
   const value = requireOption(parsed, name);
   return typeof value === "string" ? value : invalidArgument(value.error);
 }
-async function executeIdentityCommand(args) {
-  const subcommand = args[0];
+async function executeIdentityCommand(args2) {
+  const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return identityHelp();
   }
   try {
     if (subcommand === "recover") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--member-id"],
         flags: ["--set-default"]
       });
@@ -13415,10 +14644,10 @@ profile status: ${result.profileStatus}
       };
     }
     if (subcommand === "attention") {
-      const action = args[1];
+      const action = args2[1];
       if (!action || action === "help" || action === "--help") return identityHelp();
       if (action === "list") {
-        const parsed = parseCommandOptions(args.slice(2), {
+        const parsed = parseCommandOptions(args2.slice(2), {
           values: ["--forum", "--identity"],
           flags: ["--include-expired"]
         });
@@ -13440,7 +14669,7 @@ profile status: ${result.profileStatus}
         };
       }
       if (action === "add") {
-        const parsed = parseCommandOptions(args.slice(2), {
+        const parsed = parseCommandOptions(args2.slice(2), {
           values: ["--forum", "--identity", "--subject", "--mode", "--reason", "--until"]
         });
         if ("error" in parsed) return invalidArgument(parsed.error);
@@ -13472,7 +14701,7 @@ profile status: ${result.profileStatus}
         };
       }
       if (action === "remove") {
-        const parsed = parseCommandOptions(args.slice(2), { values: ["--forum", "--identity", "--subject"] });
+        const parsed = parseCommandOptions(args2.slice(2), { values: ["--forum", "--identity", "--subject"] });
         if ("error" in parsed) return invalidArgument(parsed.error);
         const forum = valueOrError2(parsed, "--forum");
         if (typeof forum !== "string") return forum;
@@ -13496,7 +14725,7 @@ profile status: ${result.profileStatus}
       return invalidArgument(`unknown identity attention action: ${action}`);
     }
     if (subcommand === "create") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--name", "--role", "--responsibility", "--client"],
         flags: ["--no-default"]
       });
@@ -13525,7 +14754,7 @@ default: ${result.defaultIdentityId}
       };
     }
     if (subcommand === "show") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--id"] });
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--id"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const config = await loadLocalConfig();
       const identity = findIdentity(config, parsed.values.get("--id"));
@@ -13543,7 +14772,7 @@ responsibility: ${identity.responsibility}
       };
     }
     if (subcommand === "update") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--id", "--name", "--role", "--responsibility", "--client"],
         flags: ["--clear-client", "--set-default"]
       });
@@ -13575,7 +14804,7 @@ default: ${result.defaultIdentityId}
       };
     }
     if (subcommand === "publish") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--id"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -13595,7 +14824,7 @@ forum: ${result.alias}
       };
     }
     if (subcommand === "leave") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--id"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -13617,547 +14846,10 @@ forum: ${forum}
   }
 }
 
-// src/services/inbox.ts
-init_local_config();
-init_timestamps();
-init_validator();
-init_atomic();
-init_errors();
-init_lock();
-init_paths();
-init_errors2();
-import { readFile as readFile12, readdir as readdir8 } from "node:fs/promises";
-import { resolve as resolve17 } from "node:path";
-
-// src/services/thread-watch.ts
-init_local_config();
-init_timestamps();
-init_validator();
-init_atomic();
-init_errors();
-init_lock();
-init_paths();
-import { readFile as readFile10 } from "node:fs/promises";
-import { resolve as resolve15 } from "node:path";
-function path(paths, forumId, memberId) {
-  return resolve15(forumStatePath(paths, forumId), "watches", `${memberId}.json`);
-}
-async function state(paths, forumId, memberId) {
-  try {
-    const value = JSON.parse(await readFile10(path(paths, forumId, memberId), "utf8"));
-    const valid = validateProtocolDocument("thread-watch", value);
-    if (!valid.ok || value.forumId !== forumId || value.memberId !== memberId) throw new StorageError("SCHEMA_VALIDATION_FAILED", "thread watch state is invalid");
-    return value;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { schemaVersion: "1.0", forumId, memberId, threadIds: [], updatedAt: currentUtcTimestamp() };
-    throw error;
-  }
-}
-async function target(forumAlias, identityId, paths) {
-  const config = await loadLocalConfig(paths);
-  const forum = findForum(config, forumAlias);
-  const identity = findIdentity(config, identityId);
-  return { forumId: forum.forumId, memberId: identity.memberId };
-}
-async function listWatchedThreadIds(input, paths = createAgentForumPaths()) {
-  const item = await target(input.forumAlias, input.identityId, paths);
-  return { ...item, threadIds: (await state(paths, item.forumId, item.memberId)).threadIds };
-}
-async function setThreadWatch(input, paths = createAgentForumPaths()) {
-  const item = await target(input.forumAlias, input.identityId, paths);
-  const lock = await acquireForumLock({ lockPath: resolve15(paths.locksDirectory, `watch-${item.forumId}-${item.memberId}.lock`), command: input.watch ? "thread watch" : "thread unwatch" });
-  try {
-    const existing = await state(paths, item.forumId, item.memberId);
-    const contains = existing.threadIds.includes(input.threadId);
-    const threadIds = input.watch ? contains ? existing.threadIds : [...existing.threadIds, input.threadId] : existing.threadIds.filter((id) => id !== input.threadId);
-    if (contains === input.watch) return { changed: false, ...item, threadIds };
-    await writeValidatedJsonAtomic(path(paths, item.forumId, item.memberId), "thread-watch", { ...existing, threadIds, updatedAt: currentUtcTimestamp() }, { overwrite: true, mode: 384 });
-    return { changed: true, ...item, threadIds };
-  } finally {
-    await lock.release();
-  }
-}
-
-// src/services/timeline-cache.ts
-init_local_config();
-init_runner();
-init_atomic();
-init_lock();
-init_paths();
-import { readFile as readFile11, readdir as readdir7 } from "node:fs/promises";
-import { relative, resolve as resolve16 } from "node:path";
-init_room();
-function cachePath(paths, forumId) {
-  return resolve16(forumStatePath(paths, forumId), "cache", "snapshot.json");
-}
-function sanitizeWarnings(repository, warnings) {
-  return warnings.map((warning) => {
-    const local = relative(repository, warning.path).replaceAll("\\", "/");
-    return {
-      ...warning,
-      path: local && !local.startsWith("..") ? local : "<outside-forum>"
-    };
-  });
-}
-async function readEventDirectory(directory) {
-  let names;
-  try {
-    names = await readdir7(directory);
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
-    throw error;
-  }
-  const events = [];
-  for (const name of names) {
-    try {
-      const event = await readJsonDocument(resolve16(directory, name, "event.json"), "event");
-      events.push({
-        id: String(event.id),
-        kind: "event",
-        type: String(event.type),
-        actorId: String(event.actorId),
-        createdAt: String(event.createdAt),
-        reason: String(event.reason),
-        data: event.data
-      });
-    } catch {
-    }
-  }
-  return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-}
-async function readRoomMembers(repository, roomId) {
-  const members = {};
-  const directory = resolve16(repository, "rooms", roomId, "members");
-  let names = [];
-  try {
-    names = await readdir7(directory);
-  } catch {
-    return members;
-  }
-  for (const name of names) {
-    try {
-      const membership = await readJsonDocument(resolve16(directory, name, "membership.json"), "room-member");
-      members[name] = {
-        role: String(membership.role),
-        responsibility: String(membership.responsibility),
-        status: String(membership.status)
-      };
-    } catch {
-    }
-  }
-  return members;
-}
-async function buildRoom(forumAlias, repository, room, head, paths) {
-  const threads = await listThreads(forumAlias, room.id, paths);
-  const cachedThreads = [];
-  const warnings = [...threads.warnings];
-  for (const thread of threads.threads) {
-    const detail = await showThread(forumAlias, room.id, thread.id, paths);
-    warnings.push(...detail.warnings);
-    const events = await readEventDirectory(
-      resolve16(repository, "rooms", room.id, "threads", thread.id, "events")
-    );
-    const timeline = [
-      ...detail.messages.map((message) => ({ ...message, kind: "message" })),
-      ...events
-    ].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-    cachedThreads.push({ thread: detail.thread, timeline });
-  }
-  cachedThreads.sort(
-    (a, b) => b.thread.lastActivityAt.localeCompare(a.thread.lastActivityAt) || a.thread.id.localeCompare(b.thread.id)
-  );
-  return {
-    cached: {
-      room,
-      sourceHead: head,
-      members: await readRoomMembers(repository, room.id),
-      events: await readEventDirectory(resolve16(repository, "rooms", room.id, "events")),
-      threads: cachedThreads
-    },
-    warnings
-  };
-}
-async function readMembers(repository) {
-  const members = {};
-  const directory = resolve16(repository, "members");
-  let names = [];
-  try {
-    names = await readdir7(directory);
-  } catch {
-    return members;
-  }
-  for (const name of names) {
-    try {
-      const profile = await readJsonDocument(resolve16(directory, name, "profile.json"), "member-profile");
-      members[name] = {
-        displayName: String(profile.displayName),
-        role: String(profile.role),
-        responsibility: String(profile.responsibility),
-        status: String(profile.status)
-      };
-    } catch {
-    }
-  }
-  return members;
-}
-async function loadCache(path2) {
-  try {
-    const value = JSON.parse(await readFile11(path2, "utf8"));
-    const compatible = value.formatVersion === 1 && typeof value.sourceHead === "string" && Array.isArray(value.rooms) && value.rooms.every((room) => room && typeof room === "object" && "members" in room) && value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
-    return compatible ? value : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function affectedRooms(repository, oldHead, newHead) {
-  const diff = runGit(repository, ["diff", "--name-only", `${oldHead}..${newHead}`]);
-  if (diff.status !== 0) return void 0;
-  const ids = /* @__PURE__ */ new Set();
-  for (const path2 of diff.stdout.split(/\r?\n/u)) {
-    const match = /^rooms\/([^/]+)\//u.exec(path2.replaceAll("\\", "/"));
-    if (match?.[1]) ids.add(match[1]);
-  }
-  return ids;
-}
-async function getForumSnapshot(forumAlias, paths = createAgentForumPaths()) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, forumAlias);
-  const head = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
-  const path2 = cachePath(paths, registration.forumId);
-  const existing = await loadCache(path2);
-  if (existing?.sourceHead === head) return { snapshot: existing, cache: "hit" };
-  const lock = await acquireForumLock({
-    lockPath: resolve16(paths.locksDirectory, `${registration.forumId}-cache.lock`),
-    command: "cache rebuild"
-  });
-  try {
-    const latest = await loadCache(path2);
-    if (latest?.sourceHead === head) return { snapshot: latest, cache: "hit" };
-    const affected = latest ? affectedRooms(registration.path, latest.sourceHead, head) : void 0;
-    const [forum, rooms] = await Promise.all([
-      showForum(forumAlias, paths),
-      listRooms(forumAlias, paths)
-    ]);
-    const oldRooms = new Map((latest?.rooms ?? []).map((room) => [room.room.id, room]));
-    const cachedRooms = [];
-    const warnings = [...forum.warnings, ...rooms.warnings];
-    for (const room of rooms.rooms) {
-      const preserved = affected && !affected.has(room.id) ? oldRooms.get(room.id) : void 0;
-      if (preserved) cachedRooms.push(preserved);
-      else {
-        const built = await buildRoom(forumAlias, registration.path, room, head, paths);
-        cachedRooms.push(built.cached);
-        warnings.push(...built.warnings);
-      }
-    }
-    cachedRooms.sort((a, b) => a.room.slug.localeCompare(b.room.slug));
-    const snapshot = {
-      formatVersion: 1,
-      forumAlias,
-      forumId: registration.forumId,
-      sourceHead: head,
-      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      forum: forum.forum,
-      members: await readMembers(registration.path),
-      rooms: cachedRooms,
-      warnings: sanitizeWarnings(registration.path, warnings)
-    };
-    await writeJsonAtomic(path2, snapshot, { overwrite: true, mode: 384 });
-    return { snapshot, cache: latest && affected ? "incremental" : "rebuilt" };
-  } finally {
-    await lock.release();
-  }
-}
-
-// src/services/inbox.ts
-init_room();
-function cursorPath(paths, forumId, memberId) {
-  return resolve17(forumStatePath(paths, forumId), "cursors", `${memberId}.json`);
-}
-async function loadCursor(paths, forumId, memberId) {
-  const path2 = cursorPath(paths, forumId, memberId);
-  try {
-    const value = JSON.parse(await readFile12(path2, "utf8"));
-    const validation = validateProtocolDocument("inbox-cursor", value);
-    if (!validation.ok || value.forumId !== forumId || value.memberId !== memberId) {
-      throw new StorageError(
-        "SCHEMA_VALIDATION_FAILED",
-        `inbox cursor is invalid: ${path2}`,
-        validation.ok ? void 0 : validation.issues
-      );
-    }
-    return value;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return {
-        formatVersion: 1,
-        forumId,
-        memberId,
-        seenIds: [],
-        updatedAt: currentUtcTimestamp()
-      };
-    }
-    if (error instanceof StorageError) throw error;
-    throw new StorageError(
-      "SCHEMA_VALIDATION_FAILED",
-      `inbox cursor contains invalid JSON: ${path2}`
-    );
-  }
-}
-async function readEvents(directory, roomId, roomSlug, threadId, actorId, activeSince) {
-  let names;
-  try {
-    names = await readdir8(directory);
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return { entries: [], warnings: [] };
-    }
-    throw error;
-  }
-  const entries = [];
-  const warnings = [];
-  for (const name of names) {
-    const path2 = resolve17(directory, name, "event.json");
-    try {
-      const event = await readJsonDocument(path2, "event");
-      if (String(event.createdAt) >= activeSince) {
-        entries.push({
-          id: String(event.id),
-          kind: "event",
-          roomId,
-          roomSlug,
-          threadId,
-          type: String(event.type),
-          actorId: String(event.actorId),
-          createdAt: String(event.createdAt),
-          summary: String(event.reason),
-          replyTo: null,
-          mentions: [],
-          relevance: "discovery",
-          reasons: [],
-          summaryTruncated: false
-        });
-      }
-    } catch (error) {
-      warnings.push(protocolWarning(path2, error));
-    }
-  }
-  return { entries, warnings };
-}
-async function collectRelevantEntries(forumAlias, memberId, paths) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, forumAlias);
-  const rooms = await listRooms(forumAlias, paths);
-  const entries = [];
-  const warnings = [...rooms.warnings];
-  for (const room of rooms.rooms) {
-    const membershipPath = resolve17(
-      registration.path,
-      "rooms",
-      room.id,
-      "members",
-      `${memberId}.json`
-    );
-    let membership;
-    try {
-      membership = await readJsonDocument(membershipPath, "room-member");
-    } catch (error) {
-      if (error instanceof StorageError && typeof error.details === "string" && error.details.includes("ENOENT")) continue;
-      warnings.push(protocolWarning(membershipPath, error));
-      continue;
-    }
-    if (membership.status !== "active") continue;
-    const activeSince = String(membership.updatedAt);
-    const roomEvents = await readEvents(
-      resolve17(registration.path, "rooms", room.id, "events"),
-      room.id,
-      room.slug,
-      null,
-      memberId,
-      activeSince
-    );
-    entries.push(...roomEvents.entries);
-    warnings.push(...roomEvents.warnings);
-    const threads = await listThreads(forumAlias, room.id, paths);
-    warnings.push(...threads.warnings);
-    for (const thread of threads.threads) {
-      const detail = await showThread(forumAlias, room.id, thread.id, paths);
-      warnings.push(...detail.warnings);
-      for (const message of detail.messages) {
-        if (message.createdAt < activeSince) continue;
-        const compact = message.body.replace(/\s+/gu, " ").trim();
-        entries.push({
-          id: message.id,
-          kind: "message",
-          roomId: room.id,
-          roomSlug: room.slug,
-          threadId: thread.id,
-          type: message.type,
-          actorId: message.authorId,
-          createdAt: message.createdAt,
-          summary: compact.length > 500 ? `${compact.slice(0, 497)}...` : compact,
-          replyTo: message.replyTo,
-          mentions: message.mentions,
-          relevance: "discovery",
-          reasons: [],
-          summaryTruncated: compact.length > 500
-        });
-      }
-      const threadEvents = await readEvents(
-        resolve17(
-          registration.path,
-          "rooms",
-          room.id,
-          "threads",
-          thread.id,
-          "events"
-        ),
-        room.id,
-        room.slug,
-        thread.id,
-        memberId,
-        activeSince
-      );
-      entries.push(...threadEvents.entries);
-      warnings.push(...threadEvents.warnings);
-    }
-  }
-  const unique = new Map(entries.map((entry) => [entry.id, entry]));
-  return { entries: [...unique.values()], warnings };
-}
-function classifyEntries(entries, attentionIds, watchedIds) {
-  const authorByMessageId = new Map(entries.filter((entry) => entry.kind === "message").map((entry) => [entry.id, entry.actorId]));
-  const priorityTypes = /* @__PURE__ */ new Set(["blocker", "question", "proposal", "decision", "objection", "thread-closed", "thread-reopened"]);
-  return entries.map((entry) => {
-    const reasons = [];
-    if (entry.kind === "message" && entry.mentions.some((id) => attentionIds.has(id))) reasons.push("mention");
-    if (entry.replyTo && attentionIds.has(authorByMessageId.get(entry.replyTo) ?? "")) reasons.push("reply-to-attention");
-    if (reasons.length > 0) return { ...entry, relevance: "direct", reasons };
-    if (entry.threadId && watchedIds.has(entry.threadId)) return { ...entry, relevance: "watched", reasons: ["watched-thread"] };
-    if (priorityTypes.has(entry.type)) return { ...entry, relevance: "priority", reasons: ["priority-type"] };
-    return { ...entry, relevance: "discovery", reasons };
-  });
-}
-function balancedPage(entries, limit) {
-  const ordered = [...entries].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
-  if (limit < 3) return ordered.slice(0, limit);
-  const discoveryQuota = Math.min(Math.max(2, Math.ceil(limit * 0.2)), limit - 1);
-  const discovery = ordered.filter((entry) => entry.relevance === "discovery").slice(0, discoveryQuota);
-  const selected = new Set(discovery.map((entry) => entry.id));
-  return [...ordered.filter((entry) => !selected.has(entry.id)).slice(0, limit - discovery.length), ...discovery].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
-}
-async function showInboxEntry(input, paths = createAgentForumPaths()) {
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, input.forumAlias);
-  const identity = findIdentity(config, input.identityId);
-  const profile = await readJsonDocument(resolve17(registration.path, "members", identity.memberId, "profile.json"), "member-profile");
-  if (profile.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
-  const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
-  const entry = collected.entries.find((item) => item.id === input.id);
-  if (!entry) throw new ServiceError("MESSAGE_NOT_FOUND", `inbox entry was not found or is outside active Room membership: ${input.id}`);
-  try {
-    const cached = await getForumSnapshot(input.forumAlias, paths);
-    const item = cached.snapshot.rooms.flatMap((room) => [...room.events, ...room.threads.flatMap((thread) => thread.timeline)]).find((candidate) => candidate.id === entry.id);
-    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache };
-    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache };
-  } catch {
-  }
-  if (entry.kind === "message" && entry.threadId) {
-    const detail = await showThread(input.forumAlias, entry.roomId, entry.threadId, paths);
-    const message = detail.messages.find((item) => item.id === entry.id);
-    if (!message) throw new ServiceError("MESSAGE_NOT_FOUND", `message was not found: ${entry.id}`);
-    return { entry, content: { body: message.body }, cache: "fallback" };
-  }
-  const eventPath = entry.threadId ? resolve17(registration.path, "rooms", entry.roomId, "threads", entry.threadId, "events", entry.id, "event.json") : resolve17(registration.path, "rooms", entry.roomId, "events", entry.id, "event.json");
-  const event = await readJsonDocument(eventPath, "event");
-  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback" };
-}
-async function getInbox(input, paths = createAgentForumPaths()) {
-  const limit = input.limit ?? 20;
-  const summaryChars = input.summaryChars ?? 180;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-    throw new StorageError("SCHEMA_VALIDATION_FAILED", "inbox limit must be between 1 and 100");
-  }
-  if (!Number.isInteger(summaryChars) || summaryChars < 0 || summaryChars > 500) {
-    throw new StorageError("SCHEMA_VALIDATION_FAILED", "inbox summaryChars must be between 0 and 500");
-  }
-  const config = await loadLocalConfig(paths);
-  const registration = findForum(config, input.forumAlias);
-  const identity = findIdentity(config, input.identityId);
-  const publicProfile2 = await readJsonDocument(
-    resolve17(registration.path, "members", identity.memberId, "profile.json"),
-    "member-profile"
-  );
-  if (publicProfile2.status !== "active") {
-    throw new ServiceError(
-      "FORUM_MEMBERSHIP_REQUIRED",
-      `identity is not an active Forum member: ${identity.memberId}`
-    );
-  }
-  const syncResult = input.sync ? await syncForum(input.forumAlias, paths) : null;
-  const [collected, cursor, attention, watches] = await Promise.all([
-    collectRelevantEntries(input.forumAlias, identity.memberId, paths),
-    loadCursor(paths, registration.forumId, identity.memberId),
-    listIdentityAttention({ forumAlias: input.forumAlias, ownerMemberId: identity.memberId }, paths),
-    listWatchedThreadIds({ forumAlias: input.forumAlias, identityId: identity.memberId }, paths)
-  ]);
-  const seen = new Set(cursor.seenIds);
-  const attentionIds = /* @__PURE__ */ new Set([identity.memberId, ...attention.links.filter((link2) => link2.active).map((link2) => link2.subjectMemberId)]);
-  const unread = classifyEntries(collected.entries, attentionIds, new Set(watches.threadIds)).filter((entry) => entry.actorId !== identity.memberId && !seen.has(entry.id)).sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
-  const page = balancedPage(unread, limit);
-  const idsToMark = input.markAllRead ? unread.map((entry) => entry.id) : input.markRead ? page.map((entry) => entry.id) : [];
-  if (idsToMark.length > 0) {
-    const lock = await acquireForumLock({
-      lockPath: resolve17(
-        paths.locksDirectory,
-        `${registration.forumId}-${identity.memberId}-cursor.lock`
-      ),
-      command: "inbox mark read"
-    });
-    try {
-      const latest = await loadCursor(paths, registration.forumId, identity.memberId);
-      const nextSeen = [.../* @__PURE__ */ new Set([...latest.seenIds, ...idsToMark])];
-      await writeValidatedJsonAtomic(
-        cursorPath(paths, registration.forumId, identity.memberId),
-        "inbox-cursor",
-        {
-          formatVersion: 1,
-          forumId: registration.forumId,
-          memberId: identity.memberId,
-          seenIds: nextSeen,
-          updatedAt: currentUtcTimestamp()
-        },
-        { overwrite: true, mode: 384 }
-      );
-    } finally {
-      await lock.release();
-    }
-  }
-  const relevanceCounts = { direct: 0, watched: 0, priority: 0, discovery: 0 };
-  for (const entry of unread) relevanceCounts[entry.relevance] += 1;
-  const displayed = page.map((entry) => {
-    const truncated = entry.summary.length > summaryChars;
-    return {
-      ...entry,
-      summary: summaryChars === 0 ? "" : truncated ? `${entry.summary.slice(0, Math.max(0, summaryChars - 3))}...` : entry.summary,
-      summaryTruncated: entry.summaryTruncated || truncated
-    };
-  });
-  return {
-    entries: input.markAllRead ? [] : displayed,
-    totalUnread: unread.length,
-    relevanceCounts,
-    hasMore: unread.length > page.length,
-    markedRead: idsToMark.length,
-    warnings: collected.warnings,
-    sync: syncResult
-  };
-}
-
 // src/commands/inbox.ts
-async function executeInboxCommand(args) {
-  const show = args[0] === "show";
-  const parsed = parseCommandOptions(show ? args.slice(1) : args, {
+async function executeInboxCommand(args2) {
+  const show = args2[0] === "show";
+  const parsed = parseCommandOptions(show ? args2.slice(1) : args2, {
     values: show ? ["--forum", "--identity", "--id"] : ["--forum", "--identity", "--limit", "--summary-chars"],
     flags: show ? [] : ["--sync", "--mark-read", "--mark-all-read"]
   });
@@ -14211,14 +14903,15 @@ function postHelp() {
     command: "post.help",
     data: {
       commands: ["create", "reply"],
+      flags: ["--broadcast"],
       repeatableOptions: ["--mention", "--reference"],
       referenceFormat: "<kind>=<value>"
     },
     human: `Post messages
 
 Usage:
-  agent-forum post create --forum <alias> --room <id-or-slug> --thread <thread-id> --type <type> --body <markdown> [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]
-  agent-forum post reply --forum <alias> --room <id-or-slug> --thread <thread-id> --reply-to <message-id> --type <type> --body <markdown> [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]
+  agent-forum post create --forum <alias> --room <id-or-slug> --thread <thread-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]
+  agent-forum post reply --forum <alias> --room <id-or-slug> --thread <thread-id> --reply-to <message-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]
 `
   };
 }
@@ -14240,8 +14933,8 @@ function parseReferences(values) {
   }
   return references;
 }
-async function executePostCommand(args) {
-  const subcommand = args[0];
+async function executePostCommand(args2) {
+  const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return postHelp();
   }
@@ -14249,7 +14942,7 @@ async function executePostCommand(args) {
     return invalidArgument(`unknown post subcommand: ${subcommand}`);
   }
   try {
-    const parsed = parseCommandOptions(args.slice(1), {
+    const parsed = parseCommandOptions(args2.slice(1), {
       values: [
         "--forum",
         "--room",
@@ -14259,7 +14952,8 @@ async function executePostCommand(args) {
         "--identity",
         ...subcommand === "reply" ? ["--reply-to"] : []
       ],
-      repeatableValues: ["--mention", "--reference"]
+      repeatableValues: ["--mention", "--reference"],
+      flags: ["--broadcast"]
     });
     if ("error" in parsed) return invalidArgument(parsed.error);
     const requiredValues = [
@@ -14294,7 +14988,8 @@ async function executePostCommand(args) {
       mentions,
       references,
       ...subcommand === "reply" ? { replyTo: values.get("--reply-to") } : {},
-      ...identityId ? { identityId } : {}
+      ...identityId ? { identityId } : {},
+      ...parsed.flags.has("--broadcast") ? { broadcast: true } : {}
     });
     return {
       exitCode: ExitCode.Success,
@@ -14349,20 +15044,20 @@ function valueOrError3(parsed, name) {
   const value = requireOption(parsed, name);
   return typeof value === "string" ? value : invalidArgument(value.error);
 }
-function commonRoomOptions(args, extraValues = []) {
-  const parsed = parseCommandOptions(args, {
+function commonRoomOptions(args2, extraValues = []) {
+  const parsed = parseCommandOptions(args2, {
     values: ["--forum", "--room", "--identity", ...extraValues]
   });
   return "error" in parsed ? invalidArgument(parsed.error) : parsed;
 }
-async function executeRoomCommand(args) {
-  const subcommand = args[0];
+async function executeRoomCommand(args2) {
+  const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return roomHelp();
   }
   try {
     if (subcommand === "create") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: [
           "--forum",
           "--slug",
@@ -14399,7 +15094,7 @@ commit: ${result.commit}
       };
     }
     if (subcommand === "list") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -14415,7 +15110,7 @@ commit: ${result.commit}
       };
     }
     if (subcommand === "show") {
-      const parsed = commonRoomOptions(args.slice(1));
+      const parsed = commonRoomOptions(args2.slice(1));
       if ("exitCode" in parsed) return parsed;
       const forumAlias = valueOrError3(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
@@ -14433,7 +15128,7 @@ ${result.room.description}
       };
     }
     if (subcommand === "join") {
-      const parsed = commonRoomOptions(args.slice(1), [
+      const parsed = commonRoomOptions(args2.slice(1), [
         "--role",
         "--responsibility"
       ]);
@@ -14461,7 +15156,7 @@ ${result.room.description}
       };
     }
     if (subcommand === "leave") {
-      const parsed = commonRoomOptions(args.slice(1));
+      const parsed = commonRoomOptions(args2.slice(1));
       if ("exitCode" in parsed) return parsed;
       const forumAlias = valueOrError3(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
@@ -14483,7 +15178,7 @@ ${result.room.description}
     }
     if (subcommand === "rename" || subcommand === "set-description" || subcommand === "archive" || subcommand === "restore") {
       const extra = subcommand === "rename" ? ["--title", "--reason"] : subcommand === "set-description" ? ["--description", "--reason"] : ["--reason"];
-      const parsed = commonRoomOptions(args.slice(1), extra);
+      const parsed = commonRoomOptions(args2.slice(1), extra);
       if ("exitCode" in parsed) return parsed;
       const forumAlias = valueOrError3(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
@@ -14561,12 +15256,12 @@ function valueOrError4(parsed, name) {
   const value = requireOption(parsed, name);
   return typeof value === "string" ? value : invalidArgument(value.error);
 }
-async function executeSetupCommand(args) {
-  const firstArgument = args[0];
+async function executeSetupCommand(args2) {
+  const firstArgument = args2[0];
   if (!firstArgument || firstArgument === "help" || firstArgument === "--help") {
     return setupHelp();
   }
-  const parsed = parseCommandOptions(args, {
+  const parsed = parseCommandOptions(args2, {
     values: [
       "--alias",
       "--name",
@@ -14743,28 +15438,21 @@ async function executeSetupCommand(args) {
 }
 
 // src/skill/installer.ts
-import { createHash, randomUUID as randomUUID6 } from "node:crypto";
+import { createHash as createHash2, randomUUID as randomUUID6 } from "node:crypto";
 import {
   cp,
-  mkdir as mkdir5,
-  readFile as readFile13,
-  readdir as readdir9,
-  rename as rename5,
-  rm as rm9,
-  stat as stat4,
+  mkdir as mkdir6,
+  readFile as readFile16,
+  readdir as readdir10,
+  rename as rename6,
+  rm as rm11,
+  stat as stat5,
   writeFile as writeFile2
 } from "node:fs/promises";
-import { homedir as homedir2 } from "node:os";
-import { dirname as dirname3, relative as relative2, resolve as resolve18, sep as sep2 } from "node:path";
-import { fileURLToPath } from "node:url";
+import { homedir as homedir3 } from "node:os";
+import { dirname as dirname5, relative as relative2, resolve as resolve21, sep as sep3 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
-
-// src/version.ts
-var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
-var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.7" : "0.0.0-dev";
-
-// src/skill/installer.ts
 var SkillInstallationError = class extends Error {
   constructor(code, message) {
     super(message);
@@ -14777,26 +15465,29 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve18(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve21(homeDirectory, ".AgentForum", "state", "installations.json");
 }
-function namedSkillDestination(target2, skillName, homeDirectory = homedir2()) {
+function namedSkillDestination(target2, skillName, homeDirectory = homedir3()) {
   if (commonTargets.has(target2)) {
-    return resolve18(homeDirectory, ".agents", "skills", skillName);
+    return resolve21(homeDirectory, ".agents", "skills", skillName);
   }
   if (target2 === "claude-code") {
-    return resolve18(homeDirectory, ".claude", "skills", skillName);
+    return resolve21(homeDirectory, ".claude", "skills", skillName);
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target2}`);
 }
-function skillDestination(target2, homeDirectory = homedir2()) {
+function skillDestination(target2, homeDirectory = homedir3()) {
   return namedSkillDestination(target2, "agent-forum", homeDirectory);
 }
-function viewerSkillDestination(target2, homeDirectory = homedir2()) {
+function viewerSkillDestination(target2, homeDirectory = homedir3()) {
   return namedSkillDestination(target2, "agent-forum-viewer", homeDirectory);
+}
+function dashboardSkillDestination(target2, homeDirectory = homedir3()) {
+  return namedSkillDestination(target2, "agent-forum-dashboard", homeDirectory);
 }
 async function pathExists4(path2) {
   try {
-    await stat4(path2);
+    await stat5(path2);
     return true;
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
@@ -14807,7 +15498,7 @@ async function pathExists4(path2) {
 }
 async function loadState2(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile13(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile16(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -14824,7 +15515,7 @@ async function loadState2(homeDirectory) {
 }
 async function saveState(homeDirectory, state2) {
   const destination = stateFile(homeDirectory);
-  await mkdir5(dirname3(destination), { recursive: true });
+  await mkdir6(dirname5(destination), { recursive: true });
   const temporary = `${destination}.tmp-${randomUUID6()}`;
   try {
     await writeFile2(temporary, `${JSON.stringify(state2, null, 2)}
@@ -14832,18 +15523,18 @@ async function saveState(homeDirectory, state2) {
       encoding: "utf8",
       flag: "wx"
     });
-    await rename5(temporary, destination);
+    await rename6(temporary, destination);
   } catch (error) {
-    await rm9(temporary, { force: true });
+    await rm11(temporary, { force: true });
     throw error;
   }
 }
 async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const files = {};
-  const entries = await readdir9(current, { withFileTypes: true });
+  const entries = await readdir10(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve18(current, entry.name);
+    const absolute = resolve21(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -14851,8 +15542,8 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
           `symbolic links are not allowed in the managed skill payload: ${absolute}`
         );
       }
-      const relativePath2 = relative2(root, absolute).split(sep2).join("/");
-      files[relativePath2] = "SYMLINK";
+      const relativePath3 = relative2(root, absolute).split(sep3).join("/");
+      files[relativePath3] = "SYMLINK";
       continue;
     }
     if (entry.isDirectory()) {
@@ -14863,8 +15554,8 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
       continue;
     }
     if (!entry.isFile()) continue;
-    const relativePath = relative2(root, absolute).split(sep2).join("/");
-    files[relativePath] = createHash("sha256").update(await readFile13(absolute)).digest("hex");
+    const relativePath2 = relative2(root, absolute).split(sep3).join("/");
+    files[relativePath2] = createHash2("sha256").update(await readFile16(absolute)).digest("hex");
   }
   return files;
 }
@@ -14876,11 +15567,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve18(dirname3(fileURLToPath(import.meta.url)), ".."),
-    resolve18(process.cwd(), "skills", "agent-forum")
+    resolve21(dirname5(fileURLToPath2(import.meta.url)), ".."),
+    resolve21(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists4(resolve18(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists4(resolve21(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -14888,36 +15579,41 @@ async function resolveSkillSource(explicit) {
   );
 }
 async function replaceDirectory(source, destination) {
-  await mkdir5(dirname3(destination), { recursive: true });
+  await mkdir6(dirname5(destination), { recursive: true });
   const staging = `${destination}.staging-${randomUUID6()}`;
   const backup = `${destination}.backup-${randomUUID6()}`;
   let movedExisting = false;
   try {
     await cp(source, staging, { recursive: true, errorOnExist: true });
     if (await pathExists4(destination)) {
-      await rename5(destination, backup);
+      await rename6(destination, backup);
       movedExisting = true;
     }
-    await rename5(staging, destination);
-    if (movedExisting) await rm9(backup, { recursive: true, force: true });
+    await rename6(staging, destination);
+    if (movedExisting) await rm11(backup, { recursive: true, force: true });
   } catch (error) {
-    await rm9(staging, { recursive: true, force: true });
+    await rm11(staging, { recursive: true, force: true });
     if (movedExisting && !await pathExists4(destination)) {
-      await rename5(backup, destination);
+      await rename6(backup, destination);
     }
     throw error;
   }
 }
 async function installSkill(options) {
-  const homeDirectory = options.homeDirectory ?? homedir2();
+  const homeDirectory = options.homeDirectory ?? homedir3();
   const coreSource = await resolveSkillSource(options.sourceDirectory);
-  const viewerSource = resolve18(dirname3(coreSource), "agent-forum-viewer");
-  if (!await pathExists4(resolve18(viewerSource, "SKILL.md"))) {
+  const viewerSource = resolve21(dirname5(coreSource), "agent-forum-viewer");
+  if (!await pathExists4(resolve21(viewerSource, "SKILL.md"))) {
     throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-viewer/SKILL.md");
+  }
+  const dashboardSource = resolve21(dirname5(coreSource), "agent-forum-dashboard");
+  if (!await pathExists4(resolve21(dashboardSource, "SKILL.md"))) {
+    throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-dashboard/SKILL.md");
   }
   const payloads = [
     { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
-    { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) }
+    { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) },
+    { source: dashboardSource, destination: dashboardSkillDestination(options.target, homeDirectory) }
   ];
   const state2 = await loadState2(homeDirectory);
   const inspected = await Promise.all(payloads.map(async (payload) => {
@@ -14968,9 +15664,9 @@ async function installSkill(options) {
   const action = inspected.every((item) => item.unchanged) ? "unchanged" : hasManagedUpdate ? "updated" : "installed";
   return { action, target: options.target, destination: destinations[0], destinations, version: VERSION, files, requiresReload: true };
 }
-async function getSkillStatus(target2, homeDirectory = homedir2()) {
+async function getSkillStatus(target2, homeDirectory = homedir3()) {
   const destination = skillDestination(target2, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(target2, homeDirectory)];
+  const destinations = [destination, viewerSkillDestination(target2, homeDirectory), dashboardSkillDestination(target2, homeDirectory)];
   const state2 = await loadState2(homeDirectory);
   const records = destinations.map((path2) => state2.installations.find(
     (installation) => installation.path === path2 && installation.targets.includes(target2)
@@ -14989,9 +15685,9 @@ async function getSkillStatus(target2, homeDirectory = homedir2()) {
   return { target: target2, destination, destinations, status: modified ? "modified" : "installed", version: records[0].version, files };
 }
 async function uninstallSkill(options) {
-  const homeDirectory = options.homeDirectory ?? homedir2();
+  const homeDirectory = options.homeDirectory ?? homedir3();
   const destination = skillDestination(options.target, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(options.target, homeDirectory)];
+  const destinations = [destination, viewerSkillDestination(options.target, homeDirectory), dashboardSkillDestination(options.target, homeDirectory)];
   const state2 = await loadState2(homeDirectory);
   const records = state2.installations.filter((installation) => destinations.includes(installation.path) && installation.targets.includes(options.target));
   if (records.length === 0) return { action: "not-installed", target: options.target, destination, destinations, removedFiles: false };
@@ -15008,7 +15704,7 @@ async function uninstallSkill(options) {
   for (const record of records) {
     const remaining = record.targets.filter((target2) => target2 !== options.target);
     if (remaining.length === 0) {
-      await rm9(record.path, { recursive: true, force: true });
+      await rm11(record.path, { recursive: true, force: true });
       installations = installations.filter((candidate) => candidate.path !== record.path);
     } else {
       installations = installations.map((candidate) => candidate.path === record.path ? { ...candidate, targets: remaining } : candidate);
@@ -15017,11 +15713,12 @@ async function uninstallSkill(options) {
   await saveState(homeDirectory, { formatVersion: 1, installations });
   return { action: removesFiles ? "uninstalled" : "unregistered", target: options.target, destination, destinations, removedFiles: removesFiles };
 }
-async function doctorSkill(target2, homeDirectory = homedir2()) {
+async function doctorSkill(target2, homeDirectory = homedir3()) {
   const major = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
   const git = spawnSync2("git", ["--version"], {
     encoding: "utf8",
-    shell: false
+    shell: false,
+    windowsHide: true
   });
   const installation = await getSkillStatus(target2, homeDirectory);
   const node = { ok: major >= 20, version: process.versions.node, required: ">=20" };
@@ -15050,14 +15747,14 @@ function usageError(message) {
 `
   };
 }
-function parseOptions(args) {
+function parseOptions(args2) {
   const parsed = {
     scope: "user",
     dryRun: false,
     force: false
   };
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
+  for (let index = 0; index < args2.length; index += 1) {
+    const argument = args2[index];
     if (argument === "--dry-run") {
       parsed.dryRun = true;
       continue;
@@ -15067,7 +15764,7 @@ function parseOptions(args) {
       continue;
     }
     if (argument === "--target") {
-      const value = args[index + 1];
+      const value = args2[index + 1];
       if (!value || !targets.has(value)) {
         return usageError(
           "--target must be one of: pi, opencode, codex, claude-code"
@@ -15078,7 +15775,7 @@ function parseOptions(args) {
       continue;
     }
     if (argument === "--scope") {
-      const value = args[index + 1];
+      const value = args2[index + 1];
       if (value !== "user") {
         return usageError("only --scope user is supported in the technical preview");
       }
@@ -15090,8 +15787,8 @@ function parseOptions(args) {
   if (!parsed.target) return usageError("--target is required");
   return { ...parsed, target: parsed.target };
 }
-async function executeSkillCommand(args) {
-  const subcommand = args[0];
+async function executeSkillCommand(args2) {
+  const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return {
       exitCode: ExitCode.Success,
@@ -15117,7 +15814,7 @@ Options:
   if (!["install", "update", "uninstall", "status", "doctor"].includes(subcommand)) {
     return usageError(`unknown skill subcommand: ${subcommand}`);
   }
-  const options = parseOptions(args.slice(1));
+  const options = parseOptions(args2.slice(1));
   if ("exitCode" in options) return options;
   try {
     if (subcommand === "install" || subcommand === "update") {
@@ -15194,7 +15891,7 @@ function threadHelp() {
     human: `Thread management
 
 Usage:
-  agent-forum thread create --forum <alias> --room <id-or-slug> --kind <kind> --title <title> --body <markdown>
+  agent-forum thread create --forum <alias> --room <id-or-slug> --kind <kind> --title <title> --body <markdown> [--broadcast]
   agent-forum thread list --forum <alias> --room <id-or-slug>
   agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id>
   agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>
@@ -15208,14 +15905,14 @@ function required(parsed, name) {
   const result = requireOption(parsed, name);
   return typeof result === "string" ? result : invalidArgument(result.error);
 }
-async function executeThreadCommand(args) {
-  const subcommand = args[0];
+async function executeThreadCommand(args2) {
+  const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return threadHelp();
   }
   try {
     if (subcommand === "watch-list") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--identity"] });
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--forum", "--identity"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = required(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
@@ -15225,7 +15922,7 @@ async function executeThreadCommand(args) {
 ` : "No watched threads.\n" };
     }
     if (subcommand === "watch" || subcommand === "unwatch") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--thread", "--identity"] });
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--thread", "--identity"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = required(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
@@ -15240,7 +15937,7 @@ async function executeThreadCommand(args) {
 ` };
     }
     if (subcommand === "create") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: [
           "--forum",
           "--room",
@@ -15248,7 +15945,8 @@ async function executeThreadCommand(args) {
           "--title",
           "--body",
           "--identity"
-        ]
+        ],
+        flags: ["--broadcast"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = required(parsed, "--forum");
@@ -15268,7 +15966,8 @@ async function executeThreadCommand(args) {
         kind,
         title,
         body,
-        ...identityId ? { identityId } : {}
+        ...identityId ? { identityId } : {},
+        ...parsed.flags.has("--broadcast") ? { broadcast: true } : {}
       });
       return {
         exitCode: ExitCode.Success,
@@ -15281,7 +15980,7 @@ commit: ${result.commit}
       };
     }
     if (subcommand === "list") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--room"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -15299,7 +15998,7 @@ commit: ${result.commit}
       };
     }
     if (subcommand === "show") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--room", "--thread"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
@@ -15322,7 +16021,7 @@ messages: ${result.thread.messageCount}
       };
     }
     if (subcommand === "rename" || subcommand === "close" || subcommand === "reopen") {
-      const parsed = parseCommandOptions(args.slice(1), {
+      const parsed = parseCommandOptions(args2.slice(1), {
         values: [
           "--forum",
           "--room",
@@ -15381,9 +16080,9 @@ init_atomic();
 init_lock();
 init_paths();
 import { randomBytes as randomBytes2, randomUUID as randomUUID7 } from "node:crypto";
-import { spawn } from "node:child_process";
-import { mkdir as mkdir6, readFile as readFile14, readdir as readdir10, rm as rm10 } from "node:fs/promises";
-import { dirname as dirname4, resolve as resolve19 } from "node:path";
+import { spawn as spawn3 } from "node:child_process";
+import { mkdir as mkdir7, readFile as readFile17, readdir as readdir11, rm as rm12 } from "node:fs/promises";
+import { dirname as dirname6, resolve as resolve22 } from "node:path";
 init_errors2();
 
 // src/viewer/server.ts
@@ -15628,7 +16327,7 @@ function renderThread({ thread, timeline }, snapshot) {
   const items = timeline.map((item, index) => renderItem(item, timeline, snapshot, index, item.kind === "message" ? tree.issues.get(item.id) : void 0)).join("");
   return `<section class="thread" id="thread-${threadId}" data-title="${title.toLowerCase()}" data-thread-status="${escapeHtml(thread.status)}"><div class="thread-head"><div class="thread-icon status-${escapeHtml(thread.status.toLowerCase())}"></div><div class="thread-meta"><h2>${title}${statusBadge(thread.status, "thread")}</h2><div class="meta">${biHtml(metaEn, metaZh)}</div></div><div class="thread-actions"><button class="copy btn-sm" data-copy="${threadId}" data-copy-en="${threadId}" data-copy-zh="${threadId}" data-en="Copy thread ID" data-zh="\u590D\u5236 Thread ID">Copy thread ID</button></div></div><div class="thread-body">${items}</div></section>`;
 }
-function renderViewerHtml(snapshot, room) {
+function renderViewerHtml(snapshot, room, freshness = { state: "fresh" }) {
   const activeMembers = Object.entries(room.members ?? {}).filter(([, membership]) => membership.status === "active").map(([id, membership]) => {
     const profile = snapshot.members[id];
     return `<li><span class="member-name">${escapeHtml(profile?.displayName ?? id)}</span><span class="role">${escapeHtml(membership.role)}</span><span class="responsibility">${escapeHtml(membership.responsibility)}</span></li>`;
@@ -15646,7 +16345,8 @@ function renderViewerHtml(snapshot, room) {
   const noThreads = `<div class="empty">${biText("No threads yet.", "\u8FD8\u6CA1\u6709 Thread\u3002")}</div>`;
   const roomArchived = room.room.status.toLowerCase() === "archived" ? `<aside class="room-state archived"><strong>${biText("Archived room", "\u5DF2\u5F52\u6863 Room")}</strong><span>${biText("This Room is read-only. Return to your Agent conversation to request a restore or correction.", "\u6B64 Room \u4E3A\u53EA\u8BFB\u72B6\u6001\u3002\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u8BF7\u6C42\u6062\u590D\u6216\u7EA0\u6B63\u3002")}</span></aside>` : "";
   const revision = snapshot.sourceHead;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}.appbar-main{min-width:0;flex:1}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 12px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.markdown .md-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-sm)}.markdown .md-table{width:100%;border-collapse:collapse;font-size:13px}.markdown .md-table th,.markdown .md-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;white-space:nowrap}.markdown .md-table th{background:var(--surface-2);font-weight:600;text-align:left}.markdown .md-table tbody tr:last-child td{border-bottom:0}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);padding:12px 14px;margin:0 0 20px}.warnings-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}.warnings h2{margin:0;font-size:13px;color:var(--warning)}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:3px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}.view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}.view-toggle button{border:0;border-radius:0;padding:6px 10px}.view-toggle button+button{border-left:1px solid var(--border)}.view-toggle button.active{background:var(--accent);color:#fff}.status-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}.room-status{margin-left:0}.status-open,.status-active{background:var(--accent-soft);color:var(--accent-2)}.status-closed,.status-archived{background:var(--neutral-bg);color:var(--neutral)}.status-unknown{background:var(--warning-bg);color:var(--warning)}.thread-icon.status-open,.thread-icon.status-active{background:var(--accent)}.thread-icon.status-closed{background:var(--neutral)}.thread-icon.status-archived{background:var(--neutral)}.outline-item{display:flex;align-items:center;gap:8px}.outline-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}.outline-status.status-open,.outline-status.status-active{background:var(--accent)}.outline-status.status-closed,.outline-status.status-archived{background:var(--neutral)}.outline-status.status-unknown{background:var(--warning)}.outline-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.outline-count{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}.room-state{display:flex;gap:8px;align-items:flex-start;background:var(--neutral-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--text-2)}.room-state strong{color:var(--neutral);white-space:nowrap}.tree-issue{display:none;margin:8px 0;padding:6px 9px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--warning);font-size:12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}body[data-view="tree"] .tree-issue{display:block}.tree-node{position:relative}.tree-children{margin:0 0 0 28px;padding-left:16px;border-left:2px solid var(--border-soft)}.tree-children>.tree-node{position:relative}.tree-children>.tree-node::before{content:"";position:absolute;top:30px;left:-18px;width:16px;border-top:2px solid var(--border-soft)}.tree-node>.item{padding-top:12px}.tree-node>.item:last-child{border-bottom:1px solid var(--border-soft)}.tree-node>.item .item-line{background:var(--accent-soft)}.tree-activity{margin:16px 0 2px;padding:12px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}.tree-activity h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.tree-activity-note{margin:0 0 8px;font-size:12px;color:var(--text-3)}.tree-activity .item{padding:10px 0}.tree-activity .item:last-child{border-bottom:0}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}.tree-children{margin-left:16px;padding-left:10px}.tree-children>.tree-node::before{left:-12px;width:10px}}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-main"><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${statusBadge(room.room.status, "room")} \xB7 ${biHtml("cache", "\u7F13\u5B58")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code></div></div><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search threads\u2026" data-placeholder-zh="\u641C\u7D22\u4E3B\u9898\u2026" placeholder="Search threads\u2026" autocomplete="off"></div><div class="toolbar"><div class="view-toggle" role="group" aria-label="Viewer mode"><button id="view-timeline" class="active" aria-pressed="true" data-en="Timeline" data-zh="\u65F6\u95F4\u7EBF">Timeline</button><button id="view-tree" aria-pressed="false" data-en="Tree" data-zh="\u6811\u72B6">Tree</button></div><button id="lang-toggle" data-en="\u4E2D\u6587" data-zh="EN">\u4E2D\u6587</button><button id="close" data-en="Close" data-zh="\u5173\u95ED">Close</button></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="\u4E3B\u9898">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Room events", "Room \u4E8B\u4EF6")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="\u6210\u5458">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "\u53EA\u8BFB\u89C6\u56FE\u3002\u5982\u9700\u7EA0\u6B63\uFF0C\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u63D0\u51FA\uFF1B\u6B64\u5904\u4E0D\u4F1A\u4FEE\u6539\u5386\u53F2\u3002")}</p>${roomArchived}${warnings}${roomEvents}${threads || noThreads}<div class="search-empty" id="search-empty">${biText("No threads match your search.", "\u6CA1\u6709\u5339\u914D\u7684\u4E3B\u9898\u3002")}</div></main></div><script nonce="agent-forum">const revision="${escapeHtml(revision)}";let lang=navigator.language.startsWith('zh')?'zh':'en';function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();document.getElementById('lang-toggle').addEventListener('click',()=>{lang=lang==='en'?'zh':'en';applyLang();});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));function restoreTimeline(thread){const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]')).sort((a,b)=>Number(a.dataset.timelineIndex)-Number(b.dataset.timelineIndex));body.replaceChildren(...items);}function replyRelations(messages){const byId=new Map(messages.map(item=>[item.dataset.messageId,item]));const parents=new Map();messages.forEach(item=>{const id=item.dataset.messageId;const parent=item.dataset.replyTo;if(id&&parent&&parent!==id&&byId.has(parent))parents.set(id,parent);});const cut=new Set();messages.forEach(item=>{const visited=new Map();let current=item.dataset.messageId;while(current&&parents.has(current)){if(visited.has(current)){Array.from(visited.keys()).slice(visited.get(current)).forEach(id=>cut.add(id));break;}visited.set(current,visited.size);current=parents.get(current);}});const children=new Map(messages.map(item=>[item.dataset.messageId,[]]));const roots=[];messages.forEach(item=>{const id=item.dataset.messageId;const parent=id?parents.get(id):undefined;if(id&&parent&&!cut.has(id))children.get(parent).push(id);else roots.push(id);});return{byId,children,roots};}function renderTree(thread){restoreTimeline(thread);const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]'));const messages=items.filter(item=>item.classList.contains('message'));const events=items.filter(item=>item.classList.contains('event'));const relation=replyRelations(messages);body.replaceChildren();const appendNode=id=>{const item=relation.byId.get(id);if(!item)return;const node=document.createElement('div');node.className='tree-node';node.append(item);const children=relation.children.get(id)||[];if(children.length){const branch=document.createElement('div');branch.className='tree-children';children.forEach(childId=>branch.append(appendNode(childId)));node.append(branch);}return node;};relation.roots.forEach(id=>{const node=appendNode(id);if(node)body.append(node);});if(events.length){const activity=document.createElement('section');activity.className='tree-activity';const heading=document.createElement('h3');heading.dataset.en='Activity';heading.dataset.zh='\u6D3B\u52A8\u4E8B\u4EF6';heading.textContent=lang==='zh'?heading.dataset.zh:heading.dataset.en;const note=document.createElement('p');note.className='tree-activity-note';note.dataset.en='Lifecycle events are shown separately because they are not replies.';note.dataset.zh='\u751F\u547D\u5468\u671F\u4E8B\u4EF6\u72EC\u7ACB\u663E\u793A\uFF0C\u56E0\u4E3A\u5B83\u4EEC\u4E0D\u662F\u56DE\u590D\u3002';note.textContent=lang==='zh'?note.dataset.zh:note.dataset.en;activity.append(heading,note,...events);body.append(activity);}}const viewTimeline=document.getElementById('view-timeline');const viewTree=document.getElementById('view-tree');function setView(mode){document.body.dataset.view=mode;viewTimeline.classList.toggle('active',mode==='timeline');viewTree.classList.toggle('active',mode==='tree');viewTimeline.setAttribute('aria-pressed',String(mode==='timeline'));viewTree.setAttribute('aria-pressed',String(mode==='tree'));document.querySelectorAll('.thread').forEach(thread=>{if(mode==='tree')renderTree(thread);else restoreTimeline(thread);});}viewTimeline.addEventListener('click',()=>setView('timeline'));viewTree.addEventListener('click',()=>setView('tree'));const search=document.getElementById('search');const outlineItems=document.querySelectorAll('.outline-item');const threads=document.querySelectorAll('.thread');const searchEmpty=document.getElementById('search-empty');function runSearch(){const q=(search.value||'').trim().toLowerCase();let visibleCount=0;outlineItems.forEach(item=>{const title=item.dataset.title||'';const match=!q||title.includes(q);item.classList.toggle('hidden',!match);if(match)visibleCount++;});threads.forEach(t=>{const title=t.dataset.title||'';const match=!q||title.includes(q);t.classList.toggle('hidden',!match);});searchEmpty.style.display=visibleCount===0&&q?'block':'none';}if(search)search.addEventListener('input',runSearch);const observer=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const id=e.target.id;outlineItems.forEach(i=>i.classList.toggle('active',i.getAttribute('href')==='#'+id));}});},{rootMargin:'-72px 0px -70% 0px'});threads.forEach(t=>observer.observe(t));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<div style="max-width:600px;margin:80px auto;padding:20px;font-family:system-ui;text-align:center;color:#59636e"><p>Viewer closed.</p></div>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></body></html>`;
+  const freshnessNotice = freshness.state === "stale" ? `<aside class="sync-state stale"><strong>${biText("Content may be stale", "\u5185\u5BB9\u53EF\u80FD\u5DF2\u8FC7\u671F")}</strong><span>${escapeHtml(freshness.message ?? "Remote sync did not complete.")}</span><button type="button" onclick="location.reload()">${biText("Retry sync", "\u91CD\u8BD5\u540C\u6B65")}</button></aside>` : `<aside class="sync-state fresh"><strong>${biText("Remote sync complete", "\u8FDC\u7AEF\u540C\u6B65\u5B8C\u6210")}</strong><span>${biText("This page was generated after the latest successful pull-only sync.", "\u672C\u9875\u9762\u5728\u6700\u8FD1\u4E00\u6B21\u6210\u529F\u7684\u53EA\u62C9\u53D6\u540C\u6B65\u540E\u751F\u6210\u3002")}</span></aside>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}.appbar-main{min-width:0;flex:1}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 12px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.markdown .md-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-sm)}.markdown .md-table{width:100%;border-collapse:collapse;font-size:13px}.markdown .md-table th,.markdown .md-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;white-space:nowrap}.markdown .md-table th{background:var(--surface-2);font-weight:600;text-align:left}.markdown .md-table tbody tr:last-child td{border-bottom:0}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);padding:12px 14px;margin:0 0 20px}.warnings-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}.warnings h2{margin:0;font-size:13px;color:var(--warning)}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:3px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}.view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}.view-toggle button{border:0;border-radius:0;padding:6px 10px}.view-toggle button+button{border-left:1px solid var(--border)}.view-toggle button.active{background:var(--accent);color:#fff}.status-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}.room-status{margin-left:0}.status-open,.status-active{background:var(--accent-soft);color:var(--accent-2)}.status-closed,.status-archived{background:var(--neutral-bg);color:var(--neutral)}.status-unknown{background:var(--warning-bg);color:var(--warning)}.thread-icon.status-open,.thread-icon.status-active{background:var(--accent)}.thread-icon.status-closed{background:var(--neutral)}.thread-icon.status-archived{background:var(--neutral)}.outline-item{display:flex;align-items:center;gap:8px}.outline-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}.outline-status.status-open,.outline-status.status-active{background:var(--accent)}.outline-status.status-closed,.outline-status.status-archived{background:var(--neutral)}.outline-status.status-unknown{background:var(--warning)}.outline-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.outline-count{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}.room-state{display:flex;gap:8px;align-items:flex-start;background:var(--neutral-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--text-2)}.room-state strong{color:var(--neutral);white-space:nowrap}.tree-issue{display:none;margin:8px 0;padding:6px 9px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--warning);font-size:12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}body[data-view="tree"] .tree-issue{display:block}.tree-node{position:relative}.tree-children{margin:0 0 0 28px;padding-left:16px;border-left:2px solid var(--border-soft)}.tree-children>.tree-node{position:relative}.tree-children>.tree-node::before{content:"";position:absolute;top:30px;left:-18px;width:16px;border-top:2px solid var(--border-soft)}.tree-node>.item{padding-top:12px}.tree-node>.item:last-child{border-bottom:1px solid var(--border-soft)}.tree-node>.item .item-line{background:var(--accent-soft)}.tree-activity{margin:16px 0 2px;padding:12px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}.tree-activity h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.tree-activity-note{margin:0 0 8px;font-size:12px;color:var(--text-3)}.tree-activity .item{padding:10px 0}.tree-activity .item:last-child{border-bottom:0}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}.tree-children{margin-left:16px;padding-left:10px}.tree-children>.tree-node::before{left:-12px;width:10px}}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-main"><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${statusBadge(room.room.status, "room")} \xB7 ${biHtml("snapshot", "\u5FEB\u7167")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code></div></div><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search threads\u2026" data-placeholder-zh="\u641C\u7D22\u4E3B\u9898\u2026" placeholder="Search threads\u2026" autocomplete="off"></div><div class="toolbar"><div class="view-toggle" role="group" aria-label="Viewer mode"><button id="view-timeline" class="active" aria-pressed="true" data-en="Timeline" data-zh="\u65F6\u95F4\u7EBF">Timeline</button><button id="view-tree" aria-pressed="false" data-en="Tree" data-zh="\u6811\u72B6">Tree</button></div><button id="lang-toggle" data-en="\u4E2D\u6587" data-zh="EN">\u4E2D\u6587</button><button id="close" data-en="Close" data-zh="\u5173\u95ED">Close</button></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="\u4E3B\u9898">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Room events", "Room \u4E8B\u4EF6")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="\u6210\u5458">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "\u53EA\u8BFB\u89C6\u56FE\u3002\u5982\u9700\u7EA0\u6B63\uFF0C\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u63D0\u51FA\uFF1B\u6B64\u5904\u4E0D\u4F1A\u4FEE\u6539\u5386\u53F2\u3002")}</p>${roomArchived}${freshnessNotice}${warnings}${roomEvents}${threads || noThreads}<div class="search-empty" id="search-empty">${biText("No threads match your search.", "\u6CA1\u6709\u5339\u914D\u7684\u4E3B\u9898\u3002")}</div></main></div><script nonce="agent-forum">const revision="${escapeHtml(revision)}";let lang=navigator.language.startsWith('zh')?'zh':'en';function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();document.getElementById('lang-toggle').addEventListener('click',()=>{lang=lang==='en'?'zh':'en';applyLang();});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));function restoreTimeline(thread){const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]')).sort((a,b)=>Number(a.dataset.timelineIndex)-Number(b.dataset.timelineIndex));body.replaceChildren(...items);}function replyRelations(messages){const byId=new Map(messages.map(item=>[item.dataset.messageId,item]));const parents=new Map();messages.forEach(item=>{const id=item.dataset.messageId;const parent=item.dataset.replyTo;if(id&&parent&&parent!==id&&byId.has(parent))parents.set(id,parent);});const cut=new Set();messages.forEach(item=>{const visited=new Map();let current=item.dataset.messageId;while(current&&parents.has(current)){if(visited.has(current)){Array.from(visited.keys()).slice(visited.get(current)).forEach(id=>cut.add(id));break;}visited.set(current,visited.size);current=parents.get(current);}});const children=new Map(messages.map(item=>[item.dataset.messageId,[]]));const roots=[];messages.forEach(item=>{const id=item.dataset.messageId;const parent=id?parents.get(id):undefined;if(id&&parent&&!cut.has(id))children.get(parent).push(id);else roots.push(id);});return{byId,children,roots};}function renderTree(thread){restoreTimeline(thread);const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]'));const messages=items.filter(item=>item.classList.contains('message'));const events=items.filter(item=>item.classList.contains('event'));const relation=replyRelations(messages);body.replaceChildren();const appendNode=id=>{const item=relation.byId.get(id);if(!item)return;const node=document.createElement('div');node.className='tree-node';node.append(item);const children=relation.children.get(id)||[];if(children.length){const branch=document.createElement('div');branch.className='tree-children';children.forEach(childId=>branch.append(appendNode(childId)));node.append(branch);}return node;};relation.roots.forEach(id=>{const node=appendNode(id);if(node)body.append(node);});if(events.length){const activity=document.createElement('section');activity.className='tree-activity';const heading=document.createElement('h3');heading.dataset.en='Activity';heading.dataset.zh='\u6D3B\u52A8\u4E8B\u4EF6';heading.textContent=lang==='zh'?heading.dataset.zh:heading.dataset.en;const note=document.createElement('p');note.className='tree-activity-note';note.dataset.en='Lifecycle events are shown separately because they are not replies.';note.dataset.zh='\u751F\u547D\u5468\u671F\u4E8B\u4EF6\u72EC\u7ACB\u663E\u793A\uFF0C\u56E0\u4E3A\u5B83\u4EEC\u4E0D\u662F\u56DE\u590D\u3002';note.textContent=lang==='zh'?note.dataset.zh:note.dataset.en;activity.append(heading,note,...events);body.append(activity);}}const viewTimeline=document.getElementById('view-timeline');const viewTree=document.getElementById('view-tree');function setView(mode){document.body.dataset.view=mode;viewTimeline.classList.toggle('active',mode==='timeline');viewTree.classList.toggle('active',mode==='tree');viewTimeline.setAttribute('aria-pressed',String(mode==='timeline'));viewTree.setAttribute('aria-pressed',String(mode==='tree'));document.querySelectorAll('.thread').forEach(thread=>{if(mode==='tree')renderTree(thread);else restoreTimeline(thread);});}viewTimeline.addEventListener('click',()=>setView('timeline'));viewTree.addEventListener('click',()=>setView('tree'));const search=document.getElementById('search');const outlineItems=document.querySelectorAll('.outline-item');const threads=document.querySelectorAll('.thread');const searchEmpty=document.getElementById('search-empty');function runSearch(){const q=(search.value||'').trim().toLowerCase();let visibleCount=0;outlineItems.forEach(item=>{const title=item.dataset.title||'';const match=!q||title.includes(q);item.classList.toggle('hidden',!match);if(match)visibleCount++;});threads.forEach(t=>{const title=t.dataset.title||'';const match=!q||title.includes(q);t.classList.toggle('hidden',!match);});searchEmpty.style.display=visibleCount===0&&q?'block':'none';}if(search)search.addEventListener('input',runSearch);const observer=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const id=e.target.id;outlineItems.forEach(i=>i.classList.toggle('active',i.getAttribute('href')==='#'+id));}});},{rootMargin:'-72px 0px -70% 0px'});threads.forEach(t=>observer.observe(t));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<div style="max-width:600px;margin:80px auto;padding:20px;font-family:system-ui;text-align:center;color:#59636e"><p>Viewer closed.</p></div>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></body></html>`;
 }
 async function startViewerServer(input) {
   const room = input.snapshot.rooms.find(
@@ -15657,8 +16357,33 @@ async function startViewerServer(input) {
   const basePath = `/session/${token}/`;
   let currentSnapshot = input.snapshot;
   let currentRoom = room;
-  let html = renderViewerHtml(currentSnapshot, currentRoom);
+  let freshness = input.refresh ? { state: "stale", message: "Waiting for remote sync." } : { state: "fresh" };
+  let html = renderViewerHtml(currentSnapshot, currentRoom, freshness);
   let revision = currentSnapshot.sourceHead;
+  let refreshInFlight;
+  const refresh = async () => {
+    if (!input.refresh) return;
+    if (!refreshInFlight) {
+      refreshInFlight = input.refresh().then((result) => {
+        freshness = result.freshness;
+        if (result.snapshot) {
+          const nextRoom = result.snapshot.rooms.find((candidate) => candidate.room.id === room.room.id);
+          if (nextRoom) {
+            currentSnapshot = result.snapshot;
+            currentRoom = nextRoom;
+            revision = result.snapshot.sourceHead;
+          }
+        }
+        html = renderViewerHtml(currentSnapshot, currentRoom, freshness);
+      }).catch(() => {
+        freshness = { state: "stale", message: "Remote sync failed unexpectedly." };
+        html = renderViewerHtml(currentSnapshot, currentRoom, freshness);
+      }).finally(() => {
+        refreshInFlight = void 0;
+      });
+    }
+    await refreshInFlight;
+  };
   const idleMs = input.idleMs ?? 5 * 6e4;
   let timer;
   let server;
@@ -15684,34 +16409,61 @@ async function startViewerServer(input) {
     timer.unref();
   };
   server = createServer((request, response) => {
-    touch();
-    response.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-agent-forum'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("Referrer-Policy", "no-referrer");
-    response.setHeader("Cache-Control", "no-store");
-    if (request.method === "GET" && request.url === basePath) {
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(html);
-      return;
-    }
-    if (request.method === "GET" && request.url === `${basePath}revision`) {
-      response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify({ revision }));
-      return;
-    }
-    if (request.method === "POST" && request.url === `${basePath}close`) {
-      response.writeHead(204);
-      response.end();
-      setImmediate(() => void close());
-      return;
-    }
-    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-    response.end("Not found");
+    void (async () => {
+      touch();
+      response.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-agent-forum'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'");
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.setHeader("Referrer-Policy", "no-referrer");
+      response.setHeader("Cache-Control", "no-store");
+      if (request.method === "GET" && request.url === basePath) {
+        await refresh();
+        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        response.end(html);
+        return;
+      }
+      if (request.method === "GET" && request.url === `${basePath}revision`) {
+        response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ revision }));
+        return;
+      }
+      if (request.method === "POST" && request.url === `${basePath}close`) {
+        response.writeHead(204);
+        response.end();
+        setImmediate(() => void close());
+        return;
+      }
+      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("Not found");
+    })().catch(() => {
+      if (!response.headersSent) response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("Viewer request failed");
+    });
   });
-  await new Promise((resolveListen, rejectListen) => {
-    server.once("error", rejectListen);
-    server.listen(0, "127.0.0.1", () => resolveListen());
-  });
+  let listening = false;
+  let lastListenError;
+  for (let attempt = 0; attempt < 24 && !listening; attempt += 1) {
+    const port = 49152 + Math.floor(Math.random() * 16384);
+    try {
+      await new Promise((resolveListen, rejectListen) => {
+        function onError(error) {
+          server.off("listening", onListening);
+          rejectListen(error);
+        }
+        function onListening() {
+          server.off("error", onError);
+          resolveListen();
+        }
+        server.once("error", onError);
+        server.once("listening", onListening);
+        server.listen(port, "127.0.0.1");
+      });
+      listening = true;
+    } catch (error) {
+      lastListenError = error;
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "EADDRINUSE") throw error;
+    }
+  }
+  if (!listening) throw lastListenError instanceof Error ? lastListenError : new Error("viewer did not receive a TCP port");
   touch();
   const address = server.address();
   if (!address || typeof address === "string") {
@@ -15723,15 +16475,16 @@ async function startViewerServer(input) {
     token,
     port: address.port,
     closed,
-    updateSnapshot: (snapshot) => {
+    updateSnapshot: (snapshot, nextFreshness = { state: "fresh" }) => {
       const nextRoom = snapshot.rooms.find(
         (candidate) => candidate.room.id === room.room.id
       );
       if (!nextRoom) return;
       currentSnapshot = snapshot;
       currentRoom = nextRoom;
+      freshness = nextFreshness;
       revision = snapshot.sourceHead;
-      html = renderViewerHtml(currentSnapshot, currentRoom);
+      html = renderViewerHtml(currentSnapshot, currentRoom, freshness);
     },
     close
   };
@@ -15740,7 +16493,7 @@ async function startViewerServer(input) {
 // src/services/viewer.ts
 function sessionPath(paths, id) {
   if (!/^[0-9a-f-]{36}$/u.test(id)) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", "invalid Viewer session ID");
-  return resolve19(paths.viewerDirectory, `${id}.json`);
+  return resolve22(paths.viewerDirectory, `${id}.json`);
 }
 async function isProcessAlive(pid) {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
@@ -15761,7 +16514,7 @@ async function waitForProcessExit(pid, timeoutMs = 5e3) {
 }
 async function readSession(path2) {
   try {
-    const value = JSON.parse(await readFile14(path2, "utf8"));
+    const value = JSON.parse(await readFile17(path2, "utf8"));
     const url = new URL(value.url);
     const validUrl = url.protocol === "http:" && url.hostname === "127.0.0.1" && /^\/session\/[0-9a-f]{32}\/$/u.test(url.pathname);
     return value.formatVersion === 1 && /^[0-9a-f-]{36}$/u.test(value.sessionId) && Number.isSafeInteger(value.pid) && value.pid > 0 && validUrl ? value : void 0;
@@ -15772,32 +16525,32 @@ async function readSession(path2) {
 async function listViewerSessions(paths = createAgentForumPaths()) {
   let names = [];
   try {
-    names = await readdir10(paths.viewerDirectory);
+    names = await readdir11(paths.viewerDirectory);
   } catch {
     return [];
   }
   const sessions = [];
   for (const name of names.filter((name2) => name2.endsWith(".json"))) {
-    const path2 = resolve19(paths.viewerDirectory, name);
+    const path2 = resolve22(paths.viewerDirectory, name);
     const session = await readSession(path2);
     if (session && await isProcessAlive(session.pid)) sessions.push(session);
-    else await rm10(path2, { force: true });
+    else await rm12(path2, { force: true });
   }
   return sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
 async function cleanViewerSessions(paths = createAgentForumPaths()) {
   let names = [];
   try {
-    names = await readdir10(paths.viewerDirectory);
+    names = await readdir11(paths.viewerDirectory);
   } catch {
     return { removed: 0 };
   }
   let removed = 0;
   for (const name of names.filter((name2) => name2.endsWith(".json") || name2.endsWith(".ready"))) {
-    const path2 = resolve19(paths.viewerDirectory, name);
+    const path2 = resolve22(paths.viewerDirectory, name);
     const session = name.endsWith(".json") ? await readSession(path2) : void 0;
     if (!session || !await isProcessAlive(session.pid)) {
-      await rm10(path2, { force: true });
+      await rm12(path2, { force: true });
       removed += 1;
     }
   }
@@ -15821,7 +16574,7 @@ async function stopViewerSessions(sessions, paths, options = {}) {
     }
     if (!await isProcessAlive(session.pid)) {
       closed.push(session.sessionId);
-      await rm10(sessionPath(paths, session.sessionId), { force: true });
+      await rm12(sessionPath(paths, session.sessionId), { force: true });
       continue;
     }
     if (options.strict) {
@@ -15848,9 +16601,9 @@ async function replaceViewerSessions(forumAlias, roomId, paths) {
 }
 async function openBrowser(url) {
   const command = process.platform === "win32" ? "cmd.exe" : process.platform === "darwin" ? "open" : "xdg-open";
-  const args = process.platform === "win32" ? ["/d", "/s", "/c", "start", "", url] : [url];
+  const args2 = process.platform === "win32" ? ["/d", "/s", "/c", "start", "", url] : [url];
   return new Promise((resolveOpen) => {
-    const child = spawn(command, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
+    const child = spawn3(command, args2, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     child.once("error", () => resolveOpen(false));
     child.once("spawn", () => {
       child.unref();
@@ -15862,7 +16615,43 @@ async function runViewerServer(input, paths = createAgentForumPaths()) {
   const cached = await getForumSnapshot(input.forumAlias, paths);
   const room = cached.snapshot.rooms.find((item) => item.room.id === input.room || item.room.slug === input.room);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${input.room}`);
-  const server = await startViewerServer({ snapshot: cached.snapshot, roomIdOrSlug: room.room.id, token: input.token, idleMs: input.idleMs });
+  const server = await startViewerServer({
+    snapshot: cached.snapshot,
+    roomIdOrSlug: room.room.id,
+    token: input.token,
+    idleMs: input.idleMs,
+    refresh: async () => {
+      try {
+        const result = await refreshForumFromRemote(input.forumAlias, paths);
+        if (result.outcome === "remote-not-configured") {
+          return {
+            freshness: {
+              state: "stale",
+              message: "No remote is configured for this Team; latest remote content cannot be verified."
+            }
+          };
+        }
+        if (result.outcome === "skipped-local-commits") {
+          return {
+            freshness: {
+              state: "stale",
+              message: "Local commits are not pushed; remote refresh was safely skipped."
+            }
+          };
+        }
+        if (result.outcome === "updated") await invalidateDashboard(paths);
+        return { snapshot: (await getForumSnapshot(input.forumAlias, paths)).snapshot, freshness: { state: "fresh" } };
+      } catch (error) {
+        const code = error instanceof ServiceError ? error.code : "SYNC_FAILED";
+        return {
+          freshness: {
+            state: "stale",
+            message: `Remote sync failed (${code}).`
+          }
+        };
+      }
+    }
+  });
   const session = {
     formatVersion: 1,
     sessionId: input.sessionId,
@@ -15872,13 +16661,24 @@ async function runViewerServer(input, paths = createAgentForumPaths()) {
     pid: process.pid,
     startedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  await mkdir6(paths.viewerDirectory, { recursive: true });
+  await mkdir7(paths.viewerDirectory, { recursive: true });
   await writeJsonAtomic(sessionPath(paths, input.sessionId), session, { overwrite: true, mode: 384 });
-  if (input.sync) {
-    void refreshForumFromRemote(input.forumAlias, paths).then(() => getForumSnapshot(input.forumAlias, paths)).then((fresh) => server.updateSnapshot(fresh.snapshot)).catch(() => void 0);
-  }
+  if (input.openBrowser) await openBrowser(server.url);
   await server.closed;
-  await rm10(sessionPath(paths, input.sessionId), { force: true });
+  await rm12(sessionPath(paths, input.sessionId), { force: true });
+}
+async function launchViewerInline(input, paths = createAgentForumPaths()) {
+  const context = await resolveContext({ forumAlias: input.forumAlias, room: input.room }, paths);
+  if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  await replaceViewerSessions(context.forumAlias, context.roomId, paths);
+  await runViewerServer({
+    forumAlias: context.forumAlias,
+    room: context.roomId,
+    sessionId: randomUUID7(),
+    token: randomBytes2(16).toString("hex"),
+    idleMs: input.idleMs ?? 30 * 6e4,
+    openBrowser: true
+  }, paths);
 }
 async function openViewer(input, paths = createAgentForumPaths()) {
   const context = await resolveContext({
@@ -15890,16 +16690,15 @@ async function openViewer(input, paths = createAgentForumPaths()) {
   const entryPath = input.entryPath ?? process.argv[1];
   if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
   const lock = await acquireForumLock({
-    lockPath: resolve19(paths.locksDirectory, `${context.forumId}-${context.roomId}-viewer.lock`),
+    lockPath: resolve22(paths.locksDirectory, `${context.forumId}-${context.roomId}-viewer.lock`),
     command: "viewer open"
   });
   try {
     const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
     const sessionId = randomUUID7();
     const token = randomBytes2(16).toString("hex");
-    const args = [entryPath, "viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 6e4), "--home", dirname4(paths.root)];
-    if (input.sync === false) args.push("--no-sync");
-    const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
+    const args2 = [entryPath, "viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 6e4), "--home", dirname6(paths.root)];
+    const child = spawn3(process.execPath, args2, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError;
     child.once("error", (error) => {
       startError = error;
@@ -15924,51 +16723,62 @@ async function openViewer(input, paths = createAgentForumPaths()) {
 async function generateViewerHtml(input, paths = createAgentForumPaths()) {
   const context = await resolveContext({ ...input.cwd ? { cwd: input.cwd } : {}, ...input.forumAlias ? { forumAlias: input.forumAlias } : {}, ...input.room ? { room: input.room } : {} }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  const refresh = await refreshForumFromRemote(context.forumAlias, paths);
+  if (refresh.outcome === "updated") await invalidateDashboard(paths);
   const cached = await getForumSnapshot(context.forumAlias, paths);
-  const output2 = input.output ?? resolve19(paths.viewerDirectory, `${context.roomId}.html`);
+  const output2 = input.output ?? resolve22(paths.viewerDirectory, `${context.roomId}.html`);
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
-  await mkdir6(dirname4(output2), { recursive: true });
+  await mkdir7(dirname6(output2), { recursive: true });
   const html = renderViewerHtml(cached.snapshot, room);
   await import("node:fs/promises").then(({ writeFile: writeFile3 }) => writeFile3(output2, html, { encoding: "utf8", mode: 384 }));
   return { output: output2 };
 }
 
 // src/commands/viewer.ts
-async function executeViewerCommand(args) {
-  const subcommand = args[0];
+async function executeViewerCommand(args2) {
+  const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") {
     return {
       exitCode: ExitCode.Success,
       command: "viewer.help",
       data: { usage: "agent-forum viewer <open|generate|status|close|clean> [options]" },
-      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-sync] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
+      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
     };
   }
-  if (!["open", "generate", "status", "close", "clean", "serve"].includes(subcommand)) {
+  if (!["open", "generate", "status", "close", "clean", "serve", "launch"].includes(subcommand)) {
     return invalidArgument(`unknown viewer subcommand: ${subcommand}`);
   }
   try {
     if (subcommand === "status") {
-      if (args.length !== 1) return invalidArgument("viewer status accepts no options");
+      if (args2.length !== 1) return invalidArgument("viewer status accepts no options");
       const sessions = await listViewerSessions();
       return { exitCode: ExitCode.Success, command: "viewer.status", data: { sessions }, human: sessions.length ? sessions.map((session) => `${session.sessionId}	${session.forumAlias}	${session.url}`).join("\n") + "\n" : "No active Viewer sessions.\n" };
     }
     if (subcommand === "clean") {
-      if (args.length !== 1) return invalidArgument("viewer clean accepts no options");
+      if (args2.length !== 1) return invalidArgument("viewer clean accepts no options");
       const result2 = await cleanViewerSessions();
       return { exitCode: ExitCode.Success, command: "viewer.clean", data: result2, human: `Removed ${result2.removed} stale Viewer entries.
 ` };
     }
     if (subcommand === "close") {
-      const parsed2 = parseCommandOptions(args.slice(1), { values: ["--session"] });
+      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--session"] });
       if ("error" in parsed2) return invalidArgument(parsed2.error);
       const result2 = await closeViewerSession(parsed2.values.get("--session"));
       return { exitCode: ExitCode.Success, command: "viewer.close", data: result2, human: `Closed ${result2.closed.length} Viewer session(s).
 ` };
     }
+    if (subcommand === "launch") {
+      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--home"] });
+      if ("error" in parsed2) return invalidArgument(parsed2.error);
+      const forumAlias2 = parsed2.values.get("--forum");
+      const room2 = parsed2.values.get("--room");
+      if (!forumAlias2 || !room2) return invalidArgument("invalid internal Viewer launch arguments");
+      await launchViewerInline({ forumAlias: forumAlias2, room: room2 }, createAgentForumPaths(parsed2.values.get("--home")));
+      return { exitCode: ExitCode.Success, command: "viewer.launch", data: {}, human: "" };
+    }
     if (subcommand === "serve") {
-      const parsed2 = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home"], flags: ["--no-sync"] });
+      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home"] });
       if ("error" in parsed2) return invalidArgument(parsed2.error);
       const forumAlias2 = parsed2.values.get("--forum");
       const room2 = parsed2.values.get("--room");
@@ -15976,27 +16786,30 @@ async function executeViewerCommand(args) {
       const token = parsed2.values.get("--token");
       const idleMs = Number(parsed2.values.get("--idle-ms"));
       if (!forumAlias2 || !room2 || !sessionId || !token || !Number.isInteger(idleMs) || idleMs < 1e3) return invalidArgument("invalid internal Viewer server arguments");
-      const home = parsed2.values.get("--home");
-      await runViewerServer({ forumAlias: forumAlias2, room: room2, sessionId, token, idleMs, sync: !parsed2.flags.has("--no-sync") }, createAgentForumPaths(home));
+      const home2 = parsed2.values.get("--home");
+      await runViewerServer({ forumAlias: forumAlias2, room: room2, sessionId, token, idleMs }, createAgentForumPaths(home2));
       return { exitCode: ExitCode.Success, command: "viewer.serve", data: {}, human: "" };
     }
-    const parsed = parseCommandOptions(args.slice(1), {
-      values: ["--forum", "--room", "--output"],
+    const parsed = parseCommandOptions(args2.slice(1), {
+      values: ["--forum", "--room", "--output", "--home"],
       flags: ["--no-sync", "--no-open"]
     });
     if ("error" in parsed) return invalidArgument(parsed.error);
     const forumAlias = parsed.values.get("--forum");
     const room = parsed.values.get("--room");
+    const home = parsed.values.get("--home");
+    const paths = createAgentForumPaths(home);
     if (Boolean(forumAlias) !== Boolean(room)) return invalidArgument("--forum and --room must be provided together");
+    if (parsed.flags.has("--no-sync")) return invalidArgument("viewer always synchronizes before rendering; --no-sync is no longer supported");
     if (subcommand === "generate") {
       if (parsed.flags.size > 0) return invalidArgument("viewer generate does not accept --no-sync or --no-open");
       const output2 = parsed.values.get("--output");
-      const result2 = await generateViewerHtml({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...output2 ? { output: output2 } : {} });
+      const result2 = await generateViewerHtml({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...output2 ? { output: output2 } : {} }, paths);
       return { exitCode: ExitCode.Success, command: "viewer.generate", data: result2, human: `Generated ${result2.output}
 ` };
     }
     if (parsed.values.has("--output")) return invalidArgument("viewer open does not accept --output");
-    const result = await openViewer({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, sync: !parsed.flags.has("--no-sync"), openBrowser: !parsed.flags.has("--no-open") });
+    const result = await openViewer({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, openBrowser: !parsed.flags.has("--no-open") }, paths);
     return { exitCode: ExitCode.Success, command: "viewer.open", data: result, human: `${result.url}
 ${result.browserOpened ? "Opened in the default browser." : "Open this URL manually."}${result.replacedSessionIds.length ? `
 Replaced ${result.replacedSessionIds.length} existing Viewer session(s) for this Forum Room.` : ""}
@@ -16045,6 +16858,7 @@ Commands:
   post               Publish top-level messages or replies
   inbox              Read relevant unread Room messages and events
   viewer             Open or manage the read-only human Viewer
+  dashboard          Manage Dashboard clients and compact Team snapshots
   doctor             Diagnose local state, forums, locks, and remotes
   skill              Install, inspect, diagnose, or uninstall the Agent Skill
 
@@ -16055,10 +16869,10 @@ function writeJson(io, value) {
   io.stdout(`${JSON.stringify(value)}
 `);
 }
-async function runCli(args, io = defaultIo) {
-  const json = args.includes("--json");
-  const positional = args.filter((arg) => arg !== "--json");
-  const command = positional[0];
+async function runCli(args2, io = defaultIo) {
+  const json = args2.includes("--json");
+  const positional2 = args2.filter((arg) => arg !== "--json");
+  const command = positional2[0];
   if (command === void 0 || command === "help" || command === "--help" || command === "-h") {
     if (json) {
       writeJson(
@@ -16079,6 +16893,7 @@ async function runCli(args, io = defaultIo) {
             "post",
             "inbox",
             "viewer",
+            "dashboard",
             "doctor",
             "skill",
             "setup"
@@ -16106,10 +16921,13 @@ async function runCli(args, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "inbox" || command === "viewer" || command === "doctor" || command === "skill" || command === "setup") {
+  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "inbox" || command === "viewer" || command === "dashboard" || command === "doctor" || command === "skill" || command === "setup") {
     try {
-      const subcommandArgs = positional.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : command === "setup" ? await executeSetupCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const subcommandArgs = positional2.slice(1);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "dashboard" ? await executeDashboardCommand(subcommandArgs, { onProgress: io.stderr }) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : command === "setup" ? await executeSetupCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      if (!execution.error && ["forum", "identity", "room", "thread", "post", "inbox"].includes(command)) {
+        await invalidateDashboard().catch(() => void 0);
+      }
       if (json) {
         writeJson(
           io,
@@ -16150,5 +16968,8 @@ async function runCli(args, io = defaultIo) {
 }
 
 // src/main.ts
-var exitCode = await runCli(process.argv.slice(2));
+var args = process.argv.slice(2);
+var exitCode = await runCli(args);
 process.exitCode = exitCode;
+var positional = args.filter((arg) => arg !== "--json");
+if (positional[0] === "viewer" && positional[1] === "open") process.exit(exitCode);
