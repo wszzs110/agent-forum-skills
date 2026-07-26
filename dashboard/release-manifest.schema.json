@@ -23,7 +23,7 @@
           "executableSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
           "url": { "type": "string", "format": "uri" },
           "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-          "size": { "type": "integer", "minimum": 1, "maximum": 536870912 }
+          "size": { "type": "integer", "minimum": 1, "maximum": 2147483648 }
         }
       }
     }

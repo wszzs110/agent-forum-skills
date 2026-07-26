@@ -5,7 +5,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
-import { getDashboardInstallationStatus, inspectDashboardRelease, installDashboard, uninstallDashboard } from "../src/services/dashboard-installer.js";
+import { getDashboardInstallationStatus, inspectDashboardRelease, installDashboard, uninstallDashboard, validateDashboardArchiveEntries } from "../src/services/dashboard-installer.js";
 import { ServiceError } from "../src/services/errors.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
@@ -89,6 +89,34 @@ test("Dashboard installer rejects checksum mismatch without exposing an installa
   } finally { await rm(item.root, { recursive: true, force: true }); }
 });
 
+test("Dashboard archive validation permits only internal relative symbolic links", () => {
+  const entries = [
+    "./",
+    "./Dashboard.app/",
+    "./Dashboard.app/Framework.framework/",
+    "./Dashboard.app/Framework.framework/Versions/",
+    "./Dashboard.app/Framework.framework/Versions/A/",
+    "./Dashboard.app/Framework.framework/Versions/A/Resources/",
+    "./Dashboard.app/Framework.framework/Versions/Current",
+    "./Dashboard.app/Framework.framework/Resources",
+  ];
+  const verbose = [
+    "drwxr-xr-x 0/0 0 date ./",
+    "drwxr-xr-x 0/0 0 date ./Dashboard.app/",
+    "drwxr-xr-x 0/0 0 date ./Dashboard.app/Framework.framework/",
+    "drwxr-xr-x 0/0 0 date ./Dashboard.app/Framework.framework/Versions/",
+    "drwxr-xr-x 0/0 0 date ./Dashboard.app/Framework.framework/Versions/A/",
+    "drwxr-xr-x 0/0 0 date ./Dashboard.app/Framework.framework/Versions/A/Resources/",
+    "lrwxr-xr-x 0/0 0 date ./Dashboard.app/Framework.framework/Versions/Current -> A",
+    "lrwxr-xr-x 0/0 0 date ./Dashboard.app/Framework.framework/Resources -> Versions/Current/Resources",
+  ];
+  assert.doesNotThrow(() => validateDashboardArchiveEntries(entries, verbose));
+  assert.throws(() => validateDashboardArchiveEntries(["./link"], ["lrwxr-xr-x 0/0 0 date ./link -> /tmp/outside"]), ServiceError);
+  assert.throws(() => validateDashboardArchiveEntries(["./nested/link"], ["lrwxr-xr-x 0/0 0 date ./nested/link -> ../../outside"]), ServiceError);
+  assert.throws(() => validateDashboardArchiveEntries(["./hard"], ["hrwxr-xr-x 0/0 0 date ./hard link to ./target"]), ServiceError);
+  assert.throws(() => validateDashboardArchiveEntries(["./link", "./link/payload"], ["lrwxr-xr-x 0/0 0 date ./link -> target", "-rw-r--r-- 0/0 1 date ./link/payload"]), ServiceError);
+});
+
 test("Dashboard release selection rejects unsupported platforms, package-version drift, and unsafe manifests", async () => {
   const item = await fixture();
   try {
@@ -106,7 +134,7 @@ test("Dashboard release selection rejects unsupported platforms, package-version
       (error) => error instanceof ServiceError && error.code === "DASHBOARD_MANIFEST_INVALID",
     );
     item.manifest.assets[0]!.executable = "agent-forum-dashboard/agent-forum-dashboard.exe";
-    item.manifest.assets[0]!.size = 536_870_913;
+    item.manifest.assets[0]!.size = 2_147_483_649;
     await assert.rejects(
       inspectDashboardRelease({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: item.fetcher }),
       (error) => error instanceof ServiceError && error.code === "DASHBOARD_MANIFEST_INVALID",

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { chmod, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, readFile, readdir, readlink, realpath, rename, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, posix, resolve, sep } from "node:path";
 import { writeJsonAtomic } from "../storage/atomic.js";
 import { acquireForumLock } from "../storage/lock.js";
 import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js";
@@ -15,7 +15,7 @@ const sha256Pattern = /^[a-f0-9]{64}$/u;
 const versionPattern = /^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/u;
 const fileNamePattern = /^[A-Za-z0-9._-]+$/u;
 const executablePattern = /^[A-Za-z0-9._/-]+$/u;
-const maximumAssetSize = 512 * 1024 * 1024;
+const maximumAssetSize = 2 * 1024 * 1024 * 1024;
 
 export interface DashboardReleaseAsset {
   platform: "win32" | "darwin" | "linux";
@@ -106,12 +106,21 @@ async function sha256File(path: string): Promise<string> {
 
 async function collectInstalledFiles(root: string, directory = root): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
+  const normalizedRoot = resolve(root);
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (directory === root && entry.name === "installation.json") continue;
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) Object.assign(files, await collectInstalledFiles(root, path));
     else if (entry.isFile()) files[relativePath(root, path)] = await sha256File(path);
-    else throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsupported filesystem entry");
+    else if (entry.isSymbolicLink()) {
+      const target = await readlink(path);
+      if (!target || isAbsolute(target) || target.includes("\\") || target.includes("\0")) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsafe symbolic link");
+      const lexicalTarget = resolve(dirname(path), target);
+      if (lexicalTarget !== normalizedRoot && !lexicalTarget.startsWith(`${normalizedRoot}${sep}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link escapes its root");
+      const canonicalTarget = await realpath(path);
+      if (canonicalTarget !== normalizedRoot && !canonicalTarget.startsWith(`${normalizedRoot}${sep}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link resolves outside its root");
+      files[relativePath(root, path)] = createHash("sha256").update(`symlink:${target}`).digest("hex");
+    } else throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsupported filesystem entry");
   }
   return files;
 }
@@ -209,12 +218,47 @@ async function runTar(args: string[]): Promise<string> {
   });
 }
 
+function normalizedArchivePath(entry: string): string {
+  const trimmed = entry.replace(/^\.\//u, "").replace(/\/$/u, "");
+  return trimmed || ".";
+}
+
+export function validateDashboardArchiveEntries(entries: string[], verboseEntries: string[]): void {
+  if (entries.length === 0 || verboseEntries.length !== entries.length) throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive listing is incomplete");
+  const normalizedEntries = entries.map(normalizedArchivePath);
+  const uniqueEntries = new Set<string>();
+  const symlinkEntries = new Set<string>();
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]!;
+    const normalized = normalizedEntries[index]!;
+    const verbose = verboseEntries[index]!;
+    if (entry.startsWith("/") || entry.startsWith("\\") || entry.includes("\\") || entry.split("/").includes("..") || uniqueEntries.has(normalized)) {
+      throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains an unsafe or duplicate path");
+    }
+    uniqueEntries.add(normalized);
+    const type = verbose[0];
+    if (type === "-" || type === "d") continue;
+    if (type !== "l") throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains an unsupported link type");
+    const separator = verbose.lastIndexOf(" -> ");
+    const target = separator >= 0 ? verbose.slice(separator + 4) : "";
+    if (!target || posix.isAbsolute(target) || target.includes("\\") || target.includes("\0")) throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains an unsafe symbolic link");
+    const resolvedTarget = posix.normalize(posix.join(posix.dirname(normalized), target));
+    if (resolvedTarget === ".." || resolvedTarget.startsWith("../")) throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive symbolic link escapes its root");
+    symlinkEntries.add(normalized);
+  }
+  for (const entry of normalizedEntries) {
+    let ancestor = posix.dirname(entry);
+    while (ancestor !== ".") {
+      if (symlinkEntries.has(ancestor)) throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive writes through a symbolic link");
+      ancestor = posix.dirname(ancestor);
+    }
+  }
+}
+
 async function extractArchive(archive: string, destination: string): Promise<void> {
   const entries = (await runTar(["-tzf", archive])).split(/\r?\n/u).filter(Boolean);
   const verboseEntries = (await runTar(["-tvzf", archive])).split(/\r?\n/u).filter(Boolean);
-  if (entries.length === 0 || verboseEntries.length !== entries.length || entries.some((entry) => entry.startsWith("/") || entry.startsWith("\\") || entry.split(/[\\/]/u).includes("..")) || verboseEntries.some((entry) => entry[0] !== "-" && entry[0] !== "d")) {
-    throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains unsafe paths or links");
-  }
+  validateDashboardArchiveEntries(entries, verboseEntries);
   await mkdir(destination, { recursive: true });
   await runTar(["-xzf", archive, "-C", destination]);
 }

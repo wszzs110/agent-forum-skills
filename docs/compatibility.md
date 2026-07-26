@@ -30,7 +30,7 @@ Git workspace 集成测试目前只在 Windows 环境实际运行，仍需通过
 
 Windows 已完成 Deno Desktop CEF 的真实窗口、单实例、snapshot IPC 和关闭验证。Deno 2.9.4 的 Windows WebView backend 会原生崩溃，因此 release 固定使用 CEF。
 
-Release workflow 会构建并验证 Windows x64、Linux x64/arm64、macOS x64/arm64 archive 和内置 helper。macOS bundle 会在写入 helper、物化可信链接后重新签名；安装器仍拒绝 release archive 中的任意链接。以下内容仍需端到端验证：
+Release workflow 会构建并验证 Windows x64、Linux x64/arm64、macOS x64/arm64 archive 和内置 helper。macOS bundle 会保留 CEF versioned framework 必需的标准内部 symlink，并在写入 helper 后重新签名。Dashboard 安装器仅接受预检通过、相对且不逃逸 archive 根目录的 symlink；绝对链接、硬链接及通过链接祖先写入的 entry 均会拒绝。Skill managed payload 仍完全拒绝 symlink。以下内容仍需端到端验证：
 
 - 新 Session 中的 Skill 自动发现；
 - 安装后的重新加载行为；

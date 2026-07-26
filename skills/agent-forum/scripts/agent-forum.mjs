@@ -12860,18 +12860,18 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { chmod, mkdir as mkdir3, mkdtemp, open as open2, readFile as readFile13, readdir as readdir8, rename as rename3, rm as rm7, stat as stat3 } from "node:fs/promises";
+import { chmod, mkdir as mkdir3, mkdtemp, open as open2, readFile as readFile13, readdir as readdir8, readlink, realpath as realpath3, rename as rename3, rm as rm7, stat as stat3 } from "node:fs/promises";
 init_atomic();
 init_lock();
 init_paths();
-import { basename as basename3, dirname as dirname3, resolve as resolve16, sep as sep2 } from "node:path";
+import { basename as basename3, dirname as dirname3, isAbsolute, posix as posix2, resolve as resolve16, sep as sep2 } from "node:path";
 init_errors2();
 var repository = "wszzs110/agent-forum-skills";
 var sha256Pattern = /^[a-f0-9]{64}$/u;
 var versionPattern = /^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/u;
 var fileNamePattern = /^[A-Za-z0-9._-]+$/u;
 var executablePattern = /^[A-Za-z0-9._/-]+$/u;
-var maximumAssetSize = 512 * 1024 * 1024;
+var maximumAssetSize = 2 * 1024 * 1024 * 1024;
 function defaultManifestUrl(packageVersion = VERSION) {
   if (packageVersion === "0.0.0-dev") {
     throw new ServiceError("DASHBOARD_RELEASE_UNAVAILABLE", "development builds require --manifest-url or AGENT_FORUM_DASHBOARD_MANIFEST_URL");
@@ -12929,12 +12929,21 @@ async function sha256File(path2) {
 }
 async function collectInstalledFiles(root, directory = root) {
   const files = {};
+  const normalizedRoot = resolve16(root);
   for (const entry of await readdir8(directory, { withFileTypes: true })) {
     if (directory === root && entry.name === "installation.json") continue;
     const path2 = resolve16(directory, entry.name);
     if (entry.isDirectory()) Object.assign(files, await collectInstalledFiles(root, path2));
     else if (entry.isFile()) files[relativePath(root, path2)] = await sha256File(path2);
-    else throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsupported filesystem entry");
+    else if (entry.isSymbolicLink()) {
+      const target2 = await readlink(path2);
+      if (!target2 || isAbsolute(target2) || target2.includes("\\") || target2.includes("\0")) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsafe symbolic link");
+      const lexicalTarget = resolve16(dirname3(path2), target2);
+      if (lexicalTarget !== normalizedRoot && !lexicalTarget.startsWith(`${normalizedRoot}${sep2}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link escapes its root");
+      const canonicalTarget = await realpath3(path2);
+      if (canonicalTarget !== normalizedRoot && !canonicalTarget.startsWith(`${normalizedRoot}${sep2}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link resolves outside its root");
+      files[relativePath(root, path2)] = createHash("sha256").update(`symlink:${target2}`).digest("hex");
+    } else throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsupported filesystem entry");
   }
   return files;
 }
@@ -13045,12 +13054,45 @@ async function runTar(args2) {
     child.on("close", (code) => code === 0 ? resolveTar(stdout) : reject(new ServiceError("DASHBOARD_INSTALL_FAILED", "could not inspect or extract the Dashboard release asset", { cause: stderr.trim() })));
   });
 }
+function normalizedArchivePath(entry) {
+  const trimmed = entry.replace(/^\.\//u, "").replace(/\/$/u, "");
+  return trimmed || ".";
+}
+function validateDashboardArchiveEntries(entries, verboseEntries) {
+  if (entries.length === 0 || verboseEntries.length !== entries.length) throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive listing is incomplete");
+  const normalizedEntries = entries.map(normalizedArchivePath);
+  const uniqueEntries = /* @__PURE__ */ new Set();
+  const symlinkEntries = /* @__PURE__ */ new Set();
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const normalized = normalizedEntries[index];
+    const verbose = verboseEntries[index];
+    if (entry.startsWith("/") || entry.startsWith("\\") || entry.includes("\\") || entry.split("/").includes("..") || uniqueEntries.has(normalized)) {
+      throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains an unsafe or duplicate path");
+    }
+    uniqueEntries.add(normalized);
+    const type = verbose[0];
+    if (type === "-" || type === "d") continue;
+    if (type !== "l") throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains an unsupported link type");
+    const separator = verbose.lastIndexOf(" -> ");
+    const target2 = separator >= 0 ? verbose.slice(separator + 4) : "";
+    if (!target2 || posix2.isAbsolute(target2) || target2.includes("\\") || target2.includes("\0")) throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains an unsafe symbolic link");
+    const resolvedTarget = posix2.normalize(posix2.join(posix2.dirname(normalized), target2));
+    if (resolvedTarget === ".." || resolvedTarget.startsWith("../")) throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive symbolic link escapes its root");
+    symlinkEntries.add(normalized);
+  }
+  for (const entry of normalizedEntries) {
+    let ancestor = posix2.dirname(entry);
+    while (ancestor !== ".") {
+      if (symlinkEntries.has(ancestor)) throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive writes through a symbolic link");
+      ancestor = posix2.dirname(ancestor);
+    }
+  }
+}
 async function extractArchive(archive2, destination) {
   const entries = (await runTar(["-tzf", archive2])).split(/\r?\n/u).filter(Boolean);
   const verboseEntries = (await runTar(["-tvzf", archive2])).split(/\r?\n/u).filter(Boolean);
-  if (entries.length === 0 || verboseEntries.length !== entries.length || entries.some((entry) => entry.startsWith("/") || entry.startsWith("\\") || entry.split(/[\\/]/u).includes("..")) || verboseEntries.some((entry) => entry[0] !== "-" && entry[0] !== "d")) {
-    throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release archive contains unsafe paths or links");
-  }
+  validateDashboardArchiveEntries(entries, verboseEntries);
   await mkdir3(destination, { recursive: true });
   await runTar(["-xzf", archive2, "-C", destination]);
 }
@@ -13367,7 +13409,7 @@ import { resolve as resolve18 } from "node:path";
 
 // src/git/remote.ts
 init_errors2();
-import { isAbsolute } from "node:path";
+import { isAbsolute as isAbsolute2 } from "node:path";
 function validateRemoteUrl(value) {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -13379,7 +13421,7 @@ function validateRemoteUrl(value) {
       "remote URL must not begin with a command-line option prefix"
     );
   }
-  if (isAbsolute(trimmed) || trimmed.startsWith(".")) {
+  if (isAbsolute2(trimmed) || trimmed.startsWith(".")) {
     return { value: trimmed, display: "<local-path>", kind: "local" };
   }
   try {
