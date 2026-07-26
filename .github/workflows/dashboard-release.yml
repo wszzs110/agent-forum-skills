@@ -21,7 +21,8 @@ jobs:
             target: linux-x64
           - os: ubuntu-24.04-arm
             target: linux-arm64
-          - os: macos-13
+          # macos-13 was retired by GitHub in 2025-12; use the supported Intel runner label.
+          - os: macos-15-intel
             target: darwin-x64
           - os: macos-14
             target: darwin-arm64
