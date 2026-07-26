@@ -93,6 +93,7 @@ test("Viewer binds to loopback, requires the token path, escapes content, and cl
   });
   try {
     assert.equal(viewer.url.startsWith("http://127.0.0.1:"), true);
+    assert.equal(Number.isInteger(viewer.port) && viewer.port > 0, true);
     const unauthorized = await fetch(`http://127.0.0.1:${viewer.port}/`);
     assert.equal(unauthorized.status, 404);
     const response = await fetch(viewer.url);

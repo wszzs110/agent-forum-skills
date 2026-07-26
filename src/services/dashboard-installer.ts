@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
+import { createReadStream } from "node:fs";
 import { chmod, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, resolve, sep } from "node:path";
@@ -97,10 +98,9 @@ function parseManifest(value: unknown): DashboardReleaseManifest {
 
 async function sha256File(path: string): Promise<string> {
   const hash = createHash("sha256");
-  const handle = await open(path, "r");
-  try {
-    for await (const chunk of handle.readableWebStream()) hash.update(chunk);
-  } finally { await handle.close().catch(() => undefined); }
+  // FileHandle.readableWebStream() 与显式 close() 在 Node 20.20.2 中可能重复关闭同一句柄并触发原生断言。
+  // createReadStream() 独占并自动关闭自己的文件描述符，可避免跨平台的双重关闭竞态。
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest("hex");
 }
 

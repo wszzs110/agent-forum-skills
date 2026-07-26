@@ -12859,6 +12859,7 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
 // src/services/dashboard-installer.ts
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
+import { createReadStream } from "node:fs";
 import { chmod, mkdir as mkdir3, mkdtemp, open as open2, readFile as readFile13, readdir as readdir8, rename as rename3, rm as rm7, stat as stat3 } from "node:fs/promises";
 init_atomic();
 init_lock();
@@ -12923,12 +12924,7 @@ function parseManifest(value) {
 }
 async function sha256File(path2) {
   const hash = createHash("sha256");
-  const handle = await open2(path2, "r");
-  try {
-    for await (const chunk of handle.readableWebStream()) hash.update(chunk);
-  } finally {
-    await handle.close().catch(() => void 0);
-  }
+  for await (const chunk of createReadStream(path2)) hash.update(chunk);
   return hash.digest("hex");
 }
 async function collectInstalledFiles(root, directory = root) {
@@ -16439,31 +16435,19 @@ async function startViewerServer(input) {
       response.end("Viewer request failed");
     });
   });
-  let listening = false;
-  let lastListenError;
-  for (let attempt = 0; attempt < 24 && !listening; attempt += 1) {
-    const port = 49152 + Math.floor(Math.random() * 16384);
-    try {
-      await new Promise((resolveListen, rejectListen) => {
-        function onError(error) {
-          server.off("listening", onListening);
-          rejectListen(error);
-        }
-        function onListening() {
-          server.off("error", onError);
-          resolveListen();
-        }
-        server.once("error", onError);
-        server.once("listening", onListening);
-        server.listen(port, "127.0.0.1");
-      });
-      listening = true;
-    } catch (error) {
-      lastListenError = error;
-      if (!(error instanceof Error) || !("code" in error) || error.code !== "EADDRINUSE") throw error;
+  await new Promise((resolveListen, rejectListen) => {
+    function onError(error) {
+      server.off("listening", onListening);
+      rejectListen(error);
     }
-  }
-  if (!listening) throw lastListenError instanceof Error ? lastListenError : new Error("viewer did not receive a TCP port");
+    function onListening() {
+      server.off("error", onError);
+      resolveListen();
+    }
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(0, "127.0.0.1");
+  });
   touch();
   const address = server.address();
   if (!address || typeof address === "string") {

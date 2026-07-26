@@ -65,6 +65,17 @@ test("Dashboard installer previews, verifies, installs, detects modification, an
   } finally { await rm(item.root, { recursive: true, force: true }); }
 });
 
+test("Dashboard status repeatedly hashes installed files without double-closing handles", async () => {
+  const item = await fixture();
+  const paths = createAgentForumPaths(resolve(item.root, "home"));
+  try {
+    await installDashboard({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: item.fetcher }, paths);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      assert.equal((await getDashboardInstallationStatus(paths)).status, "installed");
+    }
+  } finally { await rm(item.root, { recursive: true, force: true }); }
+});
+
 test("Dashboard installer rejects checksum mismatch without exposing an installation", async () => {
   const item = await fixture();
   const paths = createAgentForumPaths(resolve(item.root, "home"));

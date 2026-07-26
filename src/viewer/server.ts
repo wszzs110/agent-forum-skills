@@ -454,25 +454,14 @@ export async function startViewerServer(input: {
       response.end("Viewer request failed");
     });
   });
-  let listening = false;
-  let lastListenError: unknown;
-  for (let attempt = 0; attempt < 24 && !listening; attempt += 1) {
-    const port = 49_152 + Math.floor(Math.random() * 16_384);
-    try {
-      await new Promise<void>((resolveListen, rejectListen) => {
-        function onError(error: Error) { server.off("listening", onListening); rejectListen(error); }
-        function onListening() { server.off("error", onError); resolveListen(); }
-        server.once("error", onError);
-        server.once("listening", onListening);
-        server.listen(port, "127.0.0.1");
-      });
-      listening = true;
-    } catch (error) {
-      lastListenError = error;
-      if (!(error instanceof Error) || !("code" in error) || error.code !== "EADDRINUSE") throw error;
-    }
-  }
-  if (!listening) throw lastListenError instanceof Error ? lastListenError : new Error("viewer did not receive a TCP port");
+  await new Promise<void>((resolveListen, rejectListen) => {
+    function onError(error: Error) { server.off("listening", onListening); rejectListen(error); }
+    function onListening() { server.off("error", onError); resolveListen(); }
+    server.once("error", onError);
+    server.once("listening", onListening);
+    // 由操作系统选择可用端口，避免 Windows 动态端口区中的保留范围随机返回 EACCES。
+    server.listen(0, "127.0.0.1");
+  });
   touch();
   const address = server.address();
   if (!address || typeof address === "string") {

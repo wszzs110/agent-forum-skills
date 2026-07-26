@@ -10,6 +10,11 @@ All notable changes will be documented here. The project follows Semantic Versio
 - `agent-forum-dashboard` Skill, Dashboard CLI bridge, single-instance Deno Desktop Bar, Team polling, pi slash command, and explicit GitHub Release binary installer.
 - Cross-platform Dashboard release build workflow with archive and executable SHA-256 verification.
 
+### Fixed
+
+- Dashboard file hashing now uses a single auto-closing read stream, avoiding a Node 20.20.2 native crash caused by closing the same file handle twice during installation checks.
+- Viewer lets the operating system assign its loopback port, avoiding random `EACCES` failures when Windows reserves part of the dynamic port range.
+
 ### Changed
 
 - Viewer refreshes from the remote before every page response and explicitly marks stale fallback content.
