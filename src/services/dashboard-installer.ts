@@ -106,7 +106,8 @@ async function sha256File(path: string): Promise<string> {
 
 async function collectInstalledFiles(root: string, directory = root): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
-  const normalizedRoot = resolve(root);
+  const lexicalRoot = resolve(root);
+  const canonicalRoot = await realpath(root);
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (directory === root && entry.name === "installation.json") continue;
     const path = resolve(directory, entry.name);
@@ -116,9 +117,9 @@ async function collectInstalledFiles(root: string, directory = root): Promise<Re
       const target = await readlink(path);
       if (!target || isAbsolute(target) || target.includes("\\") || target.includes("\0")) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsafe symbolic link");
       const lexicalTarget = resolve(dirname(path), target);
-      if (lexicalTarget !== normalizedRoot && !lexicalTarget.startsWith(`${normalizedRoot}${sep}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link escapes its root");
+      if (lexicalTarget !== lexicalRoot && !lexicalTarget.startsWith(`${lexicalRoot}${sep}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link escapes its root");
       const canonicalTarget = await realpath(path);
-      if (canonicalTarget !== normalizedRoot && !canonicalTarget.startsWith(`${normalizedRoot}${sep}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link resolves outside its root");
+      if (canonicalTarget !== canonicalRoot && !canonicalTarget.startsWith(`${canonicalRoot}${sep}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link resolves outside its root");
       files[relativePath(root, path)] = createHash("sha256").update(`symlink:${target}`).digest("hex");
     } else throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsupported filesystem entry");
   }

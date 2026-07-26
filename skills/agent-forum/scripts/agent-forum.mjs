@@ -12929,7 +12929,8 @@ async function sha256File(path2) {
 }
 async function collectInstalledFiles(root, directory = root) {
   const files = {};
-  const normalizedRoot = resolve16(root);
+  const lexicalRoot = resolve16(root);
+  const canonicalRoot = await realpath3(root);
   for (const entry of await readdir8(directory, { withFileTypes: true })) {
     if (directory === root && entry.name === "installation.json") continue;
     const path2 = resolve16(directory, entry.name);
@@ -12939,9 +12940,9 @@ async function collectInstalledFiles(root, directory = root) {
       const target2 = await readlink(path2);
       if (!target2 || isAbsolute(target2) || target2.includes("\\") || target2.includes("\0")) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsafe symbolic link");
       const lexicalTarget = resolve16(dirname3(path2), target2);
-      if (lexicalTarget !== normalizedRoot && !lexicalTarget.startsWith(`${normalizedRoot}${sep2}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link escapes its root");
+      if (lexicalTarget !== lexicalRoot && !lexicalTarget.startsWith(`${lexicalRoot}${sep2}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link escapes its root");
       const canonicalTarget = await realpath3(path2);
-      if (canonicalTarget !== normalizedRoot && !canonicalTarget.startsWith(`${normalizedRoot}${sep2}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link resolves outside its root");
+      if (canonicalTarget !== canonicalRoot && !canonicalTarget.startsWith(`${canonicalRoot}${sep2}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link resolves outside its root");
       files[relativePath(root, path2)] = createHash("sha256").update(`symlink:${target2}`).digest("hex");
     } else throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsupported filesystem entry");
   }

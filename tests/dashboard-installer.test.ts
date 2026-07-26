@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -74,6 +74,40 @@ test("Dashboard status repeatedly hashes installed files without double-closing 
       assert.equal((await getDashboardInstallationStatus(paths)).status, "installed");
     }
   } finally { await rm(item.root, { recursive: true, force: true }); }
+});
+
+test("Dashboard status compares symlink targets against the canonical installation root", { skip: process.platform === "win32" }, async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "agent-forum-dashboard-canonical-root-"));
+  const actualHome = resolve(root, "actual-home");
+  const aliasHome = resolve(root, "alias-home");
+  await mkdir(actualHome, { recursive: true });
+  await symlink(actualHome, aliasHome, "dir");
+  const paths = createAgentForumPaths(aliasHome);
+  const app = resolve(paths.dashboardInstallDirectory, "Dashboard.app");
+  const executable = resolve(app, "dashboard");
+  const versionDirectory = resolve(app, "Framework.framework", "Versions", "A");
+  try {
+    await mkdir(versionDirectory, { recursive: true });
+    await writeFile(executable, "dashboard\n");
+    await writeFile(resolve(versionDirectory, "framework"), "framework\n");
+    await symlink("A", resolve(app, "Framework.framework", "Versions", "Current"));
+    await writeFile(paths.dashboardInstallationFile, `${JSON.stringify({
+      formatVersion: 1,
+      version: "1.2.3",
+      platform: "darwin",
+      arch: "arm64",
+      executable: "Dashboard.app/dashboard",
+      executableSha256: digest("dashboard\n"),
+      files: {
+        "Dashboard.app/dashboard": digest("dashboard\n"),
+        "Dashboard.app/Framework.framework/Versions/A/framework": digest("framework\n"),
+        "Dashboard.app/Framework.framework/Versions/Current": digest("symlink:A"),
+      },
+      sourceUrl: "https://example.test/dashboard.tar.gz",
+      installedAt: "2026-07-24T00:00:00.000Z",
+    }, null, 2)}\n`);
+    assert.equal((await getDashboardInstallationStatus(paths)).status, "installed");
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("Dashboard installer rejects checksum mismatch without exposing an installation", async () => {

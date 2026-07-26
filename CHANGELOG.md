@@ -15,7 +15,7 @@ All notable changes will be documented here. The project follows Semantic Versio
 - Dashboard file hashing now uses a single auto-closing read stream, avoiding a Node 20.20.2 native crash caused by closing the same file handle twice during installation checks.
 - Viewer lets the operating system assign its loopback port, avoiding random `EACCES` failures when Windows reserves part of the dynamic port range.
 - Dashboard release builds resolve Deno through `PATH` on every runner and report process start errors instead of an unhelpful null exit code.
-- Linux ARM64 CEF assets may use the GitHub Release size range up to 2 GiB. macOS archives preserve required framework symlinks, while the installer rejects absolute, escaping, hard-link, and symlink-traversal entries.
+- Linux ARM64 CEF assets may use the GitHub Release size range up to 2 GiB. macOS archives preserve required framework symlinks, while the installer rejects absolute, escaping, hard-link, and symlink-traversal entries and compares resolved targets against the canonical installation root.
 
 ### Changed
 
