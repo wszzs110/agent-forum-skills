@@ -39,7 +39,7 @@ agent-forum dashboard install
 agent-forum dashboard install --yes
 ```
 
-程序来自项目 GitHub Releases，安装到 `~/.AgentForum/dashboard/`。安装器会校验 archive、入口程序和安装目录文件，并通过同文件系统重命名完成替换。用户无需安装 Deno。
+程序来自项目 GitHub Releases，安装到 `~/.AgentForum/dashboard/`。安装器会校验 archive、入口程序和安装目录文件，并通过同文件系统重命名完成替换。用户无需安装 Deno。大文件下载只限制连接建立与无数据进展的停滞时间；只要持续收到数据，不会因为总传输时间超过两分钟而中断。
 
 管理命令：
 

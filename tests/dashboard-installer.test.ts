@@ -65,6 +65,63 @@ test("Dashboard installer previews, verifies, installs, detects modification, an
   } finally { await rm(item.root, { recursive: true, force: true }); }
 });
 
+test("Dashboard download permits slow transfers that continue making progress", async () => {
+  const item = await fixture();
+  const paths = createAgentForumPaths(resolve(item.root, "home"));
+  const slowFetcher = async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("manifest.json")) return Response.json(item.manifest);
+    if (url === item.manifest.assets[0]!.url) {
+      const bytes = item.bytes;
+      const chunkSize = Math.ceil(bytes.byteLength / 4);
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
+            await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+            controller.enqueue(bytes.subarray(offset, Math.min(offset + chunkSize, bytes.byteLength)));
+          }
+          controller.close();
+        },
+      });
+      return new Response(stream, { headers: { "content-length": String(bytes.byteLength) } });
+    }
+    return new Response("missing", { status: 404 });
+  };
+  try {
+    const result = await installDashboard({
+      manifestUrl: "http://127.0.0.1/manifest.json",
+      platform: "win32",
+      arch: "x64",
+      fetcher: slowFetcher as typeof fetch,
+      downloadTimeouts: { assetConnectionMs: 10, assetInactivityMs: 50 },
+    }, paths);
+    assert.equal(result.action, "installed");
+  } finally { await rm(item.root, { recursive: true, force: true }); }
+});
+
+test("Dashboard download aborts a stalled connection and retries", async () => {
+  const item = await fixture();
+  const paths = createAgentForumPaths(resolve(item.root, "home"));
+  const stalledFetcher = ((input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("manifest.json")) return Promise.resolve(Response.json(item.manifest));
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new Error("request aborted")), { once: true });
+    });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      installDashboard({
+        manifestUrl: "http://127.0.0.1/manifest.json",
+        platform: "win32",
+        arch: "x64",
+        fetcher: stalledFetcher,
+        downloadTimeouts: { assetConnectionMs: 10, assetInactivityMs: 50 },
+      }, paths),
+      (error) => error instanceof ServiceError && error.code === "DASHBOARD_DOWNLOAD_FAILED" && error.message === "Dashboard release asset connection timed out",
+    );
+  } finally { await rm(item.root, { recursive: true, force: true }); }
+});
+
 test("Dashboard status repeatedly hashes installed files without double-closing handles", async () => {
   const item = await fixture();
   const paths = createAgentForumPaths(resolve(item.root, "home"));

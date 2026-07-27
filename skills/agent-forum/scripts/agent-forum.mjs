@@ -10497,7 +10497,7 @@ import { fileURLToPath } from "node:url";
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.9" : "0.0.0-dev";
+var VERSION = true ? "0.0.10" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
@@ -12872,6 +12872,8 @@ var versionPattern = /^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/u;
 var fileNamePattern = /^[A-Za-z0-9._-]+$/u;
 var executablePattern = /^[A-Za-z0-9._/-]+$/u;
 var maximumAssetSize = 2 * 1024 * 1024 * 1024;
+var assetConnectionTimeoutMs = 6e4;
+var assetInactivityTimeoutMs = 10 * 6e4;
 function defaultManifestUrl(packageVersion = VERSION) {
   if (packageVersion === "0.0.0-dev") {
     throw new ServiceError("DASHBOARD_RELEASE_UNAVAILABLE", "development builds require --manifest-url or AGENT_FORUM_DASHBOARD_MANIFEST_URL");
@@ -12994,12 +12996,23 @@ async function inspectDashboardRelease(options = {}) {
   if (!asset) throw new ServiceError("DASHBOARD_PLATFORM_UNSUPPORTED", `no Dashboard release for ${platform}-${arch}`);
   return { manifestUrl, version: manifest.version, asset };
 }
-async function downloadAssetOnce(asset, destination, fetcher, onProgress, attempt = 1) {
+async function downloadAssetOnce(asset, destination, fetcher, onProgress, attempt = 1, timeouts = {}) {
+  const controller = new AbortController();
+  const connectionTimeout = timeouts.assetConnectionMs ?? assetConnectionTimeoutMs;
+  const inactivityTimeout = timeouts.assetInactivityMs ?? assetInactivityTimeoutMs;
+  let timedOut = false;
+  let connectionTimer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, connectionTimeout);
   let response;
   try {
-    response = await fetcher(asset.url, { redirect: "follow", signal: AbortSignal.timeout(12e4) });
+    response = await fetcher(asset.url, { redirect: "follow", signal: controller.signal });
   } catch (error) {
-    throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release asset", { cause: error instanceof Error ? error.message : String(error) });
+    throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", timedOut ? "Dashboard release asset connection timed out" : "could not download Dashboard release asset", { cause: error instanceof Error ? error.message : String(error) });
+  } finally {
+    if (connectionTimer) clearTimeout(connectionTimer);
+    connectionTimer = void 0;
   }
   if (!response.ok || !response.body) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", `Dashboard release asset returned HTTP ${response.status}`);
   const declared = response.headers.get("content-length");
@@ -13007,11 +13020,21 @@ async function downloadAssetOnce(asset, destination, fetcher, onProgress, attemp
   const handle = await open2(destination, "wx", 384);
   const hash = createHash("sha256");
   let received = 0;
+  let inactivityTimer;
+  const resetInactivityTimer = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, inactivityTimeout);
+  };
+  const reader = response.body.getReader();
   try {
-    const reader = response.body.getReader();
+    resetInactivityTimer();
     while (true) {
       const result = await reader.read();
       if (result.done) break;
+      resetInactivityTimer();
       received += result.value.byteLength;
       if (received > asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset exceeds the declared size");
       hash.update(result.value);
@@ -13019,18 +13042,23 @@ async function downloadAssetOnce(asset, destination, fetcher, onProgress, attemp
       onProgress?.(received, asset.size, attempt);
     }
     await handle.sync();
+  } catch (error) {
+    if (timedOut) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset download stalled", { cause: error instanceof Error ? error.message : String(error) });
+    throw error;
   } finally {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    await reader.cancel().catch(() => void 0);
     await handle.close().catch(() => void 0);
   }
   if (received !== asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset is incomplete");
   if (hash.digest("hex") !== asset.sha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard release asset failed SHA-256 verification");
 }
-async function downloadAsset(asset, destination, fetcher, onProgress) {
+async function downloadAsset(asset, destination, fetcher, onProgress, timeouts = {}) {
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     await rm7(destination, { force: true });
     try {
-      await downloadAssetOnce(asset, destination, fetcher, onProgress, attempt);
+      await downloadAssetOnce(asset, destination, fetcher, onProgress, attempt, timeouts);
       return;
     } catch (error) {
       lastError = error;
@@ -13132,7 +13160,7 @@ async function installDashboardUnlocked(options = {}, paths = createAgentForumPa
   const archive2 = resolve16(staging, basename3(release.asset.fileName));
   const payload = resolve16(staging, "payload");
   try {
-    await downloadAsset(release.asset, archive2, options.fetcher ?? fetch, options.onProgress);
+    await downloadAsset(release.asset, archive2, options.fetcher ?? fetch, options.onProgress, options.downloadTimeouts);
     await extractArchive(archive2, payload);
     const stagedExecutable = safeExecutable(payload, release.asset.executable);
     await stat3(stagedExecutable);

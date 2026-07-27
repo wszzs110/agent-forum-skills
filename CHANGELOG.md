@@ -2,6 +2,12 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.10 - 2026-07-27
+
+### Fixed
+
+- Dashboard archive downloads now limit only connection establishment and inactivity, rather than the complete transfer. Large CEF assets can continue beyond two minutes while bytes keep arriving; stalled transfers still fail and retry.
+
 ## 0.0.9 - 2026-07-26
 
 ### Fixed
