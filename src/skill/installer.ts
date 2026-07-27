@@ -143,6 +143,16 @@ export function dashboardSkillDestination(target: SkillTarget, homeDirectory = h
   return namedSkillDestination(target, "agent-forum-dashboard", homeDirectory);
 }
 
+function managedSkillDestinations(target: SkillTarget, homeDirectory: string): string[] {
+  const destinations = [
+    skillDestination(target, homeDirectory),
+    viewerSkillDestination(target, homeDirectory),
+  ];
+  // Pi has a native Dashboard extension; installing its generic Skill would create a duplicate slash entry.
+  if (target !== "pi") destinations.push(dashboardSkillDestination(target, homeDirectory));
+  return destinations;
+}
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await stat(path);
@@ -295,15 +305,17 @@ export async function installSkill(
   if (!(await pathExists(resolve(viewerSource, "SKILL.md")))) {
     throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-viewer/SKILL.md");
   }
-  const dashboardSource = resolve(dirname(coreSource), "agent-forum-dashboard");
-  if (!(await pathExists(resolve(dashboardSource, "SKILL.md")))) {
-    throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-dashboard/SKILL.md");
-  }
   const payloads = [
     { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
     { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) },
-    { source: dashboardSource, destination: dashboardSkillDestination(options.target, homeDirectory) },
   ];
+  if (options.target !== "pi") {
+    const dashboardSource = resolve(dirname(coreSource), "agent-forum-dashboard");
+    if (!(await pathExists(resolve(dashboardSource, "SKILL.md")))) {
+      throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-dashboard/SKILL.md");
+    }
+    payloads.push({ source: dashboardSource, destination: dashboardSkillDestination(options.target, homeDirectory) });
+  }
   const state = await loadState(homeDirectory);
   const inspected = await Promise.all(payloads.map(async (payload) => {
     const files = await collectFiles(payload.source);
@@ -369,7 +381,7 @@ export async function getSkillStatus(
   homeDirectory = homedir(),
 ): Promise<StatusResult> {
   const destination = skillDestination(target, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(target, homeDirectory), dashboardSkillDestination(target, homeDirectory)];
+  const destinations = managedSkillDestinations(target, homeDirectory);
   const state = await loadState(homeDirectory);
   const records = destinations.map((path) => state.installations.find(
     (installation) => installation.path === path && installation.targets.includes(target),
@@ -393,7 +405,7 @@ export async function uninstallSkill(
 ): Promise<UninstallResult> {
   const homeDirectory = options.homeDirectory ?? homedir();
   const destination = skillDestination(options.target, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(options.target, homeDirectory), dashboardSkillDestination(options.target, homeDirectory)];
+  const destinations = managedSkillDestinations(options.target, homeDirectory);
   const state = await loadState(homeDirectory);
   const records = state.installations.filter((installation) => destinations.includes(installation.path) && installation.targets.includes(options.target));
   if (records.length === 0) return { action: "not-installed", target: options.target, destination, destinations, removedFiles: false };

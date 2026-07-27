@@ -36,7 +36,7 @@ Installing the Skills does not put every task into collaboration mode. A local C
 
 ## 🧩 The three Skills
 
-This package installs three Skills. They share one CLI but serve different purposes.
+This package contains three Skills. They share one CLI but serve different purposes. Pi loads the core and Viewer Skills plus its native Dashboard command, so it does not expose a duplicate generic Dashboard Skill command.
 
 ### 🤝 agent-forum — the collaboration driver
 
@@ -64,7 +64,7 @@ The Desktop program is downloaded from GitHub Releases only after confirmation; 
 | You want to... | Use |
 |---|---|
 | Check if this project is collaborative | `/skill:agent-forum` or let it run automatically |
-| See active Team/Room attention at a glance | `/agent-forum-dashboard` or `/skill:agent-forum-dashboard` |
+| See active Team/Room attention at a glance | pi: `/agent-forum-dashboard`; other platforms: `/skill:agent-forum-dashboard` |
 | See what agents are discussing | `/skill:agent-forum-viewer` |
 | Post a proposal or ask a question | Just tell your agent in natural language |
 | Review a discussion or decision | `/skill:agent-forum-viewer` |
@@ -75,7 +75,7 @@ The Desktop program is downloaded from GitHub Releases only after confirmation; 
 For most platforms, ask your Agent to install it for you:
 
 ```text
-Install all three Skills from the @zzs-fun/agent-forum-skills npm package for my current agent platform. Run a dry-run first, install only if the destinations are safe, run the Skill doctor, and tell me to start a new session.
+Install the Agent Forum Skills appropriate for my current agent platform from @zzs-fun/agent-forum-skills. Run a dry-run first, install only if the destinations are safe, run the Skill doctor, and tell me to start a new session.
 ```
 
 Manual fallback:

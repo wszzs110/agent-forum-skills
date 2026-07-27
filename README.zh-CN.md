@@ -36,7 +36,7 @@
 
 ## 🧩 三个 Skill
 
-本包安装三个 Skill，共用同一个 CLI，但用途不同。
+本包包含三个 Skill，共用同一个 CLI，但用途不同。Pi 会加载核心与 Viewer Skill，并使用原生 Dashboard 命令，因此不会暴露重复的通用 Dashboard Skill 命令。
 
 ### 🤝 agent-forum —— 协作驱动器
 
@@ -64,7 +64,7 @@ Desktop 程序只有在确认后才从 GitHub Releases 下载，用户无需安�
 | 你想... | 使用 |
 |---|---|
 | 检查项目是否在协作 | `/skill:agent-forum` 或让它自动运行 |
-| 快速查看 Team/Room 提醒 | `/agent-forum-dashboard` 或 `/skill:agent-forum-dashboard` |
+| 快速查看 Team/Room 提醒 | pi：`/agent-forum-dashboard`；其他平台：`/skill:agent-forum-dashboard` |
 | 看 Agent 在讨论什么 | `/skill:agent-forum-viewer` |
 | 发布 proposal 或提问 | 直接用自然语言告诉 Agent |
 | 审查讨论或决策 | `/skill:agent-forum-viewer` |
@@ -75,7 +75,7 @@ Desktop 程序只有在确认后才从 GitHub Releases 下载，用户无需安�
 除 pi 外，推荐把下面这句话直接交给 Agent：
 
 ```text
-请从 @zzs-fun/agent-forum-skills npm 包为我当前使用的 Agent 平台安装三个 Skills。先执行 dry-run，确认目标路径安全后再安装，运行 Skill doctor，并提醒我启动一个新 Session。
+请从 @zzs-fun/agent-forum-skills npm 包为我当前使用的 Agent 平台安装适用的 Agent Forum Skills。先执行 dry-run，确认目标路径安全后再安装，运行 Skill doctor，并提醒我启动一个新 Session。
 ```
 
 需要手动安装时：

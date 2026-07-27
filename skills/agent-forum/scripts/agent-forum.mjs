@@ -10497,7 +10497,7 @@ import { fileURLToPath } from "node:url";
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.8" : "0.0.0-dev";
+var VERSION = true ? "0.0.9" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
@@ -15524,6 +15524,14 @@ function viewerSkillDestination(target2, homeDirectory = homedir3()) {
 function dashboardSkillDestination(target2, homeDirectory = homedir3()) {
   return namedSkillDestination(target2, "agent-forum-dashboard", homeDirectory);
 }
+function managedSkillDestinations(target2, homeDirectory) {
+  const destinations = [
+    skillDestination(target2, homeDirectory),
+    viewerSkillDestination(target2, homeDirectory)
+  ];
+  if (target2 !== "pi") destinations.push(dashboardSkillDestination(target2, homeDirectory));
+  return destinations;
+}
 async function pathExists4(path2) {
   try {
     await stat5(path2);
@@ -15645,15 +15653,17 @@ async function installSkill(options) {
   if (!await pathExists4(resolve21(viewerSource, "SKILL.md"))) {
     throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-viewer/SKILL.md");
   }
-  const dashboardSource = resolve21(dirname5(coreSource), "agent-forum-dashboard");
-  if (!await pathExists4(resolve21(dashboardSource, "SKILL.md"))) {
-    throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-dashboard/SKILL.md");
-  }
   const payloads = [
     { source: coreSource, destination: skillDestination(options.target, homeDirectory) },
-    { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) },
-    { source: dashboardSource, destination: dashboardSkillDestination(options.target, homeDirectory) }
+    { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) }
   ];
+  if (options.target !== "pi") {
+    const dashboardSource = resolve21(dirname5(coreSource), "agent-forum-dashboard");
+    if (!await pathExists4(resolve21(dashboardSource, "SKILL.md"))) {
+      throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-dashboard/SKILL.md");
+    }
+    payloads.push({ source: dashboardSource, destination: dashboardSkillDestination(options.target, homeDirectory) });
+  }
   const state2 = await loadState2(homeDirectory);
   const inspected = await Promise.all(payloads.map(async (payload) => {
     const files2 = await collectFiles(payload.source);
@@ -15705,7 +15715,7 @@ async function installSkill(options) {
 }
 async function getSkillStatus(target2, homeDirectory = homedir3()) {
   const destination = skillDestination(target2, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(target2, homeDirectory), dashboardSkillDestination(target2, homeDirectory)];
+  const destinations = managedSkillDestinations(target2, homeDirectory);
   const state2 = await loadState2(homeDirectory);
   const records = destinations.map((path2) => state2.installations.find(
     (installation) => installation.path === path2 && installation.targets.includes(target2)
@@ -15726,7 +15736,7 @@ async function getSkillStatus(target2, homeDirectory = homedir3()) {
 async function uninstallSkill(options) {
   const homeDirectory = options.homeDirectory ?? homedir3();
   const destination = skillDestination(options.target, homeDirectory);
-  const destinations = [destination, viewerSkillDestination(options.target, homeDirectory), dashboardSkillDestination(options.target, homeDirectory)];
+  const destinations = managedSkillDestinations(options.target, homeDirectory);
   const state2 = await loadState2(homeDirectory);
   const records = state2.installations.filter((installation) => destinations.includes(installation.path) && installation.targets.includes(options.target));
   if (records.length === 0) return { action: "not-installed", target: options.target, destination, destinations, removedFiles: false };

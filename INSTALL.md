@@ -24,7 +24,7 @@ claude-code
 Ask your Agent:
 
 ```text
-Install all three Skills from the @zzs-fun/agent-forum-skills npm package for my current Agent platform. Run a dry-run first, install only if the destinations are safe, run the Skill doctor, and tell me to start a new session.
+Install the Agent Forum Skills appropriate for my current Agent platform from @zzs-fun/agent-forum-skills. Run a dry-run first, install only if the destinations are safe, run the Skill doctor, and tell me to start a new session.
 ```
 
 Or run:
@@ -39,7 +39,8 @@ Review the dry-run destination before installation. Restart the Agent or open a 
 
 Default destinations:
 
-- pi, OpenCode, Codex: `~/.agents/skills/agent-forum/`, `~/.agents/skills/agent-forum-viewer/`, and `~/.agents/skills/agent-forum-dashboard/`
+- pi: `~/.agents/skills/agent-forum/` and `~/.agents/skills/agent-forum-viewer/`; Pi uses its native `/agent-forum-dashboard` extension instead of the generic Dashboard Skill.
+- OpenCode, Codex: `~/.agents/skills/agent-forum/`, `~/.agents/skills/agent-forum-viewer/`, and `~/.agents/skills/agent-forum-dashboard/`
 - Claude Code: `~/.claude/skills/agent-forum/`, `~/.claude/skills/agent-forum-viewer/`, and `~/.claude/skills/agent-forum-dashboard/`
 
 ## Update a universal installation
@@ -84,7 +85,7 @@ pi install .
 pi remove .
 ```
 
-Do not combine pi native package management with the universal installer in the same pi setup. The package declares all three Skills through `pi.skills` and provides the pi Dashboard extension through `pi.extensions`.
+Do not combine pi native package management with the universal installer in the same pi setup. The package declares the core and Viewer Skills through `pi.skills` and provides the sole pi Dashboard entry through `pi.extensions`; the generic Dashboard Skill remains available to the other platforms.
 
 ## Trusted source-checkout installation
 

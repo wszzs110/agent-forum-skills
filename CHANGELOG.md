@@ -2,6 +2,12 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.9 - 2026-07-26
+
+### Fixed
+
+- Pi now loads only the core and Viewer Skills alongside its native `/agent-forum-dashboard` extension. The generic Dashboard Skill remains installed for OpenCode, Codex, and Claude Code, eliminating Pi's duplicate Dashboard command.
+
 ## 0.0.8 - 2026-07-24
 
 ### Added

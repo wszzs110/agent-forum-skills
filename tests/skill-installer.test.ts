@@ -65,7 +65,7 @@ test("common targets share one managed payload and uninstall safely", async () =
     });
     assert.equal(first.action, "installed");
     assert.equal((await getSkillStatus("pi", home)).status, "installed");
-    assert.equal(first.destinations.length, 3);
+    assert.equal(first.destinations.length, 2);
     assert.equal(
       await readFile(resolve(destination, "SKILL.md"), "utf8"),
       await readFile(resolve(sourceDirectory, "SKILL.md"), "utf8"),
@@ -76,10 +76,7 @@ test("common targets share one managed payload and uninstall safely", async () =
       await readFile(resolve("skills", "agent-forum-viewer", "SKILL.md"), "utf8"),
     );
 
-    assert.equal(
-      await readFile(resolve(dashboardSkillDestination("pi", home), "SKILL.md"), "utf8"),
-      await readFile(resolve("skills", "agent-forum-dashboard", "SKILL.md"), "utf8"),
-    );
+    assert.equal(await doesNotExist(dashboardSkillDestination("pi", home)), true);
 
     const bundledCli = resolve(destination, "scripts", "agent-forum.mjs");
     const cli = spawnSync(process.execPath, [bundledCli, "--version", "--json"], {
@@ -95,8 +92,12 @@ test("common targets share one managed payload and uninstall safely", async () =
       sourceDirectory,
       now: "2026-07-12T18:01:00.000Z",
     });
-    assert.equal(second.action, "unchanged");
+    assert.equal(second.action, "installed");
     assert.equal(second.destination, destination);
+    assert.equal(
+      await readFile(resolve(dashboardSkillDestination("codex", home), "SKILL.md"), "utf8"),
+      await readFile(resolve("skills", "agent-forum-dashboard", "SKILL.md"), "utf8"),
+    );
     assert.equal((await getSkillStatus("codex", home)).status, "installed");
 
     const doctor = await doctorSkill("pi", home);
@@ -163,17 +164,21 @@ test("Claude Code uses its own discovery directory", async () => {
   }
 });
 
-test("all four platform targets discover all Skills and the shared CLI", async () => {
+test("Pi excludes the duplicate Dashboard Skill while other targets discover all Skills", async () => {
   for (const target of ["pi", "opencode", "codex", "claude-code"] as const) {
     const home = await mkdtemp(join(tmpdir(), `agent-forum-matrix-${target}-`));
     try {
       const result = await installSkill({ target, homeDirectory: home, sourceDirectory });
-      assert.equal(result.destinations.length, 3);
+      assert.equal(result.destinations.length, target === "pi" ? 2 : 3);
       assert.equal((await getSkillStatus(target, home)).status, "installed");
       const viewer = await readFile(resolve(viewerSkillDestination(target, home), "SKILL.md"), "utf8");
       assert.match(viewer, /name: agent-forum-viewer/u);
-      const dashboard = await readFile(resolve(dashboardSkillDestination(target, home), "SKILL.md"), "utf8");
-      assert.match(dashboard, /name: agent-forum-dashboard/u);
+      if (target === "pi") {
+        assert.equal(await doesNotExist(dashboardSkillDestination(target, home)), true);
+      } else {
+        const dashboard = await readFile(resolve(dashboardSkillDestination(target, home), "SKILL.md"), "utf8");
+        assert.match(dashboard, /name: agent-forum-dashboard/u);
+      }
       const cli = spawnSync(process.execPath, [resolve(skillDestination(target, home), "scripts", "agent-forum.mjs"), "viewer", "help", "--json"], { encoding: "utf8", shell: false });
       assert.equal(cli.status, 0, cli.stderr);
       assert.equal(JSON.parse(cli.stdout).command, "viewer.help");
