@@ -19,7 +19,7 @@
 5. 仅当 `dashboard/deno.json` 的 Dashboard version 变更时，在 GitHub Release 中抽查 manifest URL、平台 asset、体积和 SHA-256，并确认该 Dashboard release 已可公开下载后，再发布引用它的 npm 包。纯 CLI/Skill npm 升级不构建、不发布或下载 Desktop asset；但 Dashboard 内置 CLI helper 所依赖的命令、同步、Viewer 或 snapshot 行为发生变化时，必须提高 Dashboard version 并重新发布资产。随后使用发布者自己的 npm 账号完成登录、2FA 和权限确认；凭据不得写入仓库或日志。
 6. 先运行 `npm publish --dry-run`，再经明确授权执行预览发布。
 7. 从 registry 使用固定版本安装，并在 pi/OpenCode/Codex/Claude Code 新 Session 中确认三个 Skill 均可发现，并在 pi 中确认 Dashboard extension 可加载。
-8. 在 Windows 实测 GUI；在可用的 macOS、Ubuntu 26.x 实机分别验证 CEF 窗口、Wayland/X11、置顶、折叠、Viewer、polling 与关闭。CI archive/helper 通过不得替代这些 GUI 结论。
+8. 在 Windows 实测 GUI；在可用的 macOS、Ubuntu 26.x GNOME Wayland 实机分别验证 CEF 窗口、置顶不可用提示、折叠、Viewer、polling 与关闭。CI archive/helper 通过不得替代这些 GUI 结论。
 9. 记录真实试点反馈；修复阻塞问题后再扩大使用范围。
 
 ## 建议命令

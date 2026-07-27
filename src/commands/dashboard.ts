@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExitCode } from "../errors.js";
+import { createAgentForumPaths } from "../storage/paths.js";
 import { DASHBOARD_VERSION, VERSION } from "../version.js";
 import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashboardSnapshot, setDashboardForumPolling, setDashboardRoomPinned } from "../services/dashboard.js";
 import { getDashboardInstallationStatus, inspectDashboardRelease, installDashboard, uninstallDashboard } from "../services/dashboard-installer.js";
@@ -13,8 +15,8 @@ import { commandError, invalidArgument } from "./error-result.js";
 import { parseCommandOptions, requireOption } from "./options.js";
 import type { CommandExecution } from "./types.js";
 
-/** npm package version does not participate: Desktop assets update only when their own version changes. */
-export function dashboardNeedsAutomaticUpdate(installedVersion: string | undefined, dashboardVersion = DASHBOARD_VERSION): boolean {
+/** npm package version does not participate: Desktop assets only report their own available update. */
+export function dashboardUpdateAvailable(installedVersion: string | undefined, dashboardVersion = DASHBOARD_VERSION): boolean {
   return dashboardVersion !== "0.0.0-dev" && installedVersion !== dashboardVersion;
 }
 
@@ -82,29 +84,31 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       const forum = context.forumAlias; const room = context.roomId;
       if (!forum || context.targetStatus !== "active") return invalidArgument("Dashboard requires an active bound Forum Room");
       const identity = parsed.values.get("--identity");
-      let installed = await getDashboardInstallationStatus();
-      let automaticallyUpdated = false;
-      if (installed.status === "installed" && dashboardNeedsAutomaticUpdate(installed.installation?.version)) {
-        await closeExistingDashboardDesktop().catch(() => false);
-        let lastPercent = -1;
-        const update = await installDashboard({ update: true, ...(options.onProgress ? { onProgress: (received: number, total: number, attempt: number) => { const percent = Math.floor(received * 100 / total); if (percent !== lastPercent) { lastPercent = percent; options.onProgress!(`Updating Dashboard: ${percent}% (attempt ${attempt}/3)\r`); } } } : {}) });
-        options.onProgress?.("\n");
-        automaticallyUpdated = update.action === "updated";
-        installed = await getDashboardInstallationStatus();
-      }
-      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...(identity ? { identityId: identity } : {}) })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${DASHBOARD_VERSION}; ` : ""}Dashboard already running; client attached.\n` };
+      const installed = await getDashboardInstallationStatus();
+      // Desktop archive 体积较大；显式打开只提示可用更新，绝不下载或替换用户当前版本。
+      const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
+      const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard update --yes to install it.` : "";
+      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...(identity ? { identityId: identity } : {}) })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, updateAvailable }, human: `Dashboard already running; client attached.${updateHint}\n` };
       const moduleDirectory = dirname(fileURLToPath(import.meta.url));
       const entrypoint = [resolve(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
       const deno = process.platform === "win32" ? resolve(homedir(), ".deno", "bin", "deno.exe") : "deno";
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && entrypoint && (process.platform !== "win32" || existsSync(deno));
-      if (installed.status !== "installed" && !developmentFallback) return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard install" : `Dashboard installation is ${installed.status}; run agent-forum dashboard update --yes`);
+      if (installed.status !== "installed" && !developmentFallback) {
+        const modified = installed.status === "modified" && installed.modifiedFiles?.length
+          ? ` (changed files: ${installed.modifiedFiles.slice(0, 5).join(", ")}${installed.modifiedFiles.length > 5 ? ", …" : ""})`
+          : "";
+        return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard install" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard update --yes`);
+      }
       const executable = installed.status === "installed" ? installed.executable! : deno;
       const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve(dirname(entrypoint!), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint!];
       const dashboardCli = installed.status === "installed" ? resolve(dirname(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
       if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard update --yes");
-      const child = spawn(executable, executableArgs, { detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve(dirname(executable), "AppIcon.ico") : resolve(dirname(entrypoint!), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
+      // CEF 可能在工作目录写入诊断或缓存。固定使用私有 state 目录，绝不让运行时文件污染已校验的安装 payload。
+      const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
+      await mkdir(dashboardRuntimeDirectory, { recursive: true, mode: 0o700 });
+      const child = spawn(executable, executableArgs, { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve(dirname(executable), "AppIcon.ico") : resolve(dirname(entrypoint!), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
       child.unref();
-      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${DASHBOARD_VERSION}; ` : ""}Dashboard started.\n` };
+      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable }, human: `Dashboard started.${updateHint}\n` };
     }
     if (subcommand === "pin") {
       const parsed = parseCommandOptions(args.slice(1), { values: ["--room-id", "--enabled"] });

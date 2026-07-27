@@ -58,7 +58,9 @@ test("Dashboard installer previews, verifies, installs, detects modification, an
     assert.equal(updated.installation.version, "1.2.4");
     await chmod(updated.executable, 0o700);
     await writeFile(updated.executable, "modified");
-    assert.equal((await getDashboardInstallationStatus(paths)).status, "modified");
+    const modified = await getDashboardInstallationStatus(paths);
+    assert.equal(modified.status, "modified");
+    assert.deepEqual(modified.modifiedFiles, ["agent-forum-dashboard/agent-forum-dashboard.exe"], "modification diagnostics are relative to the installation root");
     await assert.rejects(uninstallDashboard({}, paths), (error) => error instanceof ServiceError && error.code === "DASHBOARD_INSTALLATION_MODIFIED");
     assert.equal((await uninstallDashboard({ force: true }, paths)).action, "uninstalled");
     assert.equal((await getDashboardInstallationStatus(paths)).status, "not-installed");

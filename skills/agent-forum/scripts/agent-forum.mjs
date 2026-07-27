@@ -10499,15 +10499,17 @@ status: ${result.targetStatus}
 // src/commands/dashboard.ts
 import { spawn as spawn2 } from "node:child_process";
 import { existsSync } from "node:fs";
+import { mkdir as mkdir4 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
 import { dirname as dirname4, resolve as resolve17 } from "node:path";
 import { fileURLToPath } from "node:url";
+init_paths();
 
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.11" : "0.0.0-dev";
-var DASHBOARD_VERSION = true ? "0.0.11" : "0.0.0-dev";
+var VERSION = true ? "0.0.12" : "0.0.0-dev";
+var DASHBOARD_VERSION = true ? "0.0.12" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
@@ -12961,7 +12963,7 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
   for (const [forumId, clients] of teams) {
     const alias = clients[0].forumAlias;
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0, own: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
     const seen = /* @__PURE__ */ new Set();
     for (const identityId of new Set(clients.map((client) => client.identityId))) {
       const inbox = await getAllUnreadInboxEntries({ forumAlias: alias, identityId }, paths);
@@ -12986,12 +12988,12 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
       if (!room) continue;
       for (const thread of sourceRoom.threads) {
         for (const item of thread.timeline) {
-          if (item.kind === "message" && attachedAtByIdentity.get(item.authorId) !== void 0 && item.createdAt >= attachedAtByIdentity.get(item.authorId)) room.counts.own += 1;
+          if (item.kind === "message" && attachedAtByIdentity.get(item.authorId) !== void 0 && item.createdAt >= attachedAtByIdentity.get(item.authorId)) room.counts.other += 1;
         }
       }
     }
     const allRooms = [...byRoom.values()].map(({ status: _status, threads: _threads, ...room }) => room);
-    const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other, own: total.own + room.counts.own }), { related: 0, broadcast: 0, other: 0, own: 0 });
+    const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other }), { related: 0, broadcast: 0, other: 0 });
     const rooms = allRooms.sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.activeLocalAgents - left.activeLocalAgents || right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
     result.push({ forumId, forumAlias: alias, polling: runtime.pollingForumIds.includes(forumId), counts, rooms });
   }
@@ -13095,10 +13097,8 @@ async function collectInstalledFiles(root, directory = root) {
 function relativePath(root, path2) {
   return path2.slice(resolve16(root).length + 1).split(sep2).join("/");
 }
-function sameFileSet(left, right) {
-  const leftKeys = Object.keys(left).sort();
-  const rightKeys = Object.keys(right).sort();
-  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
+function modifiedFilePaths(expected, actual) {
+  return [.../* @__PURE__ */ new Set([...Object.keys(expected), ...Object.keys(actual)])].filter((path2) => expected[path2] !== actual[path2]).sort();
 }
 async function fetchJson(url, fetcher) {
   let lastError;
@@ -13286,7 +13286,8 @@ async function getDashboardInstallationStatus(paths = createAgentForumPaths()) {
   try {
     const actual = await sha256File(executable);
     const files = await collectInstalledFiles(paths.dashboardInstallDirectory);
-    return { status: actual === installation.executableSha256 && sameFileSet(files, installation.files) ? "installed" : "modified", installation, executable };
+    const modifiedFiles = modifiedFilePaths(installation.files, files);
+    return actual === installation.executableSha256 && modifiedFiles.length === 0 ? { status: "installed", installation, executable } : { status: "modified", installation, executable, modifiedFiles };
   } catch {
     return { status: "damaged", installation, executable };
   }
@@ -13403,7 +13404,7 @@ async function closeExistingDashboardDesktop(paths = createAgentForumPaths()) {
 }
 
 // src/commands/dashboard.ts
-function dashboardNeedsAutomaticUpdate(installedVersion, dashboardVersion = DASHBOARD_VERSION) {
+function dashboardUpdateAvailable(installedVersion, dashboardVersion = DASHBOARD_VERSION) {
   return dashboardVersion !== "0.0.0-dev" && installedVersion !== dashboardVersion;
 }
 async function executeDashboardCommand(args2, options = {}) {
@@ -13493,36 +13494,28 @@ Run again with --yes to confirm the download.
       const room = context.roomId;
       if (!forum || context.targetStatus !== "active") return invalidArgument("Dashboard requires an active bound Forum Room");
       const identity = parsed.values.get("--identity");
-      let installed = await getDashboardInstallationStatus();
-      let automaticallyUpdated = false;
-      if (installed.status === "installed" && dashboardNeedsAutomaticUpdate(installed.installation?.version)) {
-        await closeExistingDashboardDesktop().catch(() => false);
-        let lastPercent = -1;
-        const update = await installDashboard({ update: true, ...options.onProgress ? { onProgress: (received, total, attempt) => {
-          const percent = Math.floor(received * 100 / total);
-          if (percent !== lastPercent) {
-            lastPercent = percent;
-            options.onProgress(`Updating Dashboard: ${percent}% (attempt ${attempt}/3)\r`);
-          }
-        } } : {} });
-        options.onProgress?.("\n");
-        automaticallyUpdated = update.action === "updated";
-        installed = await getDashboardInstallationStatus();
-      }
-      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${DASHBOARD_VERSION}; ` : ""}Dashboard already running; client attached.
+      const installed = await getDashboardInstallationStatus();
+      const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
+      const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard update --yes to install it.` : "";
+      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, updateAvailable }, human: `Dashboard already running; client attached.${updateHint}
 ` };
       const moduleDirectory = dirname4(fileURLToPath(import.meta.url));
       const entrypoint = [resolve17(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve17(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
       const deno = process.platform === "win32" ? resolve17(homedir2(), ".deno", "bin", "deno.exe") : "deno";
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && entrypoint && (process.platform !== "win32" || existsSync(deno));
-      if (installed.status !== "installed" && !developmentFallback) return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard install" : `Dashboard installation is ${installed.status}; run agent-forum dashboard update --yes`);
+      if (installed.status !== "installed" && !developmentFallback) {
+        const modified = installed.status === "modified" && installed.modifiedFiles?.length ? ` (changed files: ${installed.modifiedFiles.slice(0, 5).join(", ")}${installed.modifiedFiles.length > 5 ? ", \u2026" : ""})` : "";
+        return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard install" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard update --yes`);
+      }
       const executable = installed.status === "installed" ? installed.executable : deno;
       const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve17(dirname4(entrypoint), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint];
       const dashboardCli = installed.status === "installed" ? resolve17(dirname4(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
       if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard update --yes");
-      const child = spawn2(executable, executableArgs, { detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve17(dirname4(executable), "AppIcon.ico") : resolve17(dirname4(entrypoint), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });
+      const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
+      await mkdir4(dashboardRuntimeDirectory, { recursive: true, mode: 448 });
+      const child = spawn2(executable, executableArgs, { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve17(dirname4(executable), "AppIcon.ico") : resolve17(dirname4(entrypoint), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });
       child.unref();
-      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${DASHBOARD_VERSION}; ` : ""}Dashboard started.
+      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable }, human: `Dashboard started.${updateHint}
 ` };
     }
     if (subcommand === "pin") {
@@ -13578,7 +13571,7 @@ init_local_config();
 init_timestamps();
 init_runner();
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { lstat as lstat2, mkdir as mkdir4, rename as rename4, rm as rm9 } from "node:fs/promises";
+import { lstat as lstat2, mkdir as mkdir5, rename as rename4, rm as rm9 } from "node:fs/promises";
 import { resolve as resolve18 } from "node:path";
 
 // src/git/remote.ts
@@ -13742,7 +13735,7 @@ async function addRemoteForum(input, paths = createAgentForumPaths()) {
       `managed forum path already exists: ${destination}`
     );
   }
-  await mkdir4(paths.forumsDirectory, { recursive: true });
+  await mkdir5(paths.forumsDirectory, { recursive: true });
   let cloned = false;
   try {
     requireGit(paths.forumsDirectory, [
@@ -14193,7 +14186,7 @@ init_lock();
 init_paths();
 init_errors2();
 import {
-  mkdir as mkdir5,
+  mkdir as mkdir6,
   readFile as readFile15,
   rename as rename5,
   rm as rm10,
@@ -14231,7 +14224,7 @@ function samePublishedIdentity(existing, identity) {
 async function initLocalForum(input, paths = createAgentForumPaths()) {
   assertLocalAlias(input.alias);
   const dataBranch = input.dataBranch ?? "main";
-  await mkdir5(paths.forumsDirectory, { recursive: true });
+  await mkdir6(paths.forumsDirectory, { recursive: true });
   assertGitBranchName(paths.forumsDirectory, dataBranch);
   const configLock = await acquireForumLock({
     lockPath: resolve20(paths.locksDirectory, "config.lock"),
@@ -15681,7 +15674,7 @@ async function executeSetupCommand(args2) {
 import { createHash as createHash2, randomUUID as randomUUID6 } from "node:crypto";
 import {
   cp,
-  mkdir as mkdir6,
+  mkdir as mkdir7,
   readFile as readFile16,
   readdir as readdir10,
   rename as rename6,
@@ -15763,7 +15756,7 @@ async function loadState2(homeDirectory) {
 }
 async function saveState(homeDirectory, state2) {
   const destination = stateFile(homeDirectory);
-  await mkdir6(dirname5(destination), { recursive: true });
+  await mkdir7(dirname5(destination), { recursive: true });
   const temporary = `${destination}.tmp-${randomUUID6()}`;
   try {
     await writeFile2(temporary, `${JSON.stringify(state2, null, 2)}
@@ -15827,7 +15820,7 @@ async function resolveSkillSource(explicit) {
   );
 }
 async function replaceDirectory(source, destination) {
-  await mkdir6(dirname5(destination), { recursive: true });
+  await mkdir7(dirname5(destination), { recursive: true });
   const staging = `${destination}.staging-${randomUUID6()}`;
   const backup = `${destination}.backup-${randomUUID6()}`;
   let movedExisting = false;
@@ -16334,7 +16327,7 @@ init_lock();
 init_paths();
 import { randomBytes as randomBytes2, randomUUID as randomUUID7 } from "node:crypto";
 import { spawn as spawn3 } from "node:child_process";
-import { mkdir as mkdir7, readFile as readFile17, readdir as readdir11, rm as rm12 } from "node:fs/promises";
+import { mkdir as mkdir8, readFile as readFile17, readdir as readdir11, rm as rm12 } from "node:fs/promises";
 import { dirname as dirname6, resolve as resolve22 } from "node:path";
 init_errors2();
 
@@ -16902,7 +16895,7 @@ async function runViewerServer(input, paths = createAgentForumPaths()) {
     pid: process.pid,
     startedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  await mkdir7(paths.viewerDirectory, { recursive: true });
+  await mkdir8(paths.viewerDirectory, { recursive: true });
   await writeJsonAtomic(sessionPath(paths, input.sessionId), session, { overwrite: true, mode: 384 });
   if (input.openBrowser) await openBrowser(server.url);
   await server.closed;
@@ -16970,7 +16963,7 @@ async function generateViewerHtml(input, paths = createAgentForumPaths()) {
   const output2 = input.output ?? resolve22(paths.viewerDirectory, `${context.roomId}.html`);
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
-  await mkdir7(dirname6(output2), { recursive: true });
+  await mkdir8(dirname6(output2), { recursive: true });
   const html = renderViewerHtml(cached.snapshot, room);
   await import("node:fs/promises").then(({ writeFile: writeFile3 }) => writeFile3(output2, html, { encoding: "utf8", mode: 384 }));
   return { output: output2 };

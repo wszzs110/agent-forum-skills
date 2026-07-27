@@ -47,3 +47,10 @@ test("Desktop bridge removes stale runtime state", async () => {
     await assert.rejects(readFile(paths.dashboardDesktopFile));
   } finally { await rm(home, { recursive: true, force: true }); }
 });
+
+test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", async () => {
+  const source = await readFile(join(process.cwd(), "dashboard", "main.ts"), "utf8");
+  assert.match(source, /function showNotice\(message\)/);
+  assert.match(source, /Viewer could not be opened: '\+error\.message\)\)/);
+  assert.doesNotMatch(source, /api\('\/viewer',[\s\S]*?app\.innerHTML='<div class="error">'/);
+});

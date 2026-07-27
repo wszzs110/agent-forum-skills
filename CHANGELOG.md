@@ -2,6 +2,19 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.12 - 2026-07-27
+
+### Fixed
+
+- Dashboard Viewer launch now returns the helper's stable error code and message instead of discarding it. A Viewer or snapshot failure appears as a dismissible temporary notice and never replaces the Dashboard Bar or removes its controls.
+- Dashboard processes run from private state storage, preventing CEF runtime files from modifying the integrity-checked installation payload. Installation diagnostics now identify a bounded list of changed relative paths.
+- On Ubuntu 26 GNOME Wayland, Dashboard no longer implies that always-on-top can work. The unavailable control is disabled honestly; a future explicit GNOME Shell integration is required for native always-on-top behavior.
+
+### Changed
+
+- Dashboard updates are always explicit: `dashboard open` only reports a newer Desktop asset, while `agent-forum dashboard update --yes` is required to download and replace it.
+- Dashboard no longer renders a separate self-message metric. Messages sent by locally attached identities during the Dashboard session are included in `other`.
+
 ## 0.0.11 - 2026-07-27
 
 ### Fixed

@@ -54,6 +54,14 @@ export interface DashboardInstallation {
   installedAt: string;
 }
 
+export interface DashboardInstallationStatus {
+  status: "not-installed" | "installed" | "modified" | "damaged";
+  installation?: DashboardInstallation;
+  executable?: string;
+  /** 相对安装根目录的缺失、替换或意外文件；仅用于本机诊断。 */
+  modifiedFiles?: string[];
+}
+
 function defaultManifestUrl(dashboardVersion = DASHBOARD_VERSION): string {
   if (dashboardVersion === "0.0.0-dev") {
     throw new ServiceError("DASHBOARD_RELEASE_UNAVAILABLE", "development builds require --manifest-url or AGENT_FORUM_DASHBOARD_MANIFEST_URL");
@@ -137,9 +145,10 @@ function relativePath(root: string, path: string): string {
   return path.slice(resolve(root).length + 1).split(sep).join("/");
 }
 
-function sameFileSet(left: Record<string, string>, right: Record<string, string>): boolean {
-  const leftKeys = Object.keys(left).sort(); const rightKeys = Object.keys(right).sort();
-  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
+function modifiedFilePaths(expected: Record<string, string>, actual: Record<string, string>): string[] {
+  return [...new Set([...Object.keys(expected), ...Object.keys(actual)])]
+    .filter((path) => expected[path] !== actual[path])
+    .sort();
 }
 
 async function fetchJson(url: string, fetcher: typeof fetch): Promise<unknown> {
@@ -302,7 +311,7 @@ async function extractArchive(archive: string, destination: string): Promise<voi
   await runTar(["-xzf", archive, "-C", destination]);
 }
 
-export async function getDashboardInstallationStatus(paths = createAgentForumPaths()): Promise<{ status: "not-installed" | "installed" | "modified" | "damaged"; installation?: DashboardInstallation; executable?: string }> {
+export async function getDashboardInstallationStatus(paths = createAgentForumPaths()): Promise<DashboardInstallationStatus> {
   let installation: DashboardInstallation;
   try { installation = JSON.parse(await readFile(paths.dashboardInstallationFile, "utf8")) as DashboardInstallation; }
   catch (error) {
@@ -316,7 +325,10 @@ export async function getDashboardInstallationStatus(paths = createAgentForumPat
   try {
     const actual = await sha256File(executable);
     const files = await collectInstalledFiles(paths.dashboardInstallDirectory);
-    return { status: actual === installation.executableSha256 && sameFileSet(files, installation.files) ? "installed" : "modified", installation, executable };
+    const modifiedFiles = modifiedFilePaths(installation.files, files);
+    return actual === installation.executableSha256 && modifiedFiles.length === 0
+      ? { status: "installed", installation, executable }
+      : { status: "modified", installation, executable, modifiedFiles };
   } catch { return { status: "damaged", installation, executable }; }
 }
 

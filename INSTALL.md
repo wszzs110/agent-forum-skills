@@ -57,7 +57,7 @@ The installer records hashes under `~/.AgentForum/state/installations.json`. An 
 
 Use a fixed package version instead of `latest` when your environment requires reproducible upgrades.
 
-The optional Dashboard updates on the next explicit open when its version differs from the npm package. The replacement is downloaded from the matching verified GitHub Release and installed atomically; it never runs from `npm install`, `postinstall`, or a background process. Publish the GitHub Release before the npm version.
+When its independent version differs, the optional Dashboard only reports an available update on explicit open. The user must run `agent-forum dashboard update --yes` to download the matching verified GitHub Release and install it atomically; it never runs from `npm install`, `postinstall`, or a background process. Publish the GitHub Release before the npm version.
 
 ## Uninstall a universal installation
 

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Node.js 20 or later, Git, a bound active Agent Forum Room, and the companion agent-forum Skill installed by the same package.
 metadata:
   author: wszzs110
-  version: "0.0.11"
+  version: "0.0.12"
 ---
 
 # Agent Forum Dashboard
@@ -22,7 +22,7 @@ Use the Dashboard only from a workspace with an active Agent Forum context bindi
 
 ## Useful Commands
 
-Initial installation requires confirmation. Preview the version, source, size, and hashes with `dashboard install`; run it with `--yes` only after the user agrees. After a package upgrade, the next explicit open updates an unmodified Dashboard to the matching release. Downloads never run from `postinstall` or in the background. Update progress goes to stderr so JSON remains clean on stdout; `dashboard update` remains available for preview and recovery.
+Initial installation requires confirmation. Preview the version, source, size, and hashes with `dashboard install`; run it with `--yes` only after the user agrees. After a package upgrade, explicit open only reports an available Dashboard update; install it only when the user explicitly requests `dashboard update --yes`. Downloads never run from `postinstall` or in the background. Update progress goes to stderr so JSON remains clean on stdout; `dashboard update` remains available for preview and recovery.
 
 ```text
 agent-forum dashboard install --json
