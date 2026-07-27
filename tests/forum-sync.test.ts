@@ -15,6 +15,7 @@ import { addRemoteForum, publishLocalForum } from "../src/services/forum-remote.
 import { refreshForumFromRemote, syncForum } from "../src/services/forum-sync.js";
 import { initLocalForum } from "../src/services/local-forum.js";
 import { createRoom, createRoomEvent, listRooms } from "../src/services/room.js";
+import { createThread } from "../src/services/thread.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
 const memberId = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
@@ -110,6 +111,59 @@ test("forum sync pulls remote commits and pushes local commits", async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("remote invalid Message metadata is isolated without blocking sync or later valid collaboration", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-sync-remote-schema-"));
+  try {
+    const shared = await setupSharedForum(root);
+    const target = await addClone(root, "target", shared.remote);
+    const room = await createRoom({ forumAlias: "source", slug: "protocol", title: "Protocol", description: "Remote preflight", roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ad9", now: createdAt }, shared.sourcePaths);
+    await syncForum("source", shared.sourcePaths);
+    const thread = await createThread({ forumAlias: "source", room: room.room.id, title: "Schema", kind: "discussion", body: "Valid body", threadId: "thread_0194f6d2-8c10-7a31-9e42-123456789ad9", messageId: "msg_0194f6d2-8c10-7a31-9e42-123456789ad9", now: createdAt }, shared.sourcePaths);
+    await syncForum("source", shared.sourcePaths);
+    const metadataPath = resolve(shared.source.path, "rooms", room.room.id, "threads", thread.thread.id, "messages", thread.firstMessage.id, "message.json");
+    const invalid = JSON.parse(await readFile(metadataPath, "utf8")) as Record<string, unknown>;
+    invalid.schemaVersion = 9;
+    invalid.createdAt = "not-a-timestamp";
+    await writeFile(metadataPath, `${JSON.stringify(invalid, null, 2)}\n`);
+    requireGit(shared.source.path, ["add", "--", metadataPath]);
+    requireGit(shared.source.path, ["commit", "-m", "Inject invalid historical message for preflight test"]);
+    requireGit(shared.source.path, ["push", "origin", "forum-data"]);
+
+    const integrated = await syncForum("target", target.paths);
+    assert.equal(integrated.outcome, "updated");
+    assert.ok(integrated.warnings.some((warning) => warning.code === "REMOTE_MESSAGE_SCHEMA_INVALID"));
+    assert.ok(integrated.warnings.some((warning) => warning.code === "REMOTE_IMMUTABLE_HISTORY_MODIFIED"));
+    assert.equal(integrated.warnings.every((warning) => !warning.path?.includes(target.forum.path)), true, "sync warnings must not expose local clone paths");
+    assert.deepEqual(await listConflicts("target", target.paths), { conflicts: [] });
+
+    await createRoom({ forumAlias: "target", slug: "still-works", title: "Still works", description: "A valid Room after an isolated bad message.", roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ada", now: new Date("2026-07-12T10:21:00.000Z") }, target.paths);
+    assert.equal((await syncForum("target", target.paths)).outcome, "pushed");
+    assert.equal((await syncForum("source", shared.sourcePaths)).outcome, "updated");
+    assert.ok((await listRooms("source", shared.sourcePaths)).rooms.some((item) => item.slug === "still-works"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("invalid remote Forum roots still block sync safely", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-sync-invalid-root-"));
+  try {
+    const shared = await setupSharedForum(root);
+    const target = await addClone(root, "target", shared.remote);
+    const protocolPath = resolve(shared.source.path, ".forum", "protocol.json");
+    const invalid = JSON.parse(await readFile(protocolPath, "utf8")) as Record<string, unknown>;
+    invalid.dataBranch = "different-branch";
+    await writeFile(protocolPath, `${JSON.stringify(invalid, null, 2)}\n`);
+    requireGit(shared.source.path, ["add", "--", protocolPath]);
+    requireGit(shared.source.path, ["commit", "-m", "Inject invalid Forum root for preflight test"]);
+    requireGit(shared.source.path, ["push", "origin", "forum-data"]);
+    const originalHead = requireGit(target.forum.path, ["rev-parse", "HEAD"]).stdout.trim();
+    await assert.rejects(syncForum("target", target.paths), (error) => error instanceof ServiceError && error.code === "REMOTE_PROTOCOL_INVALID");
+    assert.equal(requireGit(target.forum.path, ["rev-parse", "HEAD"]).stdout.trim(), originalHead);
+    assert.deepEqual(await listConflicts("target", target.paths), { conflicts: [] });
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("Viewer refresh never pushes or rebases local commits", async () => {

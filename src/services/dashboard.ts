@@ -19,6 +19,8 @@ export interface DashboardClient {
   forumId: string;
   roomId: string;
   identityId: string;
+  /** 首次连接本次 Dashboard 的时间；仅用于标识本次会话中的本人新消息。 */
+  attachedAt?: string;
   expiresAt: string;
 }
 
@@ -42,6 +44,7 @@ function validClient(value: unknown): value is DashboardClient {
     typeof item.clientType === "string" && clientTypes.has(item.clientType) &&
     typeof item.forumAlias === "string" && typeof item.forumId === "string" &&
     typeof item.roomId === "string" && typeof item.identityId === "string" &&
+    (item.attachedAt === undefined || (typeof item.attachedAt === "string" && !Number.isNaN(Date.parse(item.attachedAt)))) &&
     typeof item.expiresAt === "string" && !Number.isNaN(Date.parse(item.expiresAt));
 }
 
@@ -87,9 +90,11 @@ export async function attachDashboardClient(input: {
   const config = await loadLocalConfig(paths);
   const forum = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
-  const client: DashboardClient = { clientId: input.clientId, clientType: input.clientType, forumAlias: forum.alias, forumId: forum.forumId, roomId: input.roomId, identityId: identity.memberId, expiresAt: new Date(Date.now() + leaseMs).toISOString() };
+  const attachedAt = new Date().toISOString();
+  const client: DashboardClient = { clientId: input.clientId, clientType: input.clientType, forumAlias: forum.alias, forumId: forum.forumId, roomId: input.roomId, identityId: identity.memberId, attachedAt, expiresAt: new Date(Date.now() + leaseMs).toISOString() };
   return mutateRuntime("dashboard attach", paths, (runtime) => {
     const previous = runtime.clients.find((item) => item.clientId === client.clientId);
+    if (previous?.attachedAt) client.attachedAt = previous.attachedAt;
     runtime.clients = [...runtime.clients.filter((item) => item.clientId !== client.clientId), client];
     if (!previous || previous.clientType !== client.clientType || previous.forumId !== client.forumId || previous.roomId !== client.roomId || previous.identityId !== client.identityId) runtime.revision += 1;
     return { client, activeClients: runtime.clients.length };
@@ -136,7 +141,7 @@ export async function setDashboardRoomPinned(roomId: string, pinned: boolean, pa
   });
 }
 
-export async function getDashboardSnapshot(paths = createAgentForumPaths()): Promise<{ revision: number; teams: Array<{ forumId: string; forumAlias: string; polling: boolean; counts: { related: number; broadcast: number; other: number }; rooms: Array<{ roomId: string; title: string; counts: { related: number; broadcast: number; other: number }; activeLocalAgents: number; pinned: boolean }> }>; activeClients: number }> {
+export async function getDashboardSnapshot(paths = createAgentForumPaths()): Promise<{ revision: number; teams: Array<{ forumId: string; forumAlias: string; polling: boolean; counts: { related: number; broadcast: number; other: number; own: number }; rooms: Array<{ roomId: string; title: string; counts: { related: number; broadcast: number; other: number; own: number }; activeLocalAgents: number; pinned: boolean }> }>; activeClients: number }> {
   const runtime = await dashboardStatus(paths);
   const teams = new Map<string, DashboardClient[]>();
   for (const client of runtime.clients) teams.set(client.forumId, [...(teams.get(client.forumId) ?? []), client]);
@@ -144,7 +149,7 @@ export async function getDashboardSnapshot(paths = createAgentForumPaths()): Pro
   for (const [forumId, clients] of teams) {
     const alias = clients[0]!.forumAlias;
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0, own: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
     const seen = new Set<string>();
     for (const identityId of new Set(clients.map((client) => client.identityId))) {
       const inbox = await getAllUnreadInboxEntries({ forumAlias: alias, identityId }, paths);
@@ -158,8 +163,23 @@ export async function getDashboardSnapshot(paths = createAgentForumPaths()): Pro
         else if (!entry.threadId || room.threads.get(entry.threadId) === "open") room.counts.other += 1;
       }
     }
+    const attachedAtByIdentity = new Map<string, string>();
+    for (const client of clients) {
+      const attachedAt = client.attachedAt ?? client.expiresAt;
+      const current = attachedAtByIdentity.get(client.identityId);
+      if (!current || attachedAt < current) attachedAtByIdentity.set(client.identityId, attachedAt);
+    }
+    for (const sourceRoom of snapshot.rooms) {
+      const room = byRoom.get(sourceRoom.room.id);
+      if (!room) continue;
+      for (const thread of sourceRoom.threads) {
+        for (const item of thread.timeline) {
+          if (item.kind === "message" && attachedAtByIdentity.get(item.authorId) !== undefined && item.createdAt >= attachedAtByIdentity.get(item.authorId)!) room.counts.own += 1;
+        }
+      }
+    }
     const allRooms = [...byRoom.values()].map(({ status: _status, threads: _threads, ...room }) => room);
-    const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other }), { related: 0, broadcast: 0, other: 0 });
+    const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other, own: total.own + room.counts.own }), { related: 0, broadcast: 0, other: 0, own: 0 });
     const rooms = allRooms.sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.activeLocalAgents - left.activeLocalAgents || (right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other) - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
     result.push({ forumId, forumAlias: alias, polling: runtime.pollingForumIds.includes(forumId), counts, rooms });
   }

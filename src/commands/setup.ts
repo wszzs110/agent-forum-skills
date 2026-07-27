@@ -6,9 +6,12 @@ import {
 import { ExitCode } from "../errors.js";
 import { ContextError } from "../context/bindings.js";
 import {
+  addRemoteForum,
   inspectForumOriginRemote,
   publishLocalForum,
+  remoteHasBranches,
 } from "../services/forum-remote.js";
+import { syncForum } from "../services/forum-sync.js";
 import { createRoom, joinRoom } from "../services/room.js";
 import { bindContext, resolveContext } from "../services/context.js";
 import type { ResolvedContextView } from "../services/context.js";
@@ -39,8 +42,8 @@ Usage:
 
 Steps performed idempotently:
   1. Create a default identity if none exists.
-  2. Create a local Forum if the alias is not yet registered.
-  3. Publish the Forum to --remote if the alias has no remote configured.
+  2. Clone an existing Forum from --remote, or create a local Forum only when the remote is empty.
+  3. Publish a newly created Forum to --remote if the alias has no remote configured.
   4. Create the Room if its slug does not exist.
   5. Publish the identity as an active Forum member.
   6. Join the Room with the published identity.
@@ -142,20 +145,31 @@ export async function executeSetupCommand(
       data.identityUsed = { memberId: identityId };
     }
 
-    // 2. Ensure local Forum.
+    // 2. Ensure local Forum. A non-empty remote is authoritative: clone it before any local init.
     const existingForum = config.forums.find((f) => f.alias === alias);
     let forumId: string;
     if (!existingForum) {
-      const initResult = await initLocalForum({
-        alias,
-        name,
-        description,
-        dataBranch: dataBranch ?? "main",
-        identityId,
-      });
-      forumId = initResult.forumId;
-      log.push(`created forum: ${forumId}`);
-      data.forumCreated = { forumId, path: initResult.path };
+      if (remote && remoteHasBranches(remote)) {
+        const added = await addRemoteForum({
+          alias,
+          remote,
+          ...(dataBranch ? { branch: dataBranch } : {}),
+        });
+        forumId = added.forumId;
+        log.push(`cloned existing forum: ${forumId}`);
+        data.forumAdded = { forumId, path: added.path, branch: added.dataBranch };
+      } else {
+        const initResult = await initLocalForum({
+          alias,
+          name,
+          description,
+          dataBranch: dataBranch ?? "main",
+          identityId,
+        });
+        forumId = initResult.forumId;
+        log.push(`created forum: ${forumId}`);
+        data.forumCreated = { forumId, path: initResult.path };
+      }
     } else {
       forumId = existingForum.forumId;
       log.push(`using forum: ${forumId}`);
@@ -247,6 +261,13 @@ export async function executeSetupCommand(
       });
       log.push(`bound context: ${bindResult.target.forumAlias}/${bindResult.target.roomSlug}`);
       data.contextBound = bindResult;
+    }
+
+    // 8. Publish setup-created member/Room commits as part of the promised one-command flow.
+    if (remote) {
+      const syncResult = await syncForum(alias);
+      log.push(`synchronized remote: ${syncResult.outcome}`);
+      data.remoteSynced = syncResult;
     }
 
     return {

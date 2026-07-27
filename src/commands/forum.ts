@@ -235,7 +235,7 @@ export async function executeForumCommand(
         exitCode: ExitCode.Success,
         command: "forum.sync",
         data: result,
-        human: `forum: ${result.forumAlias}\noutcome: ${result.outcome}\nhead: ${result.finalHead}\nfetches: ${result.fetches}\npush attempts: ${result.pushAttempts}\n`,
+        human: `forum: ${result.forumAlias}\noutcome: ${result.outcome}\nhead: ${result.finalHead}\nfetches: ${result.fetches}\npush attempts: ${result.pushAttempts}\n${result.warnings.length ? `warnings: ${result.warnings.length} malformed remote record(s) were isolated\n` : ""}`,
       };
     }
 

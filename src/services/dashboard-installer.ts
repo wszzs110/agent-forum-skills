@@ -7,7 +7,7 @@ import { basename, dirname, isAbsolute, posix, resolve, sep } from "node:path";
 import { writeJsonAtomic } from "../storage/atomic.js";
 import { acquireForumLock } from "../storage/lock.js";
 import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js";
-import { VERSION } from "../version.js";
+import { DASHBOARD_VERSION } from "../version.js";
 import { ServiceError } from "./errors.js";
 
 const repository = "wszzs110/agent-forum-skills";
@@ -54,11 +54,11 @@ export interface DashboardInstallation {
   installedAt: string;
 }
 
-function defaultManifestUrl(packageVersion = VERSION): string {
-  if (packageVersion === "0.0.0-dev") {
+function defaultManifestUrl(dashboardVersion = DASHBOARD_VERSION): string {
+  if (dashboardVersion === "0.0.0-dev") {
     throw new ServiceError("DASHBOARD_RELEASE_UNAVAILABLE", "development builds require --manifest-url or AGENT_FORUM_DASHBOARD_MANIFEST_URL");
   }
-  return `https://github.com/${repository}/releases/download/v${packageVersion}/dashboard-manifest.json`;
+  return `https://github.com/${repository}/releases/download/v${dashboardVersion}/dashboard-manifest.json`;
 }
 
 function safeExecutable(root: string, relative: string): string {
@@ -158,15 +158,16 @@ async function fetchJson(url: string, fetcher: typeof fetch): Promise<unknown> {
   throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release manifest", { cause: lastError instanceof Error ? lastError.message : String(lastError) });
 }
 
-export async function inspectDashboardRelease(options: { manifestUrl?: string; platform?: NodeJS.Platform; arch?: string; fetcher?: typeof fetch; packageVersion?: string } = {}): Promise<{ manifestUrl: string; version: string; asset: DashboardReleaseAsset }> {
-  const packageVersion = options.packageVersion ?? VERSION;
+export async function inspectDashboardRelease(options: { manifestUrl?: string; platform?: NodeJS.Platform; arch?: string; fetcher?: typeof fetch; dashboardVersion?: string; packageVersion?: string } = {}): Promise<{ manifestUrl: string; version: string; asset: DashboardReleaseAsset }> {
+  // packageVersion is retained as a test-only backward-compatible alias for dashboardVersion.
+  const dashboardVersion = options.dashboardVersion ?? options.packageVersion ?? DASHBOARD_VERSION;
   const configuredManifestUrl = options.manifestUrl ?? process.env.AGENT_FORUM_DASHBOARD_MANIFEST_URL;
-  const manifestUrl = configuredManifestUrl ?? defaultManifestUrl(packageVersion);
+  const manifestUrl = configuredManifestUrl ?? defaultManifestUrl(dashboardVersion);
   let parsedUrl: URL;
   try { parsedUrl = new URL(manifestUrl); } catch { throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL is invalid"); }
   if ((parsedUrl.protocol !== "https:" && parsedUrl.hostname !== "127.0.0.1" && parsedUrl.hostname !== "localhost") || parsedUrl.username || parsedUrl.password) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL must use credential-free HTTPS");
   const manifest = parseManifest(await fetchJson(manifestUrl, options.fetcher ?? fetch));
-  if (!configuredManifestUrl && packageVersion !== "0.0.0-dev" && manifest.version !== packageVersion) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `Dashboard manifest version ${manifest.version} does not match package version ${packageVersion}`);
+  if (!configuredManifestUrl && dashboardVersion !== "0.0.0-dev" && manifest.version !== dashboardVersion) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `Dashboard manifest version ${manifest.version} does not match the required Dashboard version ${dashboardVersion}`);
   const platform = options.platform ?? process.platform;
   const arch = options.arch ?? process.arch;
   const asset = manifest.assets.find((candidate) => candidate.platform === platform && candidate.arch === arch);

@@ -11,13 +11,14 @@ Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Team 和 
 - `related`：与当前本机身份直接相关的未读；
 - `broadcast`：面向 Room 的广播未读；
 - `other`：其余未读；
+- `own`：本次打开 Dashboard 后由当前本机身份发送的消息；它不是未读计数，用于确认本机发帖已被本地读取模型接收；
 - `Active here`：当前有本机 Agent client 附着在该 Room，不代表当前选中。
 
 蓝色边框表示当前选中的 Room。点击其他 Room 会选中并将其移到第一位；点击眼睛按钮才会打开该 Room 的 Viewer。长标题会截断，悬停时平滑滚动，不使用原生 `title` 提示。
 
 右侧按钮依次用于：
 
-1. 打开当前 Room 的 Viewer；
+1. 打开当前 Room 的 Viewer；若启动失败会在 Dashboard 中显示错误，而不是静默忽略；
 2. 开关窗口置顶；
 3. 开关当前 Team 的 polling；
 4. 收起或恢复窗口；
@@ -52,7 +53,7 @@ agent-forum dashboard uninstall
 
 检测到文件被修改或元数据损坏时，更新和卸载会停止；检查本机目录后可显式使用 `--force`。
 
-npm 包升级后，下一次显式打开 Dashboard 会把未修改的 Desktop 程序更新到相同版本。进度写入 stderr，`--json` 结果仍只写入 stdout。更新不会在安装 npm 包时、后台或 Dashboard 关闭期间运行；对应 GitHub Release 必须先于 npm 包发布。
+npm 包版本与 Desktop Dashboard 版本独立。npm 升级后，下一次显式打开只会在包内声明的 Dashboard 版本与本机未修改安装不一致时更新；纯 CLI 或 Skill 更新不会重新下载 Desktop 资产。进度写入 stderr，`--json` 结果仍只写入 stdout。更新不会在安装 npm 包时、后台或 Dashboard 关闭期间运行；只有 Dashboard 版本变更时，对应 GitHub Release 必须先于 npm 包发布。
 
 ## 打开与退出
 

@@ -56,6 +56,22 @@ export interface ForumOriginInspection {
   displayUrl: string | null;
 }
 
+/** 在本地初始化前探测 remote 是否已有任何数据分支，避免产生第二套 Forum 根。 */
+export function remoteHasBranches(
+  remote: string,
+  paths: AgentForumPaths = createAgentForumPaths(),
+): boolean {
+  const safeRemote = validateRemoteUrl(remote);
+  const result = runGit(process.cwd(), ["ls-remote", "--heads", safeRemote.value]);
+  if (result.status !== 0) {
+    throw new ServiceError(
+      "REMOTE_DISCOVERY_FAILED",
+      "could not inspect whether the remote already contains Forum data",
+    );
+  }
+  return result.stdout.trim().length > 0;
+}
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await lstat(path);
@@ -75,20 +91,23 @@ function remoteBranchFromHead(repository: string): string {
     "--short",
     "refs/remotes/origin/HEAD",
   ]);
-  if (head.status !== 0) {
-    throw new ServiceError(
-      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
-      "remote default branch could not be discovered; provide --branch",
-    );
-  }
   const value = head.stdout.trim();
-  if (!value.startsWith("origin/") || value.length <= "origin/".length) {
-    throw new ServiceError(
-      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
-      "remote HEAD does not name an origin branch",
-    );
+  if (head.status === 0 && value.startsWith("origin/") && value.length > "origin/".length) {
+    return value.slice("origin/".length);
   }
-  return value.slice("origin/".length);
+  // 某些 bare remote 在首次 push 后仍将 HEAD 指向尚不存在的 master；
+  // 单一实际分支没有歧义，可安全采用，多个分支仍要求调用者显式指定。
+  const branches = runGit(repository, ["for-each-ref", "--format=%(refname:strip=3)", "refs/remotes/origin"]);
+  const candidates = branches.status === 0
+    ? branches.stdout.split(/\r?\n/u).map((item) => item.trim()).filter((item) => item && item !== "HEAD")
+    : [];
+  if (candidates.length === 1) return candidates[0]!;
+  throw new ServiceError(
+    "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
+    candidates.length > 1
+      ? "remote has multiple branches but no usable default branch; provide --branch"
+      : "remote default branch could not be discovered; provide --branch",
+  );
 }
 
 async function validateClonedForum(

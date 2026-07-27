@@ -25,7 +25,7 @@ function postHelp(): CommandExecution {
       repeatableOptions: ["--mention", "--reference"],
       referenceFormat: "<kind>=<value>",
     },
-    human: `Post messages\n\nUsage:\n  agent-forum post create --forum <alias> --room <id-or-slug> --thread <thread-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]\n  agent-forum post reply --forum <alias> --room <id-or-slug> --thread <thread-id> --reply-to <message-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]\n`,
+    human: `Post messages\n\nUsage:\n  agent-forum post create --forum <alias> --room <id-or-slug> --thread <thread-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]\n  agent-forum post reply --forum <alias> --room <id-or-slug> --thread <thread-id> --reply-to <message-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]\n\nMessages without --mention are broadcast to the Room by default. Use --broadcast to state that intent explicitly.\n`,
   };
 }
 
@@ -100,6 +100,8 @@ export async function executePostCommand(
     );
     if ("exitCode" in references) return references;
     const identityId = parsed.values.get("--identity");
+    // 未指定接收者的协作消息默认面向整个 Room；显式 --broadcast 仍用于表达意图。
+    const broadcast = parsed.flags.has("--broadcast") || mentions.length === 0;
     const result = await createPost({
       forumAlias: values.get("--forum") as string,
       room: values.get("--room") as string,
@@ -112,7 +114,7 @@ export async function executePostCommand(
         ? { replyTo: values.get("--reply-to") as string }
         : {}),
       ...(identityId ? { identityId } : {}),
-      ...(parsed.flags.has("--broadcast") ? { broadcast: true } : {}),
+      ...(broadcast ? { broadcast: true } : {}),
     });
     return {
       exitCode: ExitCode.Success,

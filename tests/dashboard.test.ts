@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
+import { runCli } from "../src/cli.js";
+import { dashboardNeedsAutomaticUpdate } from "../src/commands/dashboard.js";
 import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashboardSnapshot, setDashboardForumPolling, setDashboardRoomPinned } from "../src/services/dashboard.js";
 import { publishIdentity, initLocalForum } from "../src/services/local-forum.js";
 import { createRoom, joinRoom } from "../src/services/room.js";
@@ -30,6 +32,12 @@ async function setup(home: string) {
   return paths;
 }
 
+test("Dashboard auto-update compares only the independent Desktop version", () => {
+  assert.equal(dashboardNeedsAutomaticUpdate("0.0.10", "0.0.10"), false, "an npm-only upgrade must not download Dashboard assets");
+  assert.equal(dashboardNeedsAutomaticUpdate("0.0.10", "0.0.11"), true);
+  assert.equal(dashboardNeedsAutomaticUpdate(undefined, "0.0.10"), true);
+});
+
 test("Dashboard leases aggregate Team snapshots and broadcast counts locally", async () => {
   const home = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-"));
   try {
@@ -50,8 +58,35 @@ test("Dashboard leases aggregate Team snapshots and broadcast counts locally", a
     assert.equal(snapshot.teams[0]?.rooms[0]?.pinned, true);
     assert.ok(snapshot.revision > attachedRevision);
     assert.equal(snapshot.teams[0]?.rooms[0]?.counts.broadcast, 1);
+    assert.equal(snapshot.teams[0]?.rooms[0]?.counts.own, 0, "messages from before Dashboard attachment are not presented as new self activity");
+    await createPost({ forumAlias: "team", room: roomId, thread: threadId, identityId: reader, type: "status", body: "Posted while Dashboard is open", messageId: "msg_0194f6d2-8c10-7a31-9e42-123456789ad2", now: new Date(Date.now() + 1_000) }, paths);
+    const afterOwnPost = await getDashboardSnapshot(paths);
+    assert.equal(afterOwnPost.teams[0]?.rooms[0]?.counts.own, 1, "own posts created during the Dashboard session are visible separately from unread messages");
+    assert.equal(afterOwnPost.teams[0]?.counts.own, 1);
     assert.equal(snapshot.teams[0]?.rooms.length, 7, "Dashboard snapshots retain all rooms for the expanded UI");
     assert.deepEqual(await detachDashboardClient("pi-session-1", paths), { detached: true, activeClients: 0 });
     assert.equal((await dashboardStatus(paths)).clients.length, 0);
   } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test("CLI posts invalidate the active Dashboard and expose the author activity immediately", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-cli-refresh-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    const paths = await setup(home);
+    await attachDashboardClient({ clientId: "pi-author", clientType: "pi", forumAlias: "team", roomId, identityId: author, leaseMs: 30_000 }, paths);
+    const before = (await dashboardStatus(paths)).revision;
+    const stdout: string[] = [];
+    assert.equal(await runCli(["--json", "post", "create", "--forum", "team", "--room", roomId, "--thread", threadId, "--type", "status", "--body", "Visible immediately."], { stdout: (value) => stdout.push(value), stderr: () => undefined }), 0);
+    assert.equal(JSON.parse(stdout.join("")).ok, true);
+    assert.ok((await dashboardStatus(paths)).revision > before, "successful CLI post must invalidate the active Dashboard runtime");
+    assert.equal((await getDashboardSnapshot(paths)).teams[0]?.rooms[0]?.counts.own, 1);
+  } finally {
+    process.env.HOME = previousHome;
+    process.env.USERPROFILE = previousUserProfile;
+    await rm(home, { recursive: true, force: true });
+  }
 });

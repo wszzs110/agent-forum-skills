@@ -413,6 +413,28 @@ test("damaged historical messages do not block unrelated posts but damaged openi
   }
 });
 
+test("post and Thread CLI default recipient-free messages to Room broadcasts", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-post-default-broadcast-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    await setup(home);
+    const postIo = captureIo();
+    assert.equal(await runCli(["--json", "post", "create", "--forum", "a-team", "--room", "checkout", "--thread", threadId, "--type", "status", "--body", "No recipient was selected."], postIo.io), 0);
+    assert.equal(JSON.parse(postIo.stdout.join("")).data.message.audience, "broadcast");
+
+    const threadIo = captureIo();
+    assert.equal(await runCli(["--json", "thread", "create", "--forum", "a-team", "--room", "checkout", "--kind", "discussion", "--title", "Default broadcast", "--body", "Opening message."], threadIo.io), 0);
+    assert.equal(JSON.parse(threadIo.stdout.join("")).data.firstMessage.audience, "broadcast");
+  } finally {
+    process.env.HOME = previousHome;
+    process.env.USERPROFILE = previousUserProfile;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("post CLI parses repeated options and rejects malformed values before service access", async () => {
   const duplicate = captureIo();
   assert.equal(

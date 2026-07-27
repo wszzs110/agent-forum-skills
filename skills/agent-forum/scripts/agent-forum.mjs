@@ -4079,49 +4079,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative3, options, skipNormalization) {
+    function resolveComponent(base, relative4, options, skipNormalization) {
       const target2 = {};
       if (!skipNormalization) {
         base = parse(serialize(base, options), options);
-        relative3 = parse(serialize(relative3, options), options);
+        relative4 = parse(serialize(relative4, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative3.scheme) {
-        target2.scheme = relative3.scheme;
-        target2.userinfo = relative3.userinfo;
-        target2.host = relative3.host;
-        target2.port = relative3.port;
-        target2.path = removeDotSegments(relative3.path || "");
-        target2.query = relative3.query;
+      if (!options.tolerant && relative4.scheme) {
+        target2.scheme = relative4.scheme;
+        target2.userinfo = relative4.userinfo;
+        target2.host = relative4.host;
+        target2.port = relative4.port;
+        target2.path = removeDotSegments(relative4.path || "");
+        target2.query = relative4.query;
       } else {
-        if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
-          target2.userinfo = relative3.userinfo;
-          target2.host = relative3.host;
-          target2.port = relative3.port;
-          target2.path = removeDotSegments(relative3.path || "");
-          target2.query = relative3.query;
+        if (relative4.userinfo !== void 0 || relative4.host !== void 0 || relative4.port !== void 0) {
+          target2.userinfo = relative4.userinfo;
+          target2.host = relative4.host;
+          target2.port = relative4.port;
+          target2.path = removeDotSegments(relative4.path || "");
+          target2.query = relative4.query;
         } else {
-          if (!relative3.path) {
+          if (!relative4.path) {
             target2.path = base.path;
-            if (relative3.query !== void 0) {
-              target2.query = relative3.query;
+            if (relative4.query !== void 0) {
+              target2.query = relative4.query;
             } else {
               target2.query = base.query;
             }
           } else {
-            if (relative3.path[0] === "/") {
-              target2.path = removeDotSegments(relative3.path);
+            if (relative4.path[0] === "/") {
+              target2.path = removeDotSegments(relative4.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target2.path = "/" + relative3.path;
+                target2.path = "/" + relative4.path;
               } else if (!base.path) {
-                target2.path = relative3.path;
+                target2.path = relative4.path;
               } else {
-                target2.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
+                target2.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative4.path;
               }
               target2.path = removeDotSegments(target2.path);
             }
-            target2.query = relative3.query;
+            target2.query = relative4.query;
           }
           target2.userinfo = base.userinfo;
           target2.host = base.host;
@@ -4129,7 +4129,7 @@ var require_fast_uri = __commonJS({
         }
         target2.scheme = base.scheme;
       }
-      target2.fragment = relative3.fragment;
+      target2.fragment = relative4.fragment;
       return target2;
     }
     function equal(uriA, uriB, options) {
@@ -8357,6 +8357,22 @@ function toIssues(errors) {
     message: error.message ?? "schema validation failed"
   }));
 }
+function normalizeProtocolReadDocument(schemaName, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value;
+  const versionField = schemaName === "protocol" ? "protocolVersion" : "schemaVersion";
+  let normalized;
+  const version2 = record[versionField];
+  if (version2 === 1 || version2 === "1" || typeof version2 === "string" && /^1\.\d+$/u.test(version2)) {
+    normalized = { ...record, [versionField]: "1.0" };
+  }
+  const createdAt = record.createdAt;
+  if (typeof createdAt === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/u.test(createdAt) && !isCanonicalUtcTimestamp(createdAt)) {
+    const date = new Date(createdAt);
+    if (!Number.isNaN(date.valueOf())) normalized = { ...normalized ?? record, createdAt: date.toISOString() };
+  }
+  return normalized ?? value;
+}
 function validateProtocolDocument(schemaName, value, options = {}) {
   const validator = validators.get(schemaName);
   if (!validator) {
@@ -8372,15 +8388,7 @@ function validateProtocolDocument(schemaName, value, options = {}) {
     };
   }
   const mode = options.mode ?? "write";
-  let candidate = value;
-  if (mode === "read" && value && typeof value === "object" && !Array.isArray(value)) {
-    const record = value;
-    const versionField = schemaName === "protocol" ? "protocolVersion" : "schemaVersion";
-    const version2 = record[versionField];
-    if (typeof version2 === "string" && /^1\.\d+$/u.test(version2)) {
-      candidate = { ...record, [versionField]: "1.0" };
-    }
-  }
+  const candidate = mode === "read" ? normalizeProtocolReadDocument(schemaName, value) : value;
   if (validator(candidate)) return { ok: true };
   const issues = toIssues(validator.errors).filter(
     (issue) => mode !== "read" || issue.keyword !== "additionalProperties"
@@ -9136,7 +9144,8 @@ async function readJsonDocument(path2, schema) {
       error instanceof Error ? error.message : String(error)
     );
   }
-  const validation = validateProtocolDocument(schema, value, { mode: "read" });
+  const normalized = normalizeProtocolReadDocument(schema, value);
+  const validation = validateProtocolDocument(schema, normalized, { mode: "read" });
   if (!validation.ok) {
     throw new StorageError(
       "SCHEMA_VALIDATION_FAILED",
@@ -9144,7 +9153,7 @@ async function readJsonDocument(path2, schema) {
       validation.issues
     );
   }
-  return value;
+  return normalized;
 }
 function protocolWarning(path2, error) {
   if (error instanceof StorageError || error instanceof ServiceError || error instanceof StateTransitionError) {
@@ -10497,7 +10506,8 @@ import { fileURLToPath } from "node:url";
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.10" : "0.0.0-dev";
+var VERSION = true ? "0.0.11" : "0.0.0-dev";
+var DASHBOARD_VERSION = true ? "0.0.11" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
@@ -10526,6 +10536,7 @@ init_local_config();
 init_runner();
 init_lock();
 init_paths();
+import { isAbsolute, relative } from "node:path";
 
 // src/services/conflicts.ts
 init_local_config();
@@ -10674,6 +10685,7 @@ init_room();
 
 // src/services/semantic-validation.ts
 init_runner();
+init_validator();
 
 // src/services/forum-lifecycle.ts
 init_ids();
@@ -11728,13 +11740,98 @@ function concurrentEventIssues(repository2, originalRemoteHead, remoteHead, loca
   }
   return issues;
 }
+function schemaForProtocolPath(path2) {
+  if (path2 === ".forum/protocol.json") return "protocol";
+  if (path2 === ".forum/forum.json") return "forum";
+  if (/^members\/[^/]+\/profile\.json$/u.test(path2)) return "member-profile";
+  if (/^\.forum\/events\/[^/]+\/event\.json$/u.test(path2) || /^rooms\/[^/]+\/events\/[^/]+\/event\.json$/u.test(path2) || /^rooms\/[^/]+\/threads\/[^/]+\/events\/[^/]+\/event\.json$/u.test(path2)) return "event";
+  if (/^rooms\/[^/]+\/room\.json$/u.test(path2)) return "room";
+  if (/^rooms\/[^/]+\/members\/[^/]+\/membership\.json$/u.test(path2)) return "room-member";
+  if (/^rooms\/[^/]+\/threads\/[^/]+\/thread\.json$/u.test(path2)) return "thread";
+  if (/^rooms\/[^/]+\/threads\/[^/]+\/messages\/[^/]+\/message\.json$/u.test(path2)) return "message";
+  return void 0;
+}
+function validateRemoteProtocolTree(input) {
+  const tree = runGit(input.repository, ["ls-tree", "-r", "--name-only", input.remoteHead]);
+  if (tree.status !== 0) {
+    return [{ code: "REMOTE_PROTOCOL_INSPECTION_FAILED", message: "could not inspect fetched remote protocol tree" }];
+  }
+  const paths = lines(tree.stdout);
+  const pathSet = new Set(paths);
+  const issues = [];
+  for (const path2 of paths) {
+    const schema = schemaForProtocolPath(path2);
+    if (!schema) continue;
+    const shown = runGit(input.repository, ["show", `${input.remoteHead}:${path2}`]);
+    if (shown.status !== 0) {
+      issues.push({ code: "REMOTE_PROTOCOL_INSPECTION_FAILED", path: path2, message: "could not read protocol document from fetched remote" });
+      continue;
+    }
+    let value;
+    try {
+      value = JSON.parse(shown.stdout);
+    } catch {
+      issues.push({ code: schema === "message" ? "REMOTE_MESSAGE_SCHEMA_INVALID" : "REMOTE_PROTOCOL_SCHEMA_INVALID", path: path2, message: "remote protocol JSON is invalid" });
+      continue;
+    }
+    const validation = validateProtocolDocument(schema, value, { mode: "read" });
+    if (!validation.ok) {
+      for (const issue of validation.issues) {
+        issues.push({
+          code: schema === "message" ? "REMOTE_MESSAGE_SCHEMA_INVALID" : "REMOTE_PROTOCOL_SCHEMA_INVALID",
+          path: path2,
+          message: `${issue.path}: ${issue.message}`
+        });
+      }
+      continue;
+    }
+    const document = value;
+    if (path2 === ".forum/protocol.json" && (document.forumId !== input.forumId || document.dataBranch !== input.branch)) {
+      issues.push({ code: "REMOTE_PROTOCOL_MISMATCH", path: path2, message: "remote protocol does not match the local forum registration" });
+    }
+    if (schema === "message") {
+      const bodyPath = `${path2.slice(0, -"message.json".length)}body.md`;
+      if (!pathSet.has(bodyPath)) {
+        issues.push({ code: "REMOTE_MESSAGE_BODY_MISSING", path: bodyPath, message: "remote message body is missing" });
+      } else {
+        const body = runGit(input.repository, ["show", `${input.remoteHead}:${bodyPath}`]);
+        if (body.status !== 0 || body.stdout.trim().length === 0 || body.stdout.includes("\0")) {
+          issues.push({ code: "REMOTE_MESSAGE_BODY_INVALID", path: bodyPath, message: "remote message body is empty, unreadable, or contains NUL" });
+        }
+      }
+    }
+  }
+  return issues;
+}
+function isRootProtocolIssue(issue) {
+  return issue.path === ".forum/protocol.json" || issue.path === ".forum/forum.json";
+}
+function isQuarantinableLeafIssue(issue) {
+  if (!issue.path || isRootProtocolIssue(issue)) return false;
+  return (/* @__PURE__ */ new Set([
+    "SCHEMA_VALIDATION_FAILED",
+    "PATH_ID_MISMATCH",
+    "INVALID_STATE_TRANSITION",
+    "EVENT_TARGET_MISMATCH",
+    "INVALID_EVENT_DATA",
+    "FIRST_MESSAGE_MISSING",
+    "FIRST_MESSAGE_TYPE_MISMATCH",
+    "FIRST_MESSAGE_AUTHOR_MISMATCH",
+    "FIRST_MESSAGE_REPLY_INVALID",
+    "REPLY_TARGET_MISSING",
+    "MESSAGE_SELF_REPLY"
+  ])).has(issue.code);
+}
 async function validateSynchronizedForum(input) {
-  const immutableIssues = [
-    ...modifiedImmutablePaths(input.repository, null, input.remoteHead),
-    ...modifiedImmutablePaths(input.repository, input.remoteHead, input.localHead)
+  const remoteImmutableIssues = modifiedImmutablePaths(input.repository, null, input.remoteHead).map((issue) => ({ ...issue, code: "REMOTE_IMMUTABLE_HISTORY_MODIFIED", message: `remote ${issue.message}` }));
+  const immutableIssues = modifiedImmutablePaths(input.repository, input.remoteHead, input.localHead);
+  const treeIssues = await validateCurrentTree(input.forumAlias, input.paths);
+  const quarantinedIssues = [
+    ...remoteImmutableIssues,
+    ...treeIssues.filter(isQuarantinableLeafIssue)
   ];
   const semanticIssues = [
-    ...await validateCurrentTree(input.forumAlias, input.paths),
+    ...treeIssues.filter((issue) => !isQuarantinableLeafIssue(issue)),
     ...concurrentEventIssues(
       input.repository,
       input.originalRemoteHead,
@@ -11742,7 +11839,7 @@ async function validateSynchronizedForum(input) {
       input.localHead
     )
   ];
-  return { immutableIssues, semanticIssues };
+  return { immutableIssues, semanticIssues, quarantinedIssues };
 }
 
 // src/services/forum-sync.ts
@@ -11796,6 +11893,18 @@ function fetchRemoteHead(repository2, branch) {
 }
 async function fetchAndRebase(forumAlias, forumId, repository2, branch, originalHead, originalRemoteHead, paths, fetchedRemoteHead) {
   const remoteHead = fetchedRemoteHead ?? fetchRemoteHead(repository2, branch);
+  const remoteIssues = validateRemoteProtocolTree({ repository: repository2, remoteHead, forumId, branch });
+  const blockingRemoteIssues = remoteIssues.filter(
+    (issue) => issue.code === "REMOTE_PROTOCOL_INSPECTION_FAILED" || issue.path === ".forum/protocol.json" || issue.path === ".forum/forum.json"
+  );
+  if (blockingRemoteIssues.length > 0) {
+    throw new ServiceError(
+      "REMOTE_PROTOCOL_INVALID",
+      "fetched remote has an invalid Forum root; no local commits were rebased",
+      { remoteHead, issues: blockingRemoteIssues }
+    );
+  }
+  const remoteWarnings = remoteIssues;
   const localHead = requireGit(repository2, ["rev-parse", "HEAD"]).stdout.trim();
   const rebase = runGit(repository2, ["rebase", remoteHead]);
   if (rebase.status !== 0) {
@@ -11866,7 +11975,10 @@ async function fetchAndRebase(forumAlias, forumId, repository2, branch, original
       { operationId: journal.operationId, recoveryRef: journal.recoveryRef, issues }
     );
   }
-  return remoteHead;
+  return {
+    remoteHead,
+    warnings: [...remoteWarnings, ...validation.quarantinedIssues].map((warning) => sanitizeSyncWarning(repository2, warning))
+  };
 }
 function countAhead(repository2, base) {
   const result = requireGit(repository2, [
@@ -11879,6 +11991,14 @@ function countAhead(repository2, base) {
 function defaultDelay(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
+function sanitizeSyncWarning(repository2, warning) {
+  if (!warning.path || !isAbsolute(warning.path)) return warning;
+  const path2 = relative(repository2, warning.path).replaceAll("\\", "/");
+  return {
+    ...warning,
+    path: path2 && !path2.startsWith("../") && path2 !== ".." ? path2 : "<outside-forum>"
+  };
+}
 async function refreshForumFromRemote(forumAlias, paths = createAgentForumPaths()) {
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, forumAlias);
@@ -11890,7 +12010,7 @@ async function refreshForumFromRemote(forumAlias, paths = createAgentForumPaths(
     await openForum(forumAlias, paths, { requireClean: true });
     const originalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
     if (runGit(registration.path, ["remote", "get-url", "origin"]).status !== 0) {
-      return { forumAlias, outcome: "remote-not-configured", originalHead, finalHead: originalHead };
+      return { forumAlias, outcome: "remote-not-configured", originalHead, finalHead: originalHead, warnings: [] };
     }
     const tracked = runGit(registration.path, [
       "rev-parse",
@@ -11899,9 +12019,9 @@ async function refreshForumFromRemote(forumAlias, paths = createAgentForumPaths(
     const originalRemoteHead = tracked.status === 0 ? tracked.stdout.trim() : null;
     const fetchedRemoteHead = fetchRemoteHead(registration.path, registration.dataBranch);
     if (countAhead(registration.path, fetchedRemoteHead) > 0) {
-      return { forumAlias, outcome: "skipped-local-commits", originalHead, finalHead: originalHead };
+      return { forumAlias, outcome: "skipped-local-commits", originalHead, finalHead: originalHead, warnings: [] };
     }
-    await fetchAndRebase(
+    const refreshed = await fetchAndRebase(
       forumAlias,
       registration.forumId,
       registration.path,
@@ -11916,7 +12036,8 @@ async function refreshForumFromRemote(forumAlias, paths = createAgentForumPaths(
       forumAlias,
       outcome: finalHead === originalHead ? "up-to-date" : "updated",
       originalHead,
-      finalHead
+      finalHead,
+      warnings: refreshed.warnings
     };
   } finally {
     await lock.release();
@@ -11951,7 +12072,7 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
     let pushAttempts = 0;
     let retries = 0;
     let successfulPush = false;
-    let remoteHead = await fetchAndRebase(
+    const initialFetch = await fetchAndRebase(
       forumAlias,
       registration.forumId,
       registration.path,
@@ -11960,6 +12081,8 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
       originalRemoteHead,
       paths
     );
+    let remoteHead = initialFetch.remoteHead;
+    const warnings = [...initialFetch.warnings];
     fetches += 1;
     let integratedRemote = originalRemoteHead !== remoteHead;
     while (countAhead(registration.path, remoteHead) > 0) {
@@ -11989,7 +12112,7 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
         100 * 2 ** (retries - 1) * (0.5 + random())
       );
       await delay(milliseconds);
-      const nextRemote = await fetchAndRebase(
+      const nextFetch = await fetchAndRebase(
         forumAlias,
         registration.forumId,
         registration.path,
@@ -11999,8 +12122,9 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
         paths
       );
       fetches += 1;
-      if (nextRemote !== remoteHead) integratedRemote = true;
-      remoteHead = nextRemote;
+      warnings.push(...nextFetch.warnings);
+      if (nextFetch.remoteHead !== remoteHead) integratedRemote = true;
+      remoteHead = nextFetch.remoteHead;
     }
     const finalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
     if (successfulPush) remoteHead = finalHead;
@@ -12014,7 +12138,8 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
       remoteHead,
       fetches,
       pushAttempts,
-      retries
+      retries,
+      warnings: [...new Map(warnings.map((warning) => [`${warning.code}\0${warning.path ?? ""}\0${warning.message}`, warning])).values()]
     };
   } finally {
     await lock.release();
@@ -12236,14 +12361,14 @@ init_atomic();
 init_lock();
 init_paths();
 import { readFile as readFile10, readdir as readdir6 } from "node:fs/promises";
-import { relative, resolve as resolve13 } from "node:path";
+import { relative as relative2, resolve as resolve13 } from "node:path";
 init_room();
 function cachePath(paths, forumId) {
   return resolve13(forumStatePath(paths, forumId), "cache", "snapshot.json");
 }
 function sanitizeWarnings(repository2, warnings) {
   return warnings.map((warning) => {
-    const local = relative(repository2, warning.path).replaceAll("\\", "/");
+    const local = relative2(repository2, warning.path).replaceAll("\\", "/");
     return {
       ...warning,
       path: local && !local.startsWith("..") ? local : "<outside-forum>"
@@ -12744,7 +12869,7 @@ function emptyRuntime() {
 function validClient(value) {
   if (!value || typeof value !== "object") return false;
   const item = value;
-  return typeof item.clientId === "string" && clientIdPattern.test(item.clientId) && typeof item.clientType === "string" && clientTypes.has(item.clientType) && typeof item.forumAlias === "string" && typeof item.forumId === "string" && typeof item.roomId === "string" && typeof item.identityId === "string" && typeof item.expiresAt === "string" && !Number.isNaN(Date.parse(item.expiresAt));
+  return typeof item.clientId === "string" && clientIdPattern.test(item.clientId) && typeof item.clientType === "string" && clientTypes.has(item.clientType) && typeof item.forumAlias === "string" && typeof item.forumId === "string" && typeof item.roomId === "string" && typeof item.identityId === "string" && (item.attachedAt === void 0 || typeof item.attachedAt === "string" && !Number.isNaN(Date.parse(item.attachedAt))) && typeof item.expiresAt === "string" && !Number.isNaN(Date.parse(item.expiresAt));
 }
 async function loadRuntime(paths) {
   try {
@@ -12783,9 +12908,11 @@ async function attachDashboardClient(input, paths = createAgentForumPaths()) {
   const config = await loadLocalConfig(paths);
   const forum = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
-  const client = { clientId: input.clientId, clientType: input.clientType, forumAlias: forum.alias, forumId: forum.forumId, roomId: input.roomId, identityId: identity.memberId, expiresAt: new Date(Date.now() + leaseMs).toISOString() };
+  const attachedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const client = { clientId: input.clientId, clientType: input.clientType, forumAlias: forum.alias, forumId: forum.forumId, roomId: input.roomId, identityId: identity.memberId, attachedAt, expiresAt: new Date(Date.now() + leaseMs).toISOString() };
   return mutateRuntime("dashboard attach", paths, (runtime) => {
     const previous = runtime.clients.find((item) => item.clientId === client.clientId);
+    if (previous?.attachedAt) client.attachedAt = previous.attachedAt;
     runtime.clients = [...runtime.clients.filter((item) => item.clientId !== client.clientId), client];
     if (!previous || previous.clientType !== client.clientType || previous.forumId !== client.forumId || previous.roomId !== client.roomId || previous.identityId !== client.identityId) runtime.revision += 1;
     return { client, activeClients: runtime.clients.length };
@@ -12834,7 +12961,7 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
   for (const [forumId, clients] of teams) {
     const alias = clients[0].forumAlias;
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0, own: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
     const seen = /* @__PURE__ */ new Set();
     for (const identityId of new Set(clients.map((client) => client.identityId))) {
       const inbox = await getAllUnreadInboxEntries({ forumAlias: alias, identityId }, paths);
@@ -12848,8 +12975,23 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
         else if (!entry.threadId || room.threads.get(entry.threadId) === "open") room.counts.other += 1;
       }
     }
+    const attachedAtByIdentity = /* @__PURE__ */ new Map();
+    for (const client of clients) {
+      const attachedAt = client.attachedAt ?? client.expiresAt;
+      const current = attachedAtByIdentity.get(client.identityId);
+      if (!current || attachedAt < current) attachedAtByIdentity.set(client.identityId, attachedAt);
+    }
+    for (const sourceRoom of snapshot.rooms) {
+      const room = byRoom.get(sourceRoom.room.id);
+      if (!room) continue;
+      for (const thread of sourceRoom.threads) {
+        for (const item of thread.timeline) {
+          if (item.kind === "message" && attachedAtByIdentity.get(item.authorId) !== void 0 && item.createdAt >= attachedAtByIdentity.get(item.authorId)) room.counts.own += 1;
+        }
+      }
+    }
     const allRooms = [...byRoom.values()].map(({ status: _status, threads: _threads, ...room }) => room);
-    const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other }), { related: 0, broadcast: 0, other: 0 });
+    const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other, own: total.own + room.counts.own }), { related: 0, broadcast: 0, other: 0, own: 0 });
     const rooms = allRooms.sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.activeLocalAgents - left.activeLocalAgents || right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
     result.push({ forumId, forumAlias: alias, polling: runtime.pollingForumIds.includes(forumId), counts, rooms });
   }
@@ -12864,7 +13006,7 @@ import { chmod, mkdir as mkdir3, mkdtemp, open as open2, readFile as readFile13,
 init_atomic();
 init_lock();
 init_paths();
-import { basename as basename3, dirname as dirname3, isAbsolute, posix as posix2, resolve as resolve16, sep as sep2 } from "node:path";
+import { basename as basename3, dirname as dirname3, isAbsolute as isAbsolute2, posix as posix2, resolve as resolve16, sep as sep2 } from "node:path";
 init_errors2();
 var repository = "wszzs110/agent-forum-skills";
 var sha256Pattern = /^[a-f0-9]{64}$/u;
@@ -12874,18 +13016,18 @@ var executablePattern = /^[A-Za-z0-9._/-]+$/u;
 var maximumAssetSize = 2 * 1024 * 1024 * 1024;
 var assetConnectionTimeoutMs = 6e4;
 var assetInactivityTimeoutMs = 10 * 6e4;
-function defaultManifestUrl(packageVersion = VERSION) {
-  if (packageVersion === "0.0.0-dev") {
+function defaultManifestUrl(dashboardVersion = DASHBOARD_VERSION) {
+  if (dashboardVersion === "0.0.0-dev") {
     throw new ServiceError("DASHBOARD_RELEASE_UNAVAILABLE", "development builds require --manifest-url or AGENT_FORUM_DASHBOARD_MANIFEST_URL");
   }
-  return `https://github.com/${repository}/releases/download/v${packageVersion}/dashboard-manifest.json`;
+  return `https://github.com/${repository}/releases/download/v${dashboardVersion}/dashboard-manifest.json`;
 }
-function safeExecutable(root, relative3) {
-  if (!executablePattern.test(relative3) || relative3.startsWith("/") || relative3.includes("..") || relative3.includes("\\")) {
-    throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `unsafe Dashboard executable path: ${relative3}`);
+function safeExecutable(root, relative4) {
+  if (!executablePattern.test(relative4) || relative4.startsWith("/") || relative4.includes("..") || relative4.includes("\\")) {
+    throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `unsafe Dashboard executable path: ${relative4}`);
   }
   const normalizedRoot = resolve16(root);
-  const target2 = resolve16(normalizedRoot, relative3);
+  const target2 = resolve16(normalizedRoot, relative4);
   if (target2 !== normalizedRoot && !target2.startsWith(`${normalizedRoot}${sep2}`)) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard executable escapes its installation directory");
   return target2;
 }
@@ -12940,7 +13082,7 @@ async function collectInstalledFiles(root, directory = root) {
     else if (entry.isFile()) files[relativePath(root, path2)] = await sha256File(path2);
     else if (entry.isSymbolicLink()) {
       const target2 = await readlink(path2);
-      if (!target2 || isAbsolute(target2) || target2.includes("\\") || target2.includes("\0")) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsafe symbolic link");
+      if (!target2 || isAbsolute2(target2) || target2.includes("\\") || target2.includes("\0")) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation contains an unsafe symbolic link");
       const lexicalTarget = resolve16(dirname3(path2), target2);
       if (lexicalTarget !== lexicalRoot && !lexicalTarget.startsWith(`${lexicalRoot}${sep2}`)) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation symbolic link escapes its root");
       const canonicalTarget = await realpath3(path2);
@@ -12978,9 +13120,9 @@ async function fetchJson(url, fetcher) {
   throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release manifest", { cause: lastError instanceof Error ? lastError.message : String(lastError) });
 }
 async function inspectDashboardRelease(options = {}) {
-  const packageVersion = options.packageVersion ?? VERSION;
+  const dashboardVersion = options.dashboardVersion ?? options.packageVersion ?? DASHBOARD_VERSION;
   const configuredManifestUrl = options.manifestUrl ?? process.env.AGENT_FORUM_DASHBOARD_MANIFEST_URL;
-  const manifestUrl = configuredManifestUrl ?? defaultManifestUrl(packageVersion);
+  const manifestUrl = configuredManifestUrl ?? defaultManifestUrl(dashboardVersion);
   let parsedUrl;
   try {
     parsedUrl = new URL(manifestUrl);
@@ -12989,7 +13131,7 @@ async function inspectDashboardRelease(options = {}) {
   }
   if (parsedUrl.protocol !== "https:" && parsedUrl.hostname !== "127.0.0.1" && parsedUrl.hostname !== "localhost" || parsedUrl.username || parsedUrl.password) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL must use credential-free HTTPS");
   const manifest = parseManifest(await fetchJson(manifestUrl, options.fetcher ?? fetch));
-  if (!configuredManifestUrl && packageVersion !== "0.0.0-dev" && manifest.version !== packageVersion) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `Dashboard manifest version ${manifest.version} does not match package version ${packageVersion}`);
+  if (!configuredManifestUrl && dashboardVersion !== "0.0.0-dev" && manifest.version !== dashboardVersion) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `Dashboard manifest version ${manifest.version} does not match the required Dashboard version ${dashboardVersion}`);
   const platform = options.platform ?? process.platform;
   const arch = options.arch ?? process.arch;
   const asset = manifest.assets.find((candidate) => candidate.platform === platform && candidate.arch === arch);
@@ -13261,6 +13403,9 @@ async function closeExistingDashboardDesktop(paths = createAgentForumPaths()) {
 }
 
 // src/commands/dashboard.ts
+function dashboardNeedsAutomaticUpdate(installedVersion, dashboardVersion = DASHBOARD_VERSION) {
+  return dashboardVersion !== "0.0.0-dev" && installedVersion !== dashboardVersion;
+}
 async function executeDashboardCommand(args2, options = {}) {
   const subcommand = args2[0];
   if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <install|update|uninstall|open|attach|heartbeat|detach|status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
@@ -13350,7 +13495,7 @@ Run again with --yes to confirm the download.
       const identity = parsed.values.get("--identity");
       let installed = await getDashboardInstallationStatus();
       let automaticallyUpdated = false;
-      if (installed.status === "installed" && VERSION !== "0.0.0-dev" && installed.installation?.version !== VERSION) {
+      if (installed.status === "installed" && dashboardNeedsAutomaticUpdate(installed.installation?.version)) {
         await closeExistingDashboardDesktop().catch(() => false);
         let lastPercent = -1;
         const update = await installDashboard({ update: true, ...options.onProgress ? { onProgress: (received, total, attempt) => {
@@ -13364,7 +13509,7 @@ Run again with --yes to confirm the download.
         automaticallyUpdated = update.action === "updated";
         installed = await getDashboardInstallationStatus();
       }
-      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${VERSION}; ` : ""}Dashboard already running; client attached.
+      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${DASHBOARD_VERSION}; ` : ""}Dashboard already running; client attached.
 ` };
       const moduleDirectory = dirname4(fileURLToPath(import.meta.url));
       const entrypoint = [resolve17(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve17(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
@@ -13377,7 +13522,7 @@ Run again with --yes to confirm the download.
       if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard update --yes");
       const child = spawn2(executable, executableArgs, { detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve17(dirname4(executable), "AppIcon.ico") : resolve17(dirname4(entrypoint), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });
       child.unref();
-      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${VERSION}; ` : ""}Dashboard started.
+      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${DASHBOARD_VERSION}; ` : ""}Dashboard started.
 ` };
     }
     if (subcommand === "pin") {
@@ -13438,7 +13583,7 @@ import { resolve as resolve18 } from "node:path";
 
 // src/git/remote.ts
 init_errors2();
-import { isAbsolute as isAbsolute2 } from "node:path";
+import { isAbsolute as isAbsolute3 } from "node:path";
 function validateRemoteUrl(value) {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -13450,7 +13595,7 @@ function validateRemoteUrl(value) {
       "remote URL must not begin with a command-line option prefix"
     );
   }
-  if (isAbsolute2(trimmed) || trimmed.startsWith(".")) {
+  if (isAbsolute3(trimmed) || trimmed.startsWith(".")) {
     return { value: trimmed, display: "<local-path>", kind: "local" };
   }
   try {
@@ -13513,6 +13658,17 @@ init_lock();
 init_paths();
 init_errors2();
 init_room();
+function remoteHasBranches(remote, paths = createAgentForumPaths()) {
+  const safeRemote = validateRemoteUrl(remote);
+  const result = runGit(process.cwd(), ["ls-remote", "--heads", safeRemote.value]);
+  if (result.status !== 0) {
+    throw new ServiceError(
+      "REMOTE_DISCOVERY_FAILED",
+      "could not inspect whether the remote already contains Forum data"
+    );
+  }
+  return result.stdout.trim().length > 0;
+}
 async function pathExists2(path2) {
   try {
     await lstat2(path2);
@@ -13531,20 +13687,17 @@ function remoteBranchFromHead(repository2) {
     "--short",
     "refs/remotes/origin/HEAD"
   ]);
-  if (head.status !== 0) {
-    throw new ServiceError(
-      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
-      "remote default branch could not be discovered; provide --branch"
-    );
-  }
   const value = head.stdout.trim();
-  if (!value.startsWith("origin/") || value.length <= "origin/".length) {
-    throw new ServiceError(
-      "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
-      "remote HEAD does not name an origin branch"
-    );
+  if (head.status === 0 && value.startsWith("origin/") && value.length > "origin/".length) {
+    return value.slice("origin/".length);
   }
-  return value.slice("origin/".length);
+  const branches = runGit(repository2, ["for-each-ref", "--format=%(refname:strip=3)", "refs/remotes/origin"]);
+  const candidates = branches.status === 0 ? branches.stdout.split(/\r?\n/u).map((item) => item.trim()).filter((item) => item && item !== "HEAD") : [];
+  if (candidates.length === 1) return candidates[0];
+  throw new ServiceError(
+    "REMOTE_DEFAULT_BRANCH_NOT_FOUND",
+    candidates.length > 1 ? "remote has multiple branches but no usable default branch; provide --branch" : "remote default branch could not be discovered; provide --branch"
+  );
 }
 async function validateClonedForum(repository2, branch) {
   try {
@@ -14557,7 +14710,8 @@ outcome: ${result.outcome}
 head: ${result.finalHead}
 fetches: ${result.fetches}
 push attempts: ${result.pushAttempts}
-`
+${result.warnings.length ? `warnings: ${result.warnings.length} malformed remote record(s) were isolated
+` : ""}`
       };
     }
     if (subcommand === "conflict") {
@@ -14979,6 +15133,8 @@ function postHelp() {
 Usage:
   agent-forum post create --forum <alias> --room <id-or-slug> --thread <thread-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]
   agent-forum post reply --forum <alias> --room <id-or-slug> --thread <thread-id> --reply-to <message-id> --type <type> --body <markdown> [--broadcast] [--mention <member-id>] [--reference <kind>=<value>] [--identity <member-id>]
+
+Messages without --mention are broadcast to the Room by default. Use --broadcast to state that intent explicitly.
 `
   };
 }
@@ -15046,6 +15202,7 @@ async function executePostCommand(args2) {
     );
     if ("exitCode" in references) return references;
     const identityId = parsed.values.get("--identity");
+    const broadcast = parsed.flags.has("--broadcast") || mentions.length === 0;
     const result = await createPost({
       forumAlias: values.get("--forum"),
       room: values.get("--room"),
@@ -15056,7 +15213,7 @@ async function executePostCommand(args2) {
       references,
       ...subcommand === "reply" ? { replyTo: values.get("--reply-to") } : {},
       ...identityId ? { identityId } : {},
-      ...parsed.flags.has("--broadcast") ? { broadcast: true } : {}
+      ...broadcast ? { broadcast: true } : {}
     });
     return {
       exitCode: ExitCode.Success,
@@ -15308,8 +15465,8 @@ Usage:
 
 Steps performed idempotently:
   1. Create a default identity if none exists.
-  2. Create a local Forum if the alias is not yet registered.
-  3. Publish the Forum to --remote if the alias has no remote configured.
+  2. Clone an existing Forum from --remote, or create a local Forum only when the remote is empty.
+  3. Publish a newly created Forum to --remote if the alias has no remote configured.
   4. Create the Room if its slug does not exist.
   5. Publish the identity as an active Forum member.
   6. Join the Room with the published identity.
@@ -15398,16 +15555,27 @@ async function executeSetupCommand(args2) {
     const existingForum = config.forums.find((f) => f.alias === alias);
     let forumId;
     if (!existingForum) {
-      const initResult = await initLocalForum({
-        alias,
-        name,
-        description,
-        dataBranch: dataBranch ?? "main",
-        identityId
-      });
-      forumId = initResult.forumId;
-      log.push(`created forum: ${forumId}`);
-      data.forumCreated = { forumId, path: initResult.path };
+      if (remote && remoteHasBranches(remote)) {
+        const added = await addRemoteForum({
+          alias,
+          remote,
+          ...dataBranch ? { branch: dataBranch } : {}
+        });
+        forumId = added.forumId;
+        log.push(`cloned existing forum: ${forumId}`);
+        data.forumAdded = { forumId, path: added.path, branch: added.dataBranch };
+      } else {
+        const initResult = await initLocalForum({
+          alias,
+          name,
+          description,
+          dataBranch: dataBranch ?? "main",
+          identityId
+        });
+        forumId = initResult.forumId;
+        log.push(`created forum: ${forumId}`);
+        data.forumCreated = { forumId, path: initResult.path };
+      }
     } else {
       forumId = existingForum.forumId;
       log.push(`using forum: ${forumId}`);
@@ -15482,6 +15650,11 @@ async function executeSetupCommand(args2) {
       log.push(`bound context: ${bindResult.target.forumAlias}/${bindResult.target.roomSlug}`);
       data.contextBound = bindResult;
     }
+    if (remote) {
+      const syncResult = await syncForum(alias);
+      log.push(`synchronized remote: ${syncResult.outcome}`);
+      data.remoteSynced = syncResult;
+    }
     return {
       exitCode: ExitCode.Success,
       command: "setup",
@@ -15517,7 +15690,7 @@ import {
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir3 } from "node:os";
-import { dirname as dirname5, relative as relative2, resolve as resolve21, sep as sep3 } from "node:path";
+import { dirname as dirname5, relative as relative3, resolve as resolve21, sep as sep3 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 var SkillInstallationError = class extends Error {
@@ -15617,7 +15790,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
           `symbolic links are not allowed in the managed skill payload: ${absolute}`
         );
       }
-      const relativePath3 = relative2(root, absolute).split(sep3).join("/");
+      const relativePath3 = relative3(root, absolute).split(sep3).join("/");
       files[relativePath3] = "SYMLINK";
       continue;
     }
@@ -15629,7 +15802,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
       continue;
     }
     if (!entry.isFile()) continue;
-    const relativePath2 = relative2(root, absolute).split(sep3).join("/");
+    const relativePath2 = relative3(root, absolute).split(sep3).join("/");
     files[relativePath2] = createHash2("sha256").update(await readFile16(absolute)).digest("hex");
   }
   return files;
@@ -15969,6 +16142,8 @@ function threadHelp() {
 
 Usage:
   agent-forum thread create --forum <alias> --room <id-or-slug> --kind <kind> --title <title> --body <markdown> [--broadcast]
+
+New Threads are broadcast to the Room by default; --broadcast is accepted to make that intent explicit.
   agent-forum thread list --forum <alias> --room <id-or-slug>
   agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id>
   agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>
@@ -16044,7 +16219,8 @@ async function executeThreadCommand(args2) {
         title,
         body,
         ...identityId ? { identityId } : {},
-        ...parsed.flags.has("--broadcast") ? { broadcast: true } : {}
+        // Thread opening posts do not identify a recipient, so they are Room broadcasts by default.
+        broadcast: true
       });
       return {
         exitCode: ExitCode.Success,

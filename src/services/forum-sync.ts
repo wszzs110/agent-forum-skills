@@ -1,4 +1,5 @@
 import { findForum, loadLocalConfig } from "../config/local-config.js";
+import { isAbsolute, relative } from "node:path";
 import { requireGit, runGit, type GitCommandResult } from "../git/runner.js";
 import { acquireForumLock } from "../storage/lock.js";
 import {
@@ -9,13 +10,19 @@ import {
 import { recordSyncConflict } from "./conflicts.js";
 import { ServiceError } from "./errors.js";
 import { openForum } from "./room.js";
-import { validateSynchronizedForum } from "./semantic-validation.js";
+import { validateRemoteProtocolTree, validateSynchronizedForum } from "./semantic-validation.js";
 
 export type SyncOutcome =
   | "up-to-date"
   | "updated"
   | "pushed"
   | "updated-and-pushed";
+
+export interface ForumSyncWarning {
+  code: string;
+  path?: string;
+  message: string;
+}
 
 export interface ForumSyncResult {
   forumAlias: string;
@@ -27,6 +34,7 @@ export interface ForumSyncResult {
   fetches: number;
   pushAttempts: number;
   retries: number;
+  warnings: ForumSyncWarning[];
 }
 
 export interface ForumSyncOptions {
@@ -127,8 +135,22 @@ async function fetchAndRebase(
   originalRemoteHead: string | null,
   paths: AgentForumPaths,
   fetchedRemoteHead?: string,
-): Promise<string> {
+): Promise<{ remoteHead: string; warnings: ForumSyncWarning[] }> {
   const remoteHead = fetchedRemoteHead ?? fetchRemoteHead(repository, branch);
+  const remoteIssues = validateRemoteProtocolTree({ repository, remoteHead, forumId, branch });
+  const blockingRemoteIssues = remoteIssues.filter((issue) =>
+    issue.code === "REMOTE_PROTOCOL_INSPECTION_FAILED" ||
+    issue.path === ".forum/protocol.json" ||
+    issue.path === ".forum/forum.json",
+  );
+  if (blockingRemoteIssues.length > 0) {
+    throw new ServiceError(
+      "REMOTE_PROTOCOL_INVALID",
+      "fetched remote has an invalid Forum root; no local commits were rebased",
+      { remoteHead, issues: blockingRemoteIssues },
+    );
+  }
+  const remoteWarnings: ForumSyncWarning[] = remoteIssues;
   const localHead = requireGit(repository, ["rev-parse", "HEAD"]).stdout.trim();
   const rebase = runGit(repository, ["rebase", remoteHead]);
   if (rebase.status !== 0) {
@@ -205,7 +227,10 @@ async function fetchAndRebase(
       { operationId: journal.operationId, recoveryRef: journal.recoveryRef, issues },
     );
   }
-  return remoteHead;
+  return {
+    remoteHead,
+    warnings: [...remoteWarnings, ...validation.quarantinedIssues].map((warning) => sanitizeSyncWarning(repository, warning)),
+  };
 }
 
 export interface ForumRefreshResult {
@@ -213,6 +238,7 @@ export interface ForumRefreshResult {
   outcome: "updated" | "up-to-date" | "skipped-local-commits" | "remote-not-configured";
   originalHead: string;
   finalHead: string;
+  warnings: ForumSyncWarning[];
 }
 
 function countAhead(repository: string, base: string): number {
@@ -226,6 +252,15 @@ function countAhead(repository: string, base: string): number {
 
 function defaultDelay(milliseconds: number): Promise<void> {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+
+function sanitizeSyncWarning(repository: string, warning: ForumSyncWarning): ForumSyncWarning {
+  if (!warning.path || !isAbsolute(warning.path)) return warning;
+  const path = relative(repository, warning.path).replaceAll("\\", "/");
+  return {
+    ...warning,
+    path: path && !path.startsWith("../") && path !== ".." ? path : "<outside-forum>",
+  };
 }
 
 export async function refreshForumFromRemote(
@@ -242,7 +277,7 @@ export async function refreshForumFromRemote(
     await openForum(forumAlias, paths, { requireClean: true });
     const originalHead = requireGit(registration.path, ["rev-parse", "HEAD"]).stdout.trim();
     if (runGit(registration.path, ["remote", "get-url", "origin"]).status !== 0) {
-      return { forumAlias, outcome: "remote-not-configured", originalHead, finalHead: originalHead };
+      return { forumAlias, outcome: "remote-not-configured", originalHead, finalHead: originalHead, warnings: [] };
     }
     const tracked = runGit(registration.path, [
       "rev-parse",
@@ -251,9 +286,9 @@ export async function refreshForumFromRemote(
     const originalRemoteHead = tracked.status === 0 ? tracked.stdout.trim() : null;
     const fetchedRemoteHead = fetchRemoteHead(registration.path, registration.dataBranch);
     if (countAhead(registration.path, fetchedRemoteHead) > 0) {
-      return { forumAlias, outcome: "skipped-local-commits", originalHead, finalHead: originalHead };
+      return { forumAlias, outcome: "skipped-local-commits", originalHead, finalHead: originalHead, warnings: [] };
     }
-    await fetchAndRebase(
+    const refreshed = await fetchAndRebase(
       forumAlias,
       registration.forumId,
       registration.path,
@@ -269,6 +304,7 @@ export async function refreshForumFromRemote(
       outcome: finalHead === originalHead ? "up-to-date" : "updated",
       originalHead,
       finalHead,
+      warnings: refreshed.warnings,
     };
   } finally {
     await lock.release();
@@ -310,7 +346,7 @@ export async function syncForum(
     let pushAttempts = 0;
     let retries = 0;
     let successfulPush = false;
-    let remoteHead = await fetchAndRebase(
+    const initialFetch = await fetchAndRebase(
       forumAlias,
       registration.forumId,
       registration.path,
@@ -319,6 +355,8 @@ export async function syncForum(
       originalRemoteHead,
       paths,
     );
+    let remoteHead = initialFetch.remoteHead;
+    const warnings = [...initialFetch.warnings];
     fetches += 1;
     let integratedRemote = originalRemoteHead !== remoteHead;
 
@@ -349,7 +387,7 @@ export async function syncForum(
         100 * 2 ** (retries - 1) * (0.5 + random()),
       );
       await delay(milliseconds);
-      const nextRemote = await fetchAndRebase(
+      const nextFetch = await fetchAndRebase(
         forumAlias,
         registration.forumId,
         registration.path,
@@ -359,8 +397,9 @@ export async function syncForum(
         paths,
       );
       fetches += 1;
-      if (nextRemote !== remoteHead) integratedRemote = true;
-      remoteHead = nextRemote;
+      warnings.push(...nextFetch.warnings);
+      if (nextFetch.remoteHead !== remoteHead) integratedRemote = true;
+      remoteHead = nextFetch.remoteHead;
     }
 
     const finalHead = requireGit(registration.path, ["rev-parse", "HEAD"])
@@ -383,6 +422,7 @@ export async function syncForum(
       fetches,
       pushAttempts,
       retries,
+      warnings: [...new Map(warnings.map((warning) => [`${warning.code}\0${warning.path ?? ""}\0${warning.message}`, warning])).values()],
     };
   } finally {
     await lock.release();

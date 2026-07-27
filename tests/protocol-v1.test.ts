@@ -17,7 +17,7 @@ import {
   currentUtcTimestamp,
   isCanonicalUtcTimestamp,
 } from "../src/domain/timestamps.js";
-import { validateProtocolDocument } from "../src/protocol/validator.js";
+import { normalizeProtocolReadDocument, validateProtocolDocument } from "../src/protocol/validator.js";
 
 const ids = {
   forum: "forum_0194f6d2-8c10-7a31-9e42-123456789abc",
@@ -218,6 +218,23 @@ test("read compatibility accepts same-major optional fields but writers remain s
     ).ok,
     false,
   );
+});
+
+test("reader normalizes known legacy Message versions and timestamps without relaxing writers", () => {
+  const legacy = {
+    schemaVersion: 1,
+    id: ids.message,
+    threadId: ids.thread,
+    authorId: ids.member,
+    type: "proposal",
+    createdAt: "2026-07-12T18:20:30+08:00",
+    replyTo: null,
+    mentions: [],
+    references: [],
+  };
+  assert.equal(validateProtocolDocument("message", legacy).ok, false);
+  assert.deepEqual(validateProtocolDocument("message", legacy, { mode: "read" }), { ok: true });
+  assert.deepEqual(normalizeProtocolReadDocument("message", legacy), { ...legacy, schemaVersion: "1.0", createdAt: "2026-07-12T10:20:30.000Z" });
 });
 
 test("event schema requires scope, target ID, and type prefix to agree", () => {

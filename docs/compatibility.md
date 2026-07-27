@@ -15,6 +15,8 @@ Agent 平台验证优先级：
 
 核心 Skill 遵循 Agent Skills 的目录与 front matter 规范。
 
+Forum 对远端手工写入采用“根严格、叶子隔离”策略：`.forum/protocol.json`、`.forum/forum.json` 或 Forum ID/数据分支不一致仍会安全阻止同步；损坏的 Message、Event、成员、Room 或 Thread 叶子记录会随 remote 同步并作为 warning 隔离，不能阻断其他合法 Room 的读取、发帖或同步。已知无歧义的旧写法（`schemaVersion: 1`、短写版本、RFC 3339 offset 或缺毫秒时间）只在读取内存中规范化，CLI 不会改写历史，writer 仍严格生成 1.0 UTC 毫秒格式。
+
 纯路径测试已覆盖：
 
 - Windows；

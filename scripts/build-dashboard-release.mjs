@@ -9,7 +9,10 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const denoConfig = JSON.parse(await readFile(resolve(root, "dashboard", "deno.json"), "utf8"));
-if (denoConfig.version !== packageJson.version) throw new Error(`dashboard/deno.json version ${denoConfig.version} does not match package ${packageJson.version}`);
+const dashboardVersion = denoConfig.version;
+if (typeof dashboardVersion !== "string" || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(dashboardVersion)) throw new Error("dashboard/deno.json must contain a valid Dashboard version");
+// 纯 CLI/Skill 版本不应调用此 release 构建，避免以旧 Dashboard version 覆盖同名资产。
+if (dashboardVersion !== packageJson.version) throw new Error(`Dashboard release build requires package version ${packageJson.version} to match dashboard version ${dashboardVersion}`);
 const platformName = platform() === "win32" ? "win32" : platform() === "darwin" ? "darwin" : platform() === "linux" ? "linux" : undefined;
 const archName = arch() === "x64" ? "x64" : arch() === "arm64" ? "arm64" : undefined;
 if (!platformName || !archName) throw new Error(`Unsupported build host: ${platform()}-${arch()}`);
@@ -64,7 +67,7 @@ if (platformName === "darwin") {
 }
 const executablePath = candidate;
 const executable = relative(staging, candidate).replaceAll("\\", "/");
-const fileName = `agent-forum-dashboard-${packageJson.version}-${platformName}-${archName}.tar.gz`;
+const fileName = `agent-forum-dashboard-${dashboardVersion}-${platformName}-${archName}.tar.gz`;
 const archive = resolve(output, fileName);
 // 保留 macOS framework 的标准内部 symlink；安装器在解包前验证其目标与 entry 祖先。
 const tar = spawnSync("tar", ["-czf", archive, "-C", staging, "."], { encoding: "utf8", shell: false });
@@ -78,7 +81,7 @@ const asset = {
   archiveFormat: "tar.gz",
   executable: executable.replaceAll("\\", "/"),
   executableSha256: await hash(executablePath),
-  url: `https://github.com/wszzs110/agent-forum-skills/releases/download/v${packageJson.version}/${fileName}`,
+  url: `https://github.com/wszzs110/agent-forum-skills/releases/download/v${dashboardVersion}/${fileName}`,
   sha256: await hash(archive),
   size: information.size,
 };

@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExitCode } from "../errors.js";
-import { VERSION } from "../version.js";
+import { DASHBOARD_VERSION, VERSION } from "../version.js";
 import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashboardSnapshot, setDashboardForumPolling, setDashboardRoomPinned } from "../services/dashboard.js";
 import { getDashboardInstallationStatus, inspectDashboardRelease, installDashboard, uninstallDashboard } from "../services/dashboard-installer.js";
 import { attachExistingDashboardDesktop, closeExistingDashboardDesktop, detachExistingDashboardDesktop } from "../services/dashboard-desktop.js";
@@ -12,6 +12,11 @@ import { resolveContext } from "../services/context.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import { parseCommandOptions, requireOption } from "./options.js";
 import type { CommandExecution } from "./types.js";
+
+/** npm package version does not participate: Desktop assets update only when their own version changes. */
+export function dashboardNeedsAutomaticUpdate(installedVersion: string | undefined, dashboardVersion = DASHBOARD_VERSION): boolean {
+  return dashboardVersion !== "0.0.0-dev" && installedVersion !== dashboardVersion;
+}
 
 export async function executeDashboardCommand(args: readonly string[], options: { onProgress?: (text: string) => void } = {}): Promise<CommandExecution> {
   const subcommand = args[0];
@@ -79,7 +84,7 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       const identity = parsed.values.get("--identity");
       let installed = await getDashboardInstallationStatus();
       let automaticallyUpdated = false;
-      if (installed.status === "installed" && VERSION !== "0.0.0-dev" && installed.installation?.version !== VERSION) {
+      if (installed.status === "installed" && dashboardNeedsAutomaticUpdate(installed.installation?.version)) {
         await closeExistingDashboardDesktop().catch(() => false);
         let lastPercent = -1;
         const update = await installDashboard({ update: true, ...(options.onProgress ? { onProgress: (received: number, total: number, attempt: number) => { const percent = Math.floor(received * 100 / total); if (percent !== lastPercent) { lastPercent = percent; options.onProgress!(`Updating Dashboard: ${percent}% (attempt ${attempt}/3)\r`); } } } : {}) });
@@ -87,7 +92,7 @@ export async function executeDashboardCommand(args: readonly string[], options: 
         automaticallyUpdated = update.action === "updated";
         installed = await getDashboardInstallationStatus();
       }
-      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...(identity ? { identityId: identity } : {}) })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${VERSION}; ` : ""}Dashboard already running; client attached.\n` };
+      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...(identity ? { identityId: identity } : {}) })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${DASHBOARD_VERSION}; ` : ""}Dashboard already running; client attached.\n` };
       const moduleDirectory = dirname(fileURLToPath(import.meta.url));
       const entrypoint = [resolve(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
       const deno = process.platform === "win32" ? resolve(homedir(), ".deno", "bin", "deno.exe") : "deno";
@@ -99,7 +104,7 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard update --yes");
       const child = spawn(executable, executableArgs, { detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve(dirname(executable), "AppIcon.ico") : resolve(dirname(entrypoint!), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
       child.unref();
-      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${VERSION}; ` : ""}Dashboard started.\n` };
+      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, automaticallyUpdated }, human: `${automaticallyUpdated ? `Dashboard updated to ${DASHBOARD_VERSION}; ` : ""}Dashboard started.\n` };
     }
     if (subcommand === "pin") {
       const parsed = parseCommandOptions(args.slice(1), { values: ["--room-id", "--enabled"] });

@@ -28,6 +28,7 @@ import {
   runGit,
 } from "../git/runner.js";
 import {
+  normalizeProtocolReadDocument,
   validateProtocolDocument,
   type ProtocolSchemaName,
 } from "../protocol/validator.js";
@@ -131,7 +132,8 @@ export async function readJsonDocument(
       error instanceof Error ? error.message : String(error),
     );
   }
-  const validation = validateProtocolDocument(schema, value, { mode: "read" });
+  const normalized = normalizeProtocolReadDocument(schema, value);
+  const validation = validateProtocolDocument(schema, normalized, { mode: "read" });
   if (!validation.ok) {
     throw new StorageError(
       "SCHEMA_VALIDATION_FAILED",
@@ -139,7 +141,7 @@ export async function readJsonDocument(
       validation.issues,
     );
   }
-  return value as Record<string, unknown>;
+  return normalized as Record<string, unknown>;
 }
 
 export function protocolWarning(path: string, error: unknown): ProtocolWarning {

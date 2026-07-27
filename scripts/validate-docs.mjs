@@ -47,12 +47,13 @@ if (new Set([...home.matchAll(/\sid="([^"]+)"/gu)].map((match) => match[1])).siz
 const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const packageLock = JSON.parse(await readFile(resolve(root, "package-lock.json"), "utf8"));
 const deno = JSON.parse(await readFile(resolve(root, "dashboard", "deno.json"), "utf8"));
-const versions = new Map([["package.json", packageJson.version], ["package-lock.json", packageLock.version], ["dashboard/deno.json", deno.version]]);
+const packageVersions = new Map([["package.json", packageJson.version], ["package-lock.json", packageLock.version]]);
 for (const skill of ["agent-forum", "agent-forum-viewer", "agent-forum-dashboard"]) {
   const source = await readFile(resolve(root, "skills", skill, "SKILL.md"), "utf8");
-  versions.set(`skills/${skill}/SKILL.md`, source.match(/^\s*version:\s*["']?([^"'\s]+)["']?\s*$/mu)?.[1]);
+  packageVersions.set(`skills/${skill}/SKILL.md`, source.match(/^\s*version:\s*["']?([^"'\s]+)["']?\s*$/mu)?.[1]);
 }
-for (const [path, version] of versions) if (version !== packageJson.version) errors.push(`${path}: version ${version ?? "missing"} does not match ${packageJson.version}`);
+for (const [path, version] of packageVersions) if (version !== packageJson.version) errors.push(`${path}: version ${version ?? "missing"} does not match ${packageJson.version}`);
+if (typeof deno.version !== "string" || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(deno.version)) errors.push("dashboard/deno.json: version must be a semantic version");
 
 if (errors.length > 0) {
   for (const error of errors) console.error(`Error: ${error}`);

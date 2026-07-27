@@ -208,12 +208,26 @@ test("Dashboard archive validation permits only internal relative symbolic links
   assert.throws(() => validateDashboardArchiveEntries(["./link", "./link/payload"], ["lrwxr-xr-x 0/0 0 date ./link -> target", "-rw-r--r-- 0/0 1 date ./link/payload"]), ServiceError);
 });
 
-test("Dashboard release selection rejects unsupported platforms, package-version drift, and unsafe manifests", async () => {
+test("Dashboard release selection uses an independent Dashboard version", async () => {
+  const item = await fixture();
+  let manifestUrl = "";
+  const fetcher = (async (input: string | URL | Request) => {
+    manifestUrl = String(input);
+    return item.fetcher(input);
+  }) as typeof fetch;
+  try {
+    const release = await inspectDashboardRelease({ dashboardVersion: "1.2.3", platform: "win32", arch: "x64", fetcher });
+    assert.equal(release.version, "1.2.3");
+    assert.match(manifestUrl, /releases\/download\/v1\.2\.3\/dashboard-manifest\.json$/u);
+  } finally { await rm(item.root, { recursive: true, force: true }); }
+});
+
+test("Dashboard release selection rejects unsupported platforms, Dashboard-version drift, and unsafe manifests", async () => {
   const item = await fixture();
   try {
     await assert.rejects(
       inspectDashboardRelease({ platform: "win32", arch: "x64", fetcher: item.fetcher, packageVersion: "0.0.8" }),
-      (error) => error instanceof ServiceError && error.code === "DASHBOARD_MANIFEST_INVALID" && error.message.includes("does not match package version"),
+      (error) => error instanceof ServiceError && error.code === "DASHBOARD_MANIFEST_INVALID" && error.message.includes("does not match the required Dashboard version"),
     );
     await assert.rejects(
       inspectDashboardRelease({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "darwin", arch: "arm64", fetcher: item.fetcher }),

@@ -84,6 +84,31 @@ function toIssues(errors: ErrorObject[] | null | undefined): ValidationIssue[] {
   }));
 }
 
+export function normalizeProtocolReadDocument(
+  schemaName: ProtocolSchemaName,
+  value: unknown,
+): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const versionField = schemaName === "protocol" ? "protocolVersion" : "schemaVersion";
+  let normalized: Record<string, unknown> | undefined;
+  const version = record[versionField];
+  // 仅接受可无歧义映射到当前 major 的历史短写；绝不写回或改动 Git 历史。
+  if (version === 1 || version === "1" || (typeof version === "string" && /^1\.\d+$/u.test(version))) {
+    normalized = { ...record, [versionField]: "1.0" };
+  }
+  const createdAt = record.createdAt;
+  if (
+    typeof createdAt === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/u.test(createdAt) &&
+    !isCanonicalUtcTimestamp(createdAt)
+  ) {
+    const date = new Date(createdAt);
+    if (!Number.isNaN(date.valueOf())) normalized = { ...(normalized ?? record), createdAt: date.toISOString() };
+  }
+  return normalized ?? value;
+}
+
 export function validateProtocolDocument(
   schemaName: ProtocolSchemaName,
   value: unknown,
@@ -103,15 +128,7 @@ export function validateProtocolDocument(
     };
   }
   const mode = options.mode ?? "write";
-  let candidate = value;
-  if (mode === "read" && value && typeof value === "object" && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    const versionField = schemaName === "protocol" ? "protocolVersion" : "schemaVersion";
-    const version = record[versionField];
-    if (typeof version === "string" && /^1\.\d+$/u.test(version)) {
-      candidate = { ...record, [versionField]: "1.0" };
-    }
-  }
+  const candidate = mode === "read" ? normalizeProtocolReadDocument(schemaName, value) : value;
 
   if (validator(candidate)) return { ok: true };
   const issues = toIssues(validator.errors).filter(

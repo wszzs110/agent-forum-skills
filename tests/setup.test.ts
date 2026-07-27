@@ -183,6 +183,55 @@ describe("setup command", () => {
     );
   });
 
+  it("clones an existing remote Forum instead of creating a conflicting local root", async () => {
+    const { execSync } = await import("node:child_process");
+    const remote = join(home, "existing-remote.git");
+    execSync("git init --bare existing-remote.git", { cwd: home });
+    const owner = await run([
+      "--json", "setup",
+      "--alias", "owner", "--name", "Owner Forum", "--description", "The authoritative Forum.",
+      "--room-slug", "coordination", "--room-title", "Coordination", "--room-description", "Shared Room.",
+      "--remote", remote, "--workspace",
+    ], repo);
+    assert.equal(owner.code, 0);
+    const ownerForumId = JSON.parse(owner.stdout).data.forumCreated.forumId;
+
+    const joinHome = await mkdtemp(join(tmpdir(), "af-setup-existing-home-"));
+    const joinRepo = await mkdtemp(join(tmpdir(), "af-setup-existing-repo-"));
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    try {
+      execSync("git init", { cwd: joinRepo });
+      execSync('git config user.email "join@test"', { cwd: joinRepo });
+      execSync('git config user.name "Join Test"', { cwd: joinRepo });
+      await writeFile(join(joinRepo, "README.md"), "# join\n", "utf8");
+      execSync("git add README.md && git commit -m init", { cwd: joinRepo });
+      process.env.HOME = joinHome;
+      process.env.USERPROFILE = joinHome;
+      const joined = await run([
+        "--json", "setup",
+        "--alias", "joined", "--name", "Must not be used", "--description", "Must not create another Forum.",
+        "--room-slug", "coordination", "--room-title", "Coordination", "--room-description", "Shared Room.",
+        "--remote", remote, "--workspace",
+      ], joinRepo);
+      assert.equal(joined.code, 0, `setup failed: ${joined.stdout}\n${joined.stderr}`);
+      const result = JSON.parse(joined.stdout);
+      assert.equal(result.data.forumAdded.forumId, ownerForumId);
+      assert.equal(result.data.forumCreated, undefined);
+      assert.ok(result.data.remoteSynced, "setup must publish the joining identity and membership");
+      const joinedConfig = await loadLocalConfig();
+      assert.equal(joinedConfig.forums.find((forum) => forum.alias === "joined")?.forumId, ownerForumId);
+      const joinedHead = execSync("git rev-parse HEAD", { cwd: joinedConfig.forums.find((forum) => forum.alias === "joined")!.path, encoding: "utf8" }).trim();
+      const remoteHead = execSync("git --git-dir existing-remote.git rev-parse refs/heads/main", { cwd: home, encoding: "utf8" }).trim();
+      assert.equal(joinedHead, remoteHead);
+    } finally {
+      process.env.HOME = previousHome;
+      process.env.USERPROFILE = previousUserProfile;
+      await rm(joinHome, { recursive: true, force: true });
+      await rm(joinRepo, { recursive: true, force: true });
+    }
+  });
+
   it("reuses a matching remote and refuses implicit remote replacement", async () => {
     const { execSync } = await import("node:child_process");
     const remote = join(home, "matching-remote.git");

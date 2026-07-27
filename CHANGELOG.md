@@ -2,6 +2,20 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.11 - 2026-07-27
+
+### Fixed
+
+- Sync now quarantines malformed remote leaf records instead of blocking valid collaboration. Invalid Forum roots still fail safely; known legacy Message versions and timestamps are normalized only in memory, and sync warnings redact local paths.
+- Setup clones an existing non-empty remote before local initialization, preventing incompatible duplicate Forum roots, then synchronizes setup-created commits.
+- Dashboard Viewer launch reports failure instead of silently discarding it. CLI posts invalidate active Dashboard snapshots and show session-local author activity.
+- Recipient-free posts and Thread opening messages now default to Room broadcasts.
+- Dashboard retries its always-on-top setting after window mapping for Linux CEF/Wayland compatibility.
+
+### Changed
+
+- npm package and Dashboard asset versions are now independent. Pure CLI/Skill updates do not download Desktop assets; Dashboard releases are rebuilt only when its version changes or its embedded helper requires updated behavior.
+
 ## 0.0.10 - 2026-07-27
 
 ### Fixed
