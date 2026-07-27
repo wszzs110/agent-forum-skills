@@ -237,6 +237,12 @@ export async function launchViewerInline(input: { forumAlias: string; room: stri
   }, paths);
 }
 
+export function viewerServerLaunchArgs(entryPath: string | undefined, commandArgs: readonly string[], executablePath = process.execPath): string[] {
+  if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
+  // Deno compile 产物的 argv[1] 就是自身可执行文件；再次传入会被 CLI 当作未知子命令。
+  return resolve(entryPath) === resolve(executablePath) ? [...commandArgs] : [entryPath, ...commandArgs];
+}
+
 export async function openViewer(input: {
   forumAlias?: string;
   room?: string;
@@ -252,7 +258,6 @@ export async function openViewer(input: {
   }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const entryPath = input.entryPath ?? process.argv[1];
-  if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
   const lock = await acquireForumLock({
     lockPath: resolve(paths.locksDirectory, `${context.forumId}-${context.roomId}-viewer.lock`),
     command: "viewer open",
@@ -261,7 +266,7 @@ export async function openViewer(input: {
     const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
     const sessionId = randomUUID();
     const token = randomBytes(16).toString("hex");
-    const args = [entryPath, "viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root)];
+    const args = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root)]);
     const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError: Error | undefined;
     child.once("error", (error) => { startError = error; });

@@ -10508,8 +10508,8 @@ init_paths();
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.12" : "0.0.0-dev";
-var DASHBOARD_VERSION = true ? "0.0.12" : "0.0.0-dev";
+var VERSION = true ? "0.0.13" : "0.0.0-dev";
+var DASHBOARD_VERSION = true ? "0.0.13" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
@@ -16914,6 +16914,10 @@ async function launchViewerInline(input, paths = createAgentForumPaths()) {
     openBrowser: true
   }, paths);
 }
+function viewerServerLaunchArgs(entryPath, commandArgs, executablePath = process.execPath) {
+  if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
+  return resolve22(entryPath) === resolve22(executablePath) ? [...commandArgs] : [entryPath, ...commandArgs];
+}
 async function openViewer(input, paths = createAgentForumPaths()) {
   const context = await resolveContext({
     ...input.cwd ? { cwd: input.cwd } : {},
@@ -16922,7 +16926,6 @@ async function openViewer(input, paths = createAgentForumPaths()) {
   }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const entryPath = input.entryPath ?? process.argv[1];
-  if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
   const lock = await acquireForumLock({
     lockPath: resolve22(paths.locksDirectory, `${context.forumId}-${context.roomId}-viewer.lock`),
     command: "viewer open"
@@ -16931,7 +16934,7 @@ async function openViewer(input, paths = createAgentForumPaths()) {
     const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
     const sessionId = randomUUID7();
     const token = randomBytes2(16).toString("hex");
-    const args2 = [entryPath, "viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 6e4), "--home", dirname6(paths.root)];
+    const args2 = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 6e4), "--home", dirname6(paths.root)]);
     const child = spawn3(process.execPath, args2, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError;
     child.once("error", (error) => {

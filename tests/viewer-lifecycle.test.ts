@@ -7,7 +7,7 @@ import { createLocalIdentity } from "../src/config/local-config.js";
 import { initLocalForum } from "../src/services/local-forum.js";
 import { createRoom } from "../src/services/room.js";
 import { createThread } from "../src/services/thread.js";
-import { closeViewerSession, generateViewerHtml, listViewerSessions, openViewer } from "../src/services/viewer.js";
+import { closeViewerSession, generateViewerHtml, listViewerSessions, openViewer, viewerServerLaunchArgs } from "../src/services/viewer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
 function isProcessAlive(pid: number): boolean {
@@ -28,6 +28,12 @@ async function setup(home: string) {
   await createThread({ forumAlias: "team", room: "review", title: "Audit this", kind: "review", body: "Visible marker 你好", now }, paths);
   return paths;
 }
+
+test("自包含 CLI 启动 Viewer 时不将自身可执行文件误传为子命令", () => {
+  const command = ["viewer", "serve", "--forum", "team"];
+  assert.deepEqual(viewerServerLaunchArgs("/tmp/agent-forum-dashboard-cli", command, "/tmp/agent-forum-dashboard-cli"), command);
+  assert.deepEqual(viewerServerLaunchArgs("/tmp/agent-forum.mjs", command, "/usr/bin/node"), ["/tmp/agent-forum.mjs", ...command]);
+});
 
 test("Viewer launcher becomes ready, reports status, and closes without blocking", async () => {
   const home = await mkdtemp(join(tmpdir(), "agent-forum-viewer-launch-"));

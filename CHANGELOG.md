@@ -2,6 +2,12 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.13 - 2026-07-27
+
+### Fixed
+
+- Dashboard's self-contained Deno CLI helper now launches its detached Viewer server without incorrectly passing the helper executable as a CLI subcommand. This fixes `VIEWER_START_FAILED: Viewer did not become ready within 10 seconds` when opening Viewer from Dashboard.
+
 ## 0.0.12 - 2026-07-27
 
 ### Fixed
