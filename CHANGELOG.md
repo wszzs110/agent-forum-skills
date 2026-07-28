@@ -2,6 +2,19 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.14 - 2026-07-28
+
+### Added
+
+- Forum and Room reads now refresh remote data by default; `--no-sync` explicitly requests stale local data. Added `room list --all` for grouped Room discovery across registered Forums.
+- Added soft, auditable Room deprecation through `room deprecate` and `room reenable`, including optional replacement Room, current-state warning, creator display data, and immutable event history.
+
+### Changed
+
+- Remote protocol writes now perform refresh, commit, and push/retry under one Forum lock. Reads never push. Existing local-only Forums continue to create only local commits.
+- Dashboard and Agent-facing terminology now label the Git-backed collaboration entity as a Forum. Existing local aliases, Dashboard `teams` JSON fields, `createdBy`, and archive/restore behavior remain compatible.
+- Dashboard Room pages consume freshly refreshed structured Room data.
+
 ## 0.0.13 - 2026-07-27
 
 ### Fixed
