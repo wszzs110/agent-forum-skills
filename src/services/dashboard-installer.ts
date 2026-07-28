@@ -2,8 +2,7 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { chmod, mkdir, mkdtemp, open, readFile, readdir, readlink, realpath, rename, rm, stat } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, posix, resolve, sep } from "node:path";
+import { dirname, isAbsolute, posix, resolve, sep } from "node:path";
 import { writeJsonAtomic } from "../storage/atomic.js";
 import { acquireForumLock } from "../storage/lock.js";
 import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js";
@@ -167,6 +166,11 @@ async function fetchJson(url: string, fetcher: typeof fetch): Promise<unknown> {
   throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release manifest", { cause: lastError instanceof Error ? lastError.message : String(lastError) });
 }
 
+export function dashboardReleasePageUrl(dashboardVersion = DASHBOARD_VERSION): string {
+  if (dashboardVersion === "0.0.0-dev") return `https://github.com/${repository}/releases`;
+  return `https://github.com/${repository}/releases/tag/v${dashboardVersion}`;
+}
+
 export async function inspectDashboardRelease(options: { manifestUrl?: string; platform?: NodeJS.Platform; arch?: string; fetcher?: typeof fetch; dashboardVersion?: string; packageVersion?: string } = {}): Promise<{ manifestUrl: string; version: string; asset: DashboardReleaseAsset }> {
   // packageVersion is retained as a test-only backward-compatible alias for dashboardVersion.
   const dashboardVersion = options.dashboardVersion ?? options.packageVersion ?? DASHBOARD_VERSION;
@@ -184,7 +188,52 @@ export async function inspectDashboardRelease(options: { manifestUrl?: string; p
   return { manifestUrl, version: manifest.version, asset };
 }
 
+/** 本地 archive 导入使用同一严格 manifest 解析与目标选择，完全不访问网络。 */
+export async function inspectDashboardReleaseFile(manifestPath: string, options: { platform?: NodeJS.Platform; arch?: string } = {}): Promise<{ manifestUrl: string; version: string; asset: DashboardReleaseAsset }> {
+  let value: unknown;
+  try { value = JSON.parse(await readFile(manifestPath, "utf8")); }
+  catch (error) { throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "could not read Dashboard release manifest file", { cause: error instanceof Error ? error.message : String(error) }); }
+  const manifest = parseManifest(value);
+  const platform = options.platform ?? process.platform;
+  const arch = options.arch ?? process.arch;
+  const asset = manifest.assets.find((candidate) => candidate.platform === platform && candidate.arch === arch);
+  if (!asset) throw new ServiceError("DASHBOARD_PLATFORM_UNSUPPORTED", `no Dashboard release for ${platform}-${arch}`);
+  return { manifestUrl: `file://${resolve(manifestPath)}`, version: manifest.version, asset };
+}
+
+async function existingPartialSize(asset: DashboardReleaseAsset, destination: string): Promise<number> {
+  try {
+    const existing = await stat(destination);
+    if (!existing.isFile() || existing.size > asset.size) {
+      await rm(destination, { force: true });
+      return 0;
+    }
+    if (existing.size === asset.size) {
+      if (await sha256File(destination) === asset.sha256) return asset.size;
+      await rm(destination, { force: true });
+      return 0;
+    }
+    return existing.size;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return 0;
+    throw error;
+  }
+}
+
+async function appendExistingBytes(hash: ReturnType<typeof createHash>, destination: string): Promise<void> {
+  for await (const chunk of createReadStream(destination)) hash.update(chunk);
+}
+
+/**
+ * 下载缓存保留为 .part；外层进程被终止后，下次会通过 Range 从已验证字节继续。
+ * 服务器忽略 Range 并返回 200 时安全地从头重下，而不会拼接出损坏 archive。
+ */
 async function downloadAssetOnce(asset: DashboardReleaseAsset, destination: string, fetcher: typeof fetch, onProgress?: (received: number, total: number, attempt: number) => void, attempt = 1, timeouts: DashboardDownloadTimeouts = {}): Promise<void> {
+  let offset = await existingPartialSize(asset, destination);
+  if (offset === asset.size) {
+    onProgress?.(asset.size, asset.size, attempt);
+    return;
+  }
   const controller = new AbortController();
   const connectionTimeout = timeouts.assetConnectionMs ?? assetConnectionTimeoutMs;
   const inactivityTimeout = timeouts.assetInactivityMs ?? assetInactivityTimeoutMs;
@@ -194,19 +243,31 @@ async function downloadAssetOnce(asset: DashboardReleaseAsset, destination: stri
     controller.abort();
   }, connectionTimeout);
   let response: Response;
-  try { response = await fetcher(asset.url, { redirect: "follow", signal: controller.signal }); }
-  catch (error) {
+  try {
+    response = await fetcher(asset.url, {
+      redirect: "follow",
+      signal: controller.signal,
+      ...(offset > 0 ? { headers: { Range: `bytes=${offset}-` } } : {}),
+    });
+  } catch (error) {
     throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", timedOut ? "Dashboard release asset connection timed out" : "could not download Dashboard release asset", { cause: error instanceof Error ? error.message : String(error) });
   } finally {
     if (connectionTimer) clearTimeout(connectionTimer);
     connectionTimer = undefined;
   }
   if (!response.ok || !response.body) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", `Dashboard release asset returned HTTP ${response.status}`);
+  const resuming = offset > 0 && response.status === 206;
+  if (!resuming) {
+    offset = 0;
+    await rm(destination, { force: true });
+  }
   const declared = response.headers.get("content-length");
-  if (declared && Number(declared) !== asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset size does not match the manifest");
-  const handle = await open(destination, "wx", 0o600);
+  const expectedLength = asset.size - offset;
+  if (declared && Number(declared) !== expectedLength) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset size does not match the manifest");
+  const handle = await open(destination, resuming ? "a" : "w", 0o600);
   const hash = createHash("sha256");
-  let received = 0;
+  if (resuming) await appendExistingBytes(hash, destination);
+  let received = offset;
   let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
   const resetInactivityTimer = () => {
     if (inactivityTimer) clearTimeout(inactivityTimer);
@@ -231,20 +292,23 @@ async function downloadAssetOnce(asset: DashboardReleaseAsset, destination: stri
     await handle.sync();
   } catch (error) {
     if (timedOut) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset download stalled", { cause: error instanceof Error ? error.message : String(error) });
-    throw error;
+    if (error instanceof ServiceError) throw error;
+    throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release asset", { cause: error instanceof Error ? error.message : String(error) });
   } finally {
     if (inactivityTimer) clearTimeout(inactivityTimer);
     await reader.cancel().catch(() => undefined);
     await handle.close().catch(() => undefined);
   }
   if (received !== asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset is incomplete");
-  if (hash.digest("hex") !== asset.sha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard release asset failed SHA-256 verification");
+  if (hash.digest("hex") !== asset.sha256) {
+    await rm(destination, { force: true });
+    throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard release asset failed SHA-256 verification");
+  }
 }
 
 async function downloadAsset(asset: DashboardReleaseAsset, destination: string, fetcher: typeof fetch, onProgress?: (received: number, total: number, attempt: number) => void, timeouts: DashboardDownloadTimeouts = {}): Promise<void> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    await rm(destination, { force: true });
     try { await downloadAssetOnce(asset, destination, fetcher, onProgress, attempt, timeouts); return; }
     catch (error) {
       lastError = error;
@@ -332,18 +396,70 @@ export async function getDashboardInstallationStatus(paths = createAgentForumPat
   } catch { return { status: "damaged", installation, executable }; }
 }
 
-async function installDashboardUnlocked(options: { manifestUrl?: string; update?: boolean; force?: boolean; now?: Date; fetcher?: typeof fetch; platform?: NodeJS.Platform; arch?: string; onProgress?: (received: number, total: number, attempt: number) => void; downloadTimeouts?: DashboardDownloadTimeouts } = {}, paths = createAgentForumPaths()): Promise<{ action: "installed" | "updated" | "unchanged"; installation: DashboardInstallation; executable: string }> {
-  const release = await inspectDashboardRelease(options);
-  const current = await getDashboardInstallationStatus(paths);
-  if (current.status === "installed" && current.installation?.version === release.version) return { action: "unchanged", installation: current.installation, executable: current.executable! };
-  if (current.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
-  if ((current.status === "modified" || current.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
+export interface InstallDashboardOptions {
+  manifestUrl?: string;
+  /** Browser-downloaded manifest; with archivePath this path is fully offline. */
+  manifestPath?: string;
+  /** Browser-downloaded archive to verify and import instead of downloading. */
+  archivePath?: string;
+  update?: boolean;
+  force?: boolean;
+  now?: Date;
+  fetcher?: typeof fetch;
+  platform?: NodeJS.Platform;
+  arch?: string;
+  onProgress?: (received: number, total: number, attempt: number) => void;
+  downloadTimeouts?: DashboardDownloadTimeouts;
+}
+
+async function resolveDashboardRelease(options: InstallDashboardOptions): Promise<{ manifestUrl: string; version: string; asset: DashboardReleaseAsset }> {
+  if (options.manifestPath) {
+    if (options.manifestUrl) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "--manifest and --manifest-url cannot be used together");
+    return inspectDashboardReleaseFile(options.manifestPath, options);
+  }
+  return inspectDashboardRelease(options);
+}
+
+async function verifyArchive(asset: DashboardReleaseAsset, archive: string): Promise<void> {
+  let archiveStat;
+  try { archiveStat = await stat(archive); }
+  catch (error) { throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard archive file does not exist", { cause: error instanceof Error ? error.message : String(error) }); }
+  if (!archiveStat.isFile() || archiveStat.size !== asset.size) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard archive size does not match the manifest");
+  if (await sha256File(archive) !== asset.sha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard archive failed SHA-256 verification");
+}
+
+async function acquireArchive(release: { version: string; asset: DashboardReleaseAsset }, options: InstallDashboardOptions, paths: AgentForumPaths): Promise<string> {
+  if (options.archivePath) {
+    await verifyArchive(release.asset, options.archivePath);
+    return options.archivePath;
+  }
+  const cacheName = `${release.version}-${release.asset.platform}-${release.asset.arch}-${release.asset.fileName}.part`;
+  const archive = resolve(paths.dashboardDownloadsDirectory, cacheName);
+  const lock = await acquireForumLock({
+    lockPath: resolve(paths.locksDirectory, `dashboard-download-${release.version}-${release.asset.platform}-${release.asset.arch}.lock`),
+    command: "dashboard download",
+  });
+  try {
+    await mkdir(paths.dashboardDownloadsDirectory, { recursive: true, mode: 0o700 });
+    await downloadAsset(release.asset, archive, options.fetcher ?? fetch, options.onProgress, options.downloadTimeouts);
+    return archive;
+  } finally {
+    await lock.release();
+  }
+}
+
+/** 下载、校验和解压不持有安装激活锁；只有最终替换安装目录的瞬间串行化。 */
+export async function installDashboard(options: InstallDashboardOptions = {}, paths = createAgentForumPaths()): Promise<{ action: "installed" | "updated" | "unchanged"; installation: DashboardInstallation; executable: string }> {
+  const release = await resolveDashboardRelease(options);
+  const before = await getDashboardInstallationStatus(paths);
+  if (before.status === "installed" && before.installation?.version === release.version) return { action: "unchanged", installation: before.installation, executable: before.executable! };
+  if (before.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
+  if ((before.status === "modified" || before.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
+  const archive = await acquireArchive(release, options, paths);
   await mkdir(dirname(paths.dashboardInstallDirectory), { recursive: true });
   const staging = await mkdtemp(resolve(dirname(paths.dashboardInstallDirectory), ".dashboard-install-"));
-  const archive = resolve(staging, basename(release.asset.fileName));
   const payload = resolve(staging, "payload");
   try {
-    await downloadAsset(release.asset, archive, options.fetcher ?? fetch, options.onProgress, options.downloadTimeouts);
     await extractArchive(archive, payload);
     const stagedExecutable = safeExecutable(payload, release.asset.executable);
     await stat(stagedExecutable);
@@ -355,24 +471,27 @@ async function installDashboardUnlocked(options: { manifestUrl?: string; update?
     const files = await collectInstalledFiles(payload);
     const installation: DashboardInstallation = { formatVersion: 1, version: release.version, platform: release.asset.platform, arch: release.asset.arch, executable: release.asset.executable, executableSha256: release.asset.executableSha256, files, sourceUrl: release.asset.url, installedAt: (options.now ?? new Date()).toISOString() };
     await writeJsonAtomic(resolve(payload, "installation.json"), installation, { overwrite: true });
-    const backup = resolve(dirname(paths.dashboardInstallDirectory), `.dashboard-backup-${Date.now()}`);
-    let backedUp = false;
+    const lock = await acquireForumLock({ lockPath: resolve(paths.locksDirectory, "dashboard-install.lock"), command: "dashboard activate" });
     try {
-      if (current.status !== "not-installed") { await rename(paths.dashboardInstallDirectory, backup); backedUp = true; }
-      await rename(payload, paths.dashboardInstallDirectory);
-      if (backedUp) await rm(backup, { recursive: true, force: true });
-    } catch (error) {
-      if (backedUp) await rename(backup, paths.dashboardInstallDirectory).catch(() => undefined);
-      throw error;
+      const current = await getDashboardInstallationStatus(paths);
+      if (current.status === "installed" && current.installation?.version === release.version) return { action: "unchanged", installation: current.installation, executable: current.executable! };
+      if (current.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
+      if ((current.status === "modified" || current.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
+      const backup = resolve(dirname(paths.dashboardInstallDirectory), `.dashboard-backup-${Date.now()}`);
+      let backedUp = false;
+      try {
+        if (current.status !== "not-installed") { await rename(paths.dashboardInstallDirectory, backup); backedUp = true; }
+        await rename(payload, paths.dashboardInstallDirectory);
+        if (backedUp) await rm(backup, { recursive: true, force: true });
+      } catch (error) {
+        if (backedUp) await rename(backup, paths.dashboardInstallDirectory).catch(() => undefined);
+        throw error;
+      }
+      return { action: current.status === "not-installed" ? "installed" : "updated", installation, executable: safeExecutable(paths.dashboardInstallDirectory, installation.executable) };
+    } finally {
+      await lock.release();
     }
-    return { action: current.status === "not-installed" ? "installed" : "updated", installation, executable: safeExecutable(paths.dashboardInstallDirectory, installation.executable) };
   } finally { await rm(staging, { recursive: true, force: true }); }
-}
-
-export async function installDashboard(options: { manifestUrl?: string; update?: boolean; force?: boolean; now?: Date; fetcher?: typeof fetch; platform?: NodeJS.Platform; arch?: string; onProgress?: (received: number, total: number, attempt: number) => void; downloadTimeouts?: DashboardDownloadTimeouts } = {}, paths = createAgentForumPaths()): Promise<{ action: "installed" | "updated" | "unchanged"; installation: DashboardInstallation; executable: string }> {
-  const lock = await acquireForumLock({ lockPath: resolve(paths.locksDirectory, "dashboard-install.lock"), command: "dashboard install" });
-  try { return await installDashboardUnlocked(options, paths); }
-  finally { await lock.release(); }
 }
 
 export async function uninstallDashboard(options: { force?: boolean } = {}, paths = createAgentForumPaths()): Promise<{ action: "uninstalled" | "not-installed" }> {

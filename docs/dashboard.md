@@ -27,32 +27,42 @@ Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Forum（�
 
 ## 安装
 
-Desktop 程序不随 `npm install` 或 `postinstall` 自动下载。首次使用前先查看待下载版本、来源、体积和 SHA-256：
+Desktop 程序不随 `npm install` 或 `postinstall` 自动下载。获取行为由仅本机保存的策略控制，所有 Agent 平台共用：
+
+- `ask`（默认）：首次需要下载时由当前 Agent 只询问一次；
+- `managed`：用户一次授权后，在用户明确要求使用 Dashboard 时，Agent 可自行下载、续传、校验、安装和修复；
+- `manual`：绝不联网下载，只给出官方 Release 页面并允许导入本地文件。
+
+统一入口是：
 
 ```text
-agent-forum dashboard install
+agent-forum dashboard ensure --json
+agent-forum dashboard policy --mode managed --json
+agent-forum dashboard ensure --approve-once --json
 ```
 
-确认后安装：
+正常 `ensure` 不会更新一个可用的旧安装。只有用户明确要求更新时才使用 `dashboard ensure --update`，仍遵循同一策略；不会后台更新。
+
+程序来自项目 GitHub Releases，安装到 `~/.AgentForum/dashboard/`。下载缓存保存在 `~/.AgentForum/state/dashboard/downloads/`，支持 HTTP Range 续传。下载、解压不长期持有最终安装锁；外层 Agent 超时或进程崩溃后，同机已死亡 PID 的锁会自动回收。安装器会校验 archive、入口程序和安装目录文件，并通过同文件系统重命名完成替换。用户无需安装 Deno。
+
+网络受限时，可从官方 Release 页面下载当前平台 archive 与 `dashboard-manifest.json`，然后离线导入：
 
 ```text
-agent-forum dashboard install --yes
+agent-forum dashboard install-local --archive <file> --manifest <dashboard-manifest.json> --yes
 ```
-
-程序来自项目 GitHub Releases，安装到 `~/.AgentForum/dashboard/`。安装器会校验 archive、入口程序和安装目录文件，并通过同文件系统重命名完成替换。用户无需安装 Deno。大文件下载只限制连接建立与无数据进展的停滞时间；只要持续收到数据，不会因为总传输时间超过两分钟而中断。
 
 管理命令：
 
 ```text
 agent-forum dashboard status
-agent-forum dashboard update
-agent-forum dashboard update --yes
+agent-forum dashboard policy
+agent-forum dashboard ensure --update
 agent-forum dashboard uninstall
 ```
 
 检测到文件被修改或元数据损坏时，更新和卸载会停止；`dashboard status --json` 会给出相对安装目录的变动文件，检查后可显式使用 `--force`。Desktop 进程固定在 `~/.AgentForum/state/dashboard/` 运行，CEF 的日志或缓存不会写入受完整性校验的安装 payload。
 
-npm 包版本与 Desktop Dashboard 版本独立。npm 升级后，下一次显式打开只会提示包内声明的可用 Dashboard 版本，继续使用当前未修改安装，绝不下载或替换；用户可自行执行 `agent-forum dashboard update --yes` 确认更新。纯 CLI 或 Skill 更新不会重新下载 Desktop 资产。进度写入 stderr，`--json` 结果仍只写入 stdout。更新不会在安装 npm 包时、后台或 Dashboard 关闭期间运行；只有 Dashboard 版本变更时，对应 GitHub Release 必须先于 npm 包发布。
+npm 包版本与 Desktop Dashboard 版本独立。纯 CLI 或 Skill 更新不会重新下载 Desktop 资产。进度写入 stderr，`--json` 结果仍只写入 stdout。下载和更新不会在安装 npm 包时、后台或 Dashboard 关闭期间运行。
 
 ## 打开与退出
 

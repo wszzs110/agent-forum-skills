@@ -417,8 +417,8 @@
         </article>
         <article class="install-card dashboard-install">
           <div class="install-heading"><h3><span data-lang="en">Optional Desktop Dashboard</span><span data-lang="zh">可选 Desktop Dashboard</span></h3><span class="recommend"><span data-lang="en">Explicit download</span><span data-lang="zh">显式下载</span></span></div>
-          <p><span data-lang="en">Preview the platform-specific GitHub Release, then confirm the download. Deno is not required. Later package upgrades only recommend an available Dashboard update; the user confirms it with <code>dashboard update --yes</code>.</span><span data-lang="zh">先查看平台对应的 GitHub Release，再确认下载。用户无需安装 Deno；以后包升级时，显式打开仅提示可用更新，用户执行 <code>dashboard update --yes</code> 后才会下载。</span></p>
-          <div class="mini-code"><span class="prompt">$</span> agent-forum dashboard install<br><span class="prompt">$</span> agent-forum dashboard install --yes</div>
+          <p><span data-lang="en">Dashboard use starts with one local policy choice: allow and remember, allow once, or manual download. Deno is not required. Within that boundary, Agents resume, verify, install, and repair without repeated prompts; normal open never updates a working Dashboard.</span><span data-lang="zh">首次使用 Dashboard 时只需选择一次本机策略：允许并记住、仅本次允许，或手动下载。用户无需安装 Deno；在该边界内，Agent 会自行续传、校验、安装和修复，不会重复提问；正常打开绝不更新可用 Dashboard。</span></p>
+          <div class="mini-code"><span class="prompt">$</span> agent-forum dashboard ensure --json<br><span class="prompt">$</span> agent-forum dashboard ensure --approve-once --json</div>
         </article>
       </div>
       <div class="first-forum">

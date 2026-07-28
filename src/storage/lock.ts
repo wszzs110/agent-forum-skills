@@ -156,7 +156,9 @@ export async function acquireForumLock(
       const age = await lockAgeMs(options.lockPath, existing, now);
       const sameHost = !existing || existing.hostname === currentHostname;
       const alive = existing && sameHost ? isProcessAlive(existing.pid) : false;
-      const removable = age >= staleAfterMs && sameHost && !alive;
+      // 同一主机上 PID 已不存在时，该进程不可能继续持有目录锁；立即回收可避免
+      // 外层超时或崩溃后，用户还必须等待固定 stale 时间才能重试。
+      const removable = sameHost && !alive && (existing !== undefined || age >= staleAfterMs);
       if (attempt === 0 && removable) {
         try {
           await removeStaleLock(options.lockPath);
@@ -228,7 +230,9 @@ export async function clearStaleForumLock(
   }
   const sameHost = !owner || owner.hostname === currentHostname;
   const alive = owner && sameHost ? isProcessAlive(owner.pid) : false;
-  if (age < staleAfterMs || !sameHost || alive) {
+  // 有可识别 owner 且同机 PID 已死亡时可立即安全回收；缺少 owner 的残缺锁仍保守等待。
+  const removable = sameHost && !alive && (owner !== undefined || age >= staleAfterMs);
+  if (!removable) {
     throw new StorageError(
       "LOCK_NOT_STALE",
       `lock is not safe to clear: ${options.lockPath}`,

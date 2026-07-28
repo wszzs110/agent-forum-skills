@@ -328,7 +328,7 @@ async function acquireForumLock(options) {
       const age = await lockAgeMs(options.lockPath, existing, now);
       const sameHost = !existing || existing.hostname === currentHostname;
       const alive = existing && sameHost ? isProcessAlive2(existing.pid) : false;
-      const removable = age >= staleAfterMs && sameHost && !alive;
+      const removable = sameHost && !alive && (existing !== void 0 || age >= staleAfterMs);
       if (attempt === 0 && removable) {
         try {
           await removeStaleLock(options.lockPath);
@@ -377,7 +377,8 @@ async function clearStaleForumLock(options) {
   }
   const sameHost = !owner || owner.hostname === currentHostname;
   const alive = owner && sameHost ? isProcessAlive2(owner.pid) : false;
-  if (age < staleAfterMs || !sameHost || alive) {
+  const removable = sameHost && !alive && (owner !== void 0 || age >= staleAfterMs);
+  if (!removable) {
     throw new StorageError(
       "LOCK_NOT_STALE",
       `lock is not safe to clear: ${options.lockPath}`
@@ -414,6 +415,8 @@ function createAgentForumPaths(homeDirectory = homedir()) {
     dashboardDirectory: resolve2(stateDirectory, "dashboard"),
     dashboardRuntimeFile: resolve2(stateDirectory, "dashboard", "runtime.json"),
     dashboardDesktopFile: resolve2(stateDirectory, "dashboard", "desktop.json"),
+    dashboardPolicyFile: resolve2(stateDirectory, "dashboard", "acquisition-policy.json"),
+    dashboardDownloadsDirectory: resolve2(stateDirectory, "dashboard", "downloads"),
     dashboardInstallDirectory: resolve2(root, "dashboard"),
     dashboardInstallationFile: resolve2(root, "dashboard", "installation.json"),
     installationsFile: resolve2(stateDirectory, "installations.json"),
@@ -3415,7 +3418,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve23.call(this, root, ref);
+      let _sch = resolve24.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3442,7 +3445,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve23(root, ref) {
+    function resolve24(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -4073,7 +4076,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve23(baseURI, relativeURI, options) {
+    function resolve24(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -4337,7 +4340,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve23,
+      resolve: resolve24,
       resolveComponent,
       equal,
       serialize,
@@ -12316,7 +12319,7 @@ import { spawn as spawn2 } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir as mkdir4 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname4, resolve as resolve17 } from "node:path";
+import { dirname as dirname4, resolve as resolve18 } from "node:path";
 import { fileURLToPath } from "node:url";
 init_paths();
 
@@ -13206,14 +13209,14 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
 }
 
 // src/services/dashboard-installer.ts
+init_atomic();
+init_lock();
+init_paths();
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { chmod, mkdir as mkdir3, mkdtemp, open as open2, readFile as readFile13, readdir as readdir8, readlink, realpath as realpath3, rename as rename3, rm as rm7, stat as stat3 } from "node:fs/promises";
-init_atomic();
-init_lock();
-init_paths();
-import { basename as basename3, dirname as dirname3, isAbsolute as isAbsolute2, posix as posix2, resolve as resolve16, sep as sep2 } from "node:path";
+import { dirname as dirname3, isAbsolute as isAbsolute2, posix as posix2, resolve as resolve16, sep as sep2 } from "node:path";
 init_errors2();
 var repository = "wszzs110/agent-forum-skills";
 var sha256Pattern = /^[a-f0-9]{64}$/u;
@@ -13324,6 +13327,10 @@ async function fetchJson(url, fetcher) {
   }
   throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release manifest", { cause: lastError instanceof Error ? lastError.message : String(lastError) });
 }
+function dashboardReleasePageUrl(dashboardVersion = DASHBOARD_VERSION) {
+  if (dashboardVersion === "0.0.0-dev") return `https://github.com/${repository}/releases`;
+  return `https://github.com/${repository}/releases/tag/v${dashboardVersion}`;
+}
 async function inspectDashboardRelease(options = {}) {
   const dashboardVersion = options.dashboardVersion ?? options.packageVersion ?? DASHBOARD_VERSION;
   const configuredManifestUrl = options.manifestUrl ?? process.env.AGENT_FORUM_DASHBOARD_MANIFEST_URL;
@@ -13343,7 +13350,47 @@ async function inspectDashboardRelease(options = {}) {
   if (!asset) throw new ServiceError("DASHBOARD_PLATFORM_UNSUPPORTED", `no Dashboard release for ${platform}-${arch}`);
   return { manifestUrl, version: manifest.version, asset };
 }
+async function inspectDashboardReleaseFile(manifestPath, options = {}) {
+  let value;
+  try {
+    value = JSON.parse(await readFile13(manifestPath, "utf8"));
+  } catch (error) {
+    throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "could not read Dashboard release manifest file", { cause: error instanceof Error ? error.message : String(error) });
+  }
+  const manifest = parseManifest(value);
+  const platform = options.platform ?? process.platform;
+  const arch = options.arch ?? process.arch;
+  const asset = manifest.assets.find((candidate) => candidate.platform === platform && candidate.arch === arch);
+  if (!asset) throw new ServiceError("DASHBOARD_PLATFORM_UNSUPPORTED", `no Dashboard release for ${platform}-${arch}`);
+  return { manifestUrl: `file://${resolve16(manifestPath)}`, version: manifest.version, asset };
+}
+async function existingPartialSize(asset, destination) {
+  try {
+    const existing = await stat3(destination);
+    if (!existing.isFile() || existing.size > asset.size) {
+      await rm7(destination, { force: true });
+      return 0;
+    }
+    if (existing.size === asset.size) {
+      if (await sha256File(destination) === asset.sha256) return asset.size;
+      await rm7(destination, { force: true });
+      return 0;
+    }
+    return existing.size;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return 0;
+    throw error;
+  }
+}
+async function appendExistingBytes(hash, destination) {
+  for await (const chunk of createReadStream(destination)) hash.update(chunk);
+}
 async function downloadAssetOnce(asset, destination, fetcher, onProgress, attempt = 1, timeouts = {}) {
+  let offset = await existingPartialSize(asset, destination);
+  if (offset === asset.size) {
+    onProgress?.(asset.size, asset.size, attempt);
+    return;
+  }
   const controller = new AbortController();
   const connectionTimeout = timeouts.assetConnectionMs ?? assetConnectionTimeoutMs;
   const inactivityTimeout = timeouts.assetInactivityMs ?? assetInactivityTimeoutMs;
@@ -13354,7 +13401,11 @@ async function downloadAssetOnce(asset, destination, fetcher, onProgress, attemp
   }, connectionTimeout);
   let response;
   try {
-    response = await fetcher(asset.url, { redirect: "follow", signal: controller.signal });
+    response = await fetcher(asset.url, {
+      redirect: "follow",
+      signal: controller.signal,
+      ...offset > 0 ? { headers: { Range: `bytes=${offset}-` } } : {}
+    });
   } catch (error) {
     throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", timedOut ? "Dashboard release asset connection timed out" : "could not download Dashboard release asset", { cause: error instanceof Error ? error.message : String(error) });
   } finally {
@@ -13362,11 +13413,18 @@ async function downloadAssetOnce(asset, destination, fetcher, onProgress, attemp
     connectionTimer = void 0;
   }
   if (!response.ok || !response.body) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", `Dashboard release asset returned HTTP ${response.status}`);
+  const resuming = offset > 0 && response.status === 206;
+  if (!resuming) {
+    offset = 0;
+    await rm7(destination, { force: true });
+  }
   const declared = response.headers.get("content-length");
-  if (declared && Number(declared) !== asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset size does not match the manifest");
-  const handle = await open2(destination, "wx", 384);
+  const expectedLength = asset.size - offset;
+  if (declared && Number(declared) !== expectedLength) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset size does not match the manifest");
+  const handle = await open2(destination, resuming ? "a" : "w", 384);
   const hash = createHash("sha256");
-  let received = 0;
+  if (resuming) await appendExistingBytes(hash, destination);
+  let received = offset;
   let inactivityTimer;
   const resetInactivityTimer = () => {
     if (inactivityTimer) clearTimeout(inactivityTimer);
@@ -13391,19 +13449,22 @@ async function downloadAssetOnce(asset, destination, fetcher, onProgress, attemp
     await handle.sync();
   } catch (error) {
     if (timedOut) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset download stalled", { cause: error instanceof Error ? error.message : String(error) });
-    throw error;
+    if (error instanceof ServiceError) throw error;
+    throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "could not download Dashboard release asset", { cause: error instanceof Error ? error.message : String(error) });
   } finally {
     if (inactivityTimer) clearTimeout(inactivityTimer);
     await reader.cancel().catch(() => void 0);
     await handle.close().catch(() => void 0);
   }
   if (received !== asset.size) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", "Dashboard release asset is incomplete");
-  if (hash.digest("hex") !== asset.sha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard release asset failed SHA-256 verification");
+  if (hash.digest("hex") !== asset.sha256) {
+    await rm7(destination, { force: true });
+    throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard release asset failed SHA-256 verification");
+  }
 }
 async function downloadAsset(asset, destination, fetcher, onProgress, timeouts = {}) {
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    await rm7(destination, { force: true });
     try {
       await downloadAssetOnce(asset, destination, fetcher, onProgress, attempt, timeouts);
       return;
@@ -13497,18 +13558,53 @@ async function getDashboardInstallationStatus(paths = createAgentForumPaths()) {
     return { status: "damaged", installation, executable };
   }
 }
-async function installDashboardUnlocked(options = {}, paths = createAgentForumPaths()) {
-  const release = await inspectDashboardRelease(options);
-  const current = await getDashboardInstallationStatus(paths);
-  if (current.status === "installed" && current.installation?.version === release.version) return { action: "unchanged", installation: current.installation, executable: current.executable };
-  if (current.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
-  if ((current.status === "modified" || current.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
+async function resolveDashboardRelease(options) {
+  if (options.manifestPath) {
+    if (options.manifestUrl) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "--manifest and --manifest-url cannot be used together");
+    return inspectDashboardReleaseFile(options.manifestPath, options);
+  }
+  return inspectDashboardRelease(options);
+}
+async function verifyArchive(asset, archive2) {
+  let archiveStat;
+  try {
+    archiveStat = await stat3(archive2);
+  } catch (error) {
+    throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard archive file does not exist", { cause: error instanceof Error ? error.message : String(error) });
+  }
+  if (!archiveStat.isFile() || archiveStat.size !== asset.size) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard archive size does not match the manifest");
+  if (await sha256File(archive2) !== asset.sha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "Dashboard archive failed SHA-256 verification");
+}
+async function acquireArchive(release, options, paths) {
+  if (options.archivePath) {
+    await verifyArchive(release.asset, options.archivePath);
+    return options.archivePath;
+  }
+  const cacheName = `${release.version}-${release.asset.platform}-${release.asset.arch}-${release.asset.fileName}.part`;
+  const archive2 = resolve16(paths.dashboardDownloadsDirectory, cacheName);
+  const lock = await acquireForumLock({
+    lockPath: resolve16(paths.locksDirectory, `dashboard-download-${release.version}-${release.asset.platform}-${release.asset.arch}.lock`),
+    command: "dashboard download"
+  });
+  try {
+    await mkdir3(paths.dashboardDownloadsDirectory, { recursive: true, mode: 448 });
+    await downloadAsset(release.asset, archive2, options.fetcher ?? fetch, options.onProgress, options.downloadTimeouts);
+    return archive2;
+  } finally {
+    await lock.release();
+  }
+}
+async function installDashboard(options = {}, paths = createAgentForumPaths()) {
+  const release = await resolveDashboardRelease(options);
+  const before = await getDashboardInstallationStatus(paths);
+  if (before.status === "installed" && before.installation?.version === release.version) return { action: "unchanged", installation: before.installation, executable: before.executable };
+  if (before.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
+  if ((before.status === "modified" || before.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
+  const archive2 = await acquireArchive(release, options, paths);
   await mkdir3(dirname3(paths.dashboardInstallDirectory), { recursive: true });
   const staging = await mkdtemp(resolve16(dirname3(paths.dashboardInstallDirectory), ".dashboard-install-"));
-  const archive2 = resolve16(staging, basename3(release.asset.fileName));
   const payload = resolve16(staging, "payload");
   try {
-    await downloadAsset(release.asset, archive2, options.fetcher ?? fetch, options.onProgress, options.downloadTimeouts);
     await extractArchive(archive2, payload);
     const stagedExecutable = safeExecutable(payload, release.asset.executable);
     await stat3(stagedExecutable);
@@ -13526,30 +13622,31 @@ async function installDashboardUnlocked(options = {}, paths = createAgentForumPa
     const files = await collectInstalledFiles(payload);
     const installation = { formatVersion: 1, version: release.version, platform: release.asset.platform, arch: release.asset.arch, executable: release.asset.executable, executableSha256: release.asset.executableSha256, files, sourceUrl: release.asset.url, installedAt: (options.now ?? /* @__PURE__ */ new Date()).toISOString() };
     await writeJsonAtomic(resolve16(payload, "installation.json"), installation, { overwrite: true });
-    const backup = resolve16(dirname3(paths.dashboardInstallDirectory), `.dashboard-backup-${Date.now()}`);
-    let backedUp = false;
+    const lock = await acquireForumLock({ lockPath: resolve16(paths.locksDirectory, "dashboard-install.lock"), command: "dashboard activate" });
     try {
-      if (current.status !== "not-installed") {
-        await rename3(paths.dashboardInstallDirectory, backup);
-        backedUp = true;
+      const current = await getDashboardInstallationStatus(paths);
+      if (current.status === "installed" && current.installation?.version === release.version) return { action: "unchanged", installation: current.installation, executable: current.executable };
+      if (current.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
+      if ((current.status === "modified" || current.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
+      const backup = resolve16(dirname3(paths.dashboardInstallDirectory), `.dashboard-backup-${Date.now()}`);
+      let backedUp = false;
+      try {
+        if (current.status !== "not-installed") {
+          await rename3(paths.dashboardInstallDirectory, backup);
+          backedUp = true;
+        }
+        await rename3(payload, paths.dashboardInstallDirectory);
+        if (backedUp) await rm7(backup, { recursive: true, force: true });
+      } catch (error) {
+        if (backedUp) await rename3(backup, paths.dashboardInstallDirectory).catch(() => void 0);
+        throw error;
       }
-      await rename3(payload, paths.dashboardInstallDirectory);
-      if (backedUp) await rm7(backup, { recursive: true, force: true });
-    } catch (error) {
-      if (backedUp) await rename3(backup, paths.dashboardInstallDirectory).catch(() => void 0);
-      throw error;
+      return { action: current.status === "not-installed" ? "installed" : "updated", installation, executable: safeExecutable(paths.dashboardInstallDirectory, installation.executable) };
+    } finally {
+      await lock.release();
     }
-    return { action: current.status === "not-installed" ? "installed" : "updated", installation, executable: safeExecutable(paths.dashboardInstallDirectory, installation.executable) };
   } finally {
     await rm7(staging, { recursive: true, force: true });
-  }
-}
-async function installDashboard(options = {}, paths = createAgentForumPaths()) {
-  const lock = await acquireForumLock({ lockPath: resolve16(paths.locksDirectory, "dashboard-install.lock"), command: "dashboard install" });
-  try {
-    return await installDashboardUnlocked(options, paths);
-  } finally {
-    await lock.release();
   }
 }
 async function uninstallDashboard(options = {}, paths = createAgentForumPaths()) {
@@ -13565,12 +13662,101 @@ async function uninstallDashboard(options = {}, paths = createAgentForumPaths())
   }
 }
 
+// src/services/dashboard-ensure.ts
+init_paths();
+
+// src/services/dashboard-policy.ts
+init_atomic();
+init_lock();
+init_paths();
+init_errors2();
+import { readFile as readFile14 } from "node:fs/promises";
+import { resolve as resolve17 } from "node:path";
+var policyValues = /* @__PURE__ */ new Set(["managed", "ask", "manual"]);
+function defaultState() {
+  return { formatVersion: 1, policy: "ask", updatedAt: "1970-01-01T00:00:00.000Z" };
+}
+function parseState(value) {
+  if (!value || typeof value !== "object") throw new ServiceError("DASHBOARD_POLICY_INVALID", "Dashboard acquisition policy must be an object");
+  const state2 = value;
+  if (Object.keys(state2).length !== 3 || state2.formatVersion !== 1 || typeof state2.policy !== "string" || !policyValues.has(state2.policy) || typeof state2.updatedAt !== "string" || Number.isNaN(Date.parse(state2.updatedAt))) {
+    throw new ServiceError("DASHBOARD_POLICY_INVALID", "Dashboard acquisition policy is invalid");
+  }
+  return state2;
+}
+async function getDashboardAcquisitionPolicy(paths = createAgentForumPaths()) {
+  try {
+    return parseState(JSON.parse(await readFile14(paths.dashboardPolicyFile, "utf8")));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return defaultState();
+    throw error;
+  }
+}
+async function setDashboardAcquisitionPolicy(policy, paths = createAgentForumPaths(), now = /* @__PURE__ */ new Date()) {
+  if (!policyValues.has(policy)) throw new ServiceError("DASHBOARD_POLICY_INVALID", `unknown Dashboard acquisition policy: ${policy}`);
+  const lock = await acquireForumLock({
+    lockPath: resolve17(paths.locksDirectory, "dashboard-policy.lock"),
+    command: "dashboard policy set"
+  });
+  try {
+    const state2 = { formatVersion: 1, policy, updatedAt: now.toISOString() };
+    await writeJsonAtomic(paths.dashboardPolicyFile, state2, { overwrite: true, mode: 384 });
+    return state2;
+  } finally {
+    await lock.release();
+  }
+}
+
+// src/services/dashboard-ensure.ts
+function requiredAction(installation, update) {
+  if (installation.status === "not-installed") return "install";
+  if (installation.status === "installed") return update ? "update" : "none";
+  return "repair";
+}
+function acquisitionHint(options) {
+  return {
+    version: DASHBOARD_VERSION,
+    platform: options.platform ?? process.platform,
+    arch: options.arch ?? process.arch,
+    browserUrl: dashboardReleasePageUrl()
+  };
+}
+async function ensureDashboard(options = {}, paths = createAgentForumPaths()) {
+  const [policyState, installation] = await Promise.all([
+    getDashboardAcquisitionPolicy(paths),
+    getDashboardInstallationStatus(paths)
+  ]);
+  const action = requiredAction(installation, options.update === true);
+  if (action === "none") return { status: "ready", action, policy: policyState.policy, installation };
+  const acquisition = acquisitionHint(options);
+  if (policyState.policy === "manual" && !options.archivePath) {
+    return { status: "manual-required", action: "import-local", policy: policyState.policy, installation, acquisition };
+  }
+  if (policyState.policy === "ask" && !options.approveOnce && !options.archivePath) {
+    return { status: "confirmation-required", action, policy: policyState.policy, installation, acquisition };
+  }
+  const result = await installDashboard({
+    ...options,
+    update: action !== "install",
+    // 已按策略授权的 repair 应恢复受校验的发布物；不再把损坏安装的二次 --force 确认转嫁给用户。
+    force: options.force || action === "repair"
+  }, paths);
+  return {
+    status: "ready",
+    action: result.action === "unchanged" ? "none" : action,
+    policy: policyState.policy,
+    installation: await getDashboardInstallationStatus(paths),
+    acquisition,
+    result
+  };
+}
+
 // src/services/dashboard-desktop.ts
 init_paths();
-import { readFile as readFile14, rm as rm8 } from "node:fs/promises";
+import { readFile as readFile15, rm as rm8 } from "node:fs/promises";
 async function readDesktop(paths) {
   try {
-    const value = JSON.parse(await readFile14(paths.dashboardDesktopFile, "utf8"));
+    const value = JSON.parse(await readFile15(paths.dashboardDesktopFile, "utf8"));
     return value.formatVersion === 1 && Number.isSafeInteger(value.pid) && value.pid > 0 && Number.isSafeInteger(value.port) && value.port > 0 && value.port <= 65535 && typeof value.token === "string" && /^[a-f0-9-]{36}$/u.test(value.token) ? value : void 0;
   } catch {
     return void 0;
@@ -13614,39 +13800,64 @@ function dashboardUpdateAvailable(installedVersion, dashboardVersion = DASHBOARD
 }
 async function executeDashboardCommand(args2, options = {}) {
   const subcommand = args2[0];
-  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <install|update|uninstall|open|attach|heartbeat|detach|status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
+  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <ensure|policy|install|update|install-local|uninstall|open|attach|heartbeat|detach|status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard ensure [--update] [--approve-once] [--force]\n  agent-forum dashboard policy [--mode <managed|ask|manual>]\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard install-local --archive <file> --manifest <file> [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
   try {
     if (subcommand === "status") {
       if (args2.length !== 1) return invalidArgument("dashboard status accepts no options");
-      const [result, installation] = await Promise.all([dashboardStatus(), getDashboardInstallationStatus()]);
-      return { exitCode: ExitCode.Success, command: "dashboard.status", data: { ...result, installation }, human: `Desktop: ${installation.status}; ${result.clients.length} active Dashboard client(s).
+      const [result, installation, policy] = await Promise.all([dashboardStatus(), getDashboardInstallationStatus(), getDashboardAcquisitionPolicy()]);
+      return { exitCode: ExitCode.Success, command: "dashboard.status", data: { ...result, installation, policy }, human: `Desktop: ${installation.status}; acquisition policy: ${policy.policy}; ${result.clients.length} active Dashboard client(s).
 ` };
     }
-    if (subcommand === "install" || subcommand === "update") {
-      const parsed = parseCommandOptions(args2.slice(1), { values: ["--manifest-url"], flags: ["--yes", "--force"] });
+    if (subcommand === "policy") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--mode"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
-      const manifestUrl = parsed.values.get("--manifest-url");
-      if (!parsed.flags.has("--yes")) {
-        const release = await inspectDashboardRelease({ ...manifestUrl ? { manifestUrl } : {} });
-        return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: { action: "confirmation-required", version: release.version, platform: release.asset.platform, arch: release.asset.arch, size: release.asset.size, source: release.asset.url, sha256: release.asset.sha256 }, human: `Dashboard ${release.version} for ${release.asset.platform}-${release.asset.arch}
-Source: ${release.asset.url}
-Size: ${release.asset.size} bytes
-SHA-256: ${release.asset.sha256}
-Run again with --yes to confirm the download.
+      if (parsed.values.size === 0) {
+        const result2 = await getDashboardAcquisitionPolicy();
+        return { exitCode: ExitCode.Success, command: "dashboard.policy", data: result2, human: `Dashboard acquisition policy: ${result2.policy}.
 ` };
       }
-      if (subcommand === "update") await closeExistingDashboardDesktop().catch(() => false);
-      let lastPercent = -1;
-      const result = await installDashboard({ ...manifestUrl ? { manifestUrl } : {}, update: subcommand === "update", force: parsed.flags.has("--force"), ...options.onProgress ? { onProgress: (received, total, attempt) => {
-        const percent = Math.floor(received * 100 / total);
-        if (percent !== lastPercent) {
-          lastPercent = percent;
-          options.onProgress(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`);
-        }
-      } } : {} });
-      options.onProgress?.("\n");
-      return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: result, human: `Dashboard ${result.action}: ${result.installation.version}
+      const mode = parsed.values.get("--mode");
+      if (mode !== "managed" && mode !== "ask" && mode !== "manual") return invalidArgument("--mode must be managed, ask, or manual");
+      const result = await setDashboardAcquisitionPolicy(mode);
+      return { exitCode: ExitCode.Success, command: "dashboard.policy", data: result, human: `Dashboard acquisition policy set to ${result.policy}.
 ` };
+    }
+    if (subcommand === "ensure" || subcommand === "install" || subcommand === "update" || subcommand === "install-local") {
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--manifest-url", "--manifest", "--archive"], flags: ["--yes", "--force", "--update", "--approve-once"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const manifestUrl = parsed.values.get("--manifest-url");
+      const manifestPath = parsed.values.get("--manifest");
+      const archivePath = parsed.values.get("--archive");
+      const localImport = subcommand === "install-local";
+      if (localImport && (!manifestPath || !archivePath)) return invalidArgument("dashboard install-local requires --archive and --manifest");
+      if (localImport && manifestUrl) return invalidArgument("dashboard install-local does not accept --manifest-url");
+      if (archivePath && !manifestPath && !manifestUrl) return invalidArgument("--archive requires --manifest for offline verification or --manifest-url");
+      const update = subcommand === "update" || parsed.flags.has("--update");
+      if (subcommand === "update" || localImport && update) await closeExistingDashboardDesktop().catch(() => false);
+      let lastPercent = -1;
+      const result = await ensureDashboard({
+        ...manifestUrl ? { manifestUrl } : {},
+        ...manifestPath ? { manifestPath } : {},
+        ...archivePath ? { archivePath } : {},
+        update,
+        force: parsed.flags.has("--force"),
+        // install/update --yes 是兼容入口；ensure 的 --approve-once 是跨 Agent 的原子当次授权。
+        approveOnce: parsed.flags.has("--approve-once") || parsed.flags.has("--yes") || localImport,
+        ...options.onProgress ? { onProgress: (received, total, attempt) => {
+          const percent = Math.floor(received * 100 / total);
+          if (percent !== lastPercent) {
+            lastPercent = percent;
+            options.onProgress(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`);
+          }
+        } } : {}
+      });
+      if (result.status === "ready") options.onProgress?.("\n");
+      const command = subcommand === "ensure" ? "dashboard.ensure" : `dashboard.${subcommand}`;
+      const human = result.status === "ready" ? `Dashboard ${result.result?.action ?? "ready"}.
+` : result.status === "manual-required" ? `Dashboard requires a local archive. Download it from ${result.acquisition?.browserUrl} and run dashboard install-local --archive <file> --manifest <file> --yes.
+` : `Dashboard ${result.action} requires one-time approval. Run dashboard ensure --approve-once, or set dashboard policy --mode managed.
+`;
+      return { exitCode: ExitCode.Success, command, data: result, human };
     }
     if (subcommand === "uninstall") {
       const parsed = parseCommandOptions(args2.slice(1), { values: [], flags: ["--force"] });
@@ -13701,24 +13912,24 @@ Run again with --yes to confirm the download.
       const identity = parsed.values.get("--identity");
       const installed = await getDashboardInstallationStatus();
       const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
-      const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard update --yes to install it.` : "";
+      const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard ensure --update to follow your acquisition policy.` : "";
       if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, updateAvailable }, human: `Dashboard already running; client attached.${updateHint}
 ` };
       const moduleDirectory = dirname4(fileURLToPath(import.meta.url));
-      const entrypoint = [resolve17(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve17(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
-      const deno = process.platform === "win32" ? resolve17(homedir2(), ".deno", "bin", "deno.exe") : "deno";
+      const entrypoint = [resolve18(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve18(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
+      const deno = process.platform === "win32" ? resolve18(homedir2(), ".deno", "bin", "deno.exe") : "deno";
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && entrypoint && (process.platform !== "win32" || existsSync(deno));
       if (installed.status !== "installed" && !developmentFallback) {
         const modified = installed.status === "modified" && installed.modifiedFiles?.length ? ` (changed files: ${installed.modifiedFiles.slice(0, 5).join(", ")}${installed.modifiedFiles.length > 5 ? ", \u2026" : ""})` : "";
-        return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard install" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard update --yes`);
+        return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard ensure --update`);
       }
       const executable = installed.status === "installed" ? installed.executable : deno;
-      const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve17(dirname4(entrypoint), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint];
-      const dashboardCli = installed.status === "installed" ? resolve17(dirname4(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
-      if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard update --yes");
+      const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve18(dirname4(entrypoint), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint];
+      const dashboardCli = installed.status === "installed" ? resolve18(dirname4(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
+      if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard ensure --update");
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir4(dashboardRuntimeDirectory, { recursive: true, mode: 448 });
-      const child = spawn2(executable, executableArgs, { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve17(dirname4(executable), "AppIcon.ico") : resolve17(dirname4(entrypoint), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });
+      const child = spawn2(executable, executableArgs, { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve18(dirname4(executable), "AppIcon.ico") : resolve18(dirname4(entrypoint), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });
       child.unref();
       return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable }, human: `Dashboard started.${updateHint}
 ` };
@@ -13766,7 +13977,7 @@ Run again with --yes to confirm the download.
 init_local_config();
 import { access, lstat as lstat3, readdir as readdir9 } from "node:fs/promises";
 import { constants } from "node:fs";
-import { resolve as resolve19 } from "node:path";
+import { resolve as resolve20 } from "node:path";
 init_runner();
 init_lock();
 init_paths();
@@ -13778,7 +13989,7 @@ init_timestamps();
 init_runner();
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { lstat as lstat2, mkdir as mkdir5, rename as rename4, rm as rm9 } from "node:fs/promises";
-import { resolve as resolve18 } from "node:path";
+import { resolve as resolve19 } from "node:path";
 
 // src/git/remote.ts
 init_errors2();
@@ -13901,11 +14112,11 @@ function remoteBranchFromHead(repository2) {
 async function validateClonedForum(repository2, branch) {
   try {
     const protocol = await readJsonDocument(
-      resolve18(repository2, ".forum", "protocol.json"),
+      resolve19(repository2, ".forum", "protocol.json"),
       "protocol"
     );
     const forum = await readJsonDocument(
-      resolve18(repository2, ".forum", "forum.json"),
+      resolve19(repository2, ".forum", "forum.json"),
       "forum"
     );
     if (protocol.dataBranch !== branch || protocol.forumId !== forum.forumId) {
@@ -14113,7 +14324,7 @@ async function getForumRemoteStatus(forumAlias, paths = createAgentForumPaths())
   let protocolValid = false;
   try {
     const protocol = await readJsonDocument(
-      resolve18(registration.path, ".forum", "protocol.json"),
+      resolve19(registration.path, ".forum", "protocol.json"),
       "protocol"
     );
     protocolValid = protocol.forumId === registration.forumId && protocol.dataBranch === registration.dataBranch;
@@ -14287,7 +14498,7 @@ async function diagnoseAgentForum(input = {}, paths = createAgentForumPaths()) {
       });
       const gitPath = runGit(forum.path, ["rev-parse", "--git-path", "rebase-merge"]);
       const applyPath = runGit(forum.path, ["rev-parse", "--git-path", "rebase-apply"]);
-      const rebasePresent = gitPath.status === 0 && await exists(resolve19(forum.path, gitPath.stdout.trim())) || applyPath.status === 0 && await exists(resolve19(forum.path, applyPath.stdout.trim()));
+      const rebasePresent = gitPath.status === 0 && await exists(resolve20(forum.path, gitPath.stdout.trim())) || applyPath.status === 0 && await exists(resolve20(forum.path, applyPath.stdout.trim()));
       checks.push({
         id: `${prefix}.rebase`,
         status: rebasePresent ? "error" : "ok",
@@ -14399,13 +14610,13 @@ init_errors2();
 init_forum_sync();
 import {
   mkdir as mkdir6,
-  readFile as readFile15,
+  readFile as readFile16,
   rename as rename5,
   rm as rm10,
   stat as stat4
 } from "node:fs/promises";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { resolve as resolve20 } from "node:path";
+import { resolve as resolve21 } from "node:path";
 async function pathExists3(path2) {
   try {
     await stat4(path2);
@@ -14439,11 +14650,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
   await mkdir6(paths.forumsDirectory, { recursive: true });
   assertGitBranchName(paths.forumsDirectory, dataBranch);
   const configLock = await acquireForumLock({
-    lockPath: resolve20(paths.locksDirectory, "config.lock"),
+    lockPath: resolve21(paths.locksDirectory, "config.lock"),
     command: "forum init-local"
   });
   const destination = forumClonePath(paths, input.alias);
-  const staging = resolve20(
+  const staging = resolve21(
     paths.forumsDirectory,
     `.agent-forum-tmp-${randomUUID5()}`
   );
@@ -14479,11 +14690,11 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       identity.memberId
     );
     await writeFileAtomic(
-      resolve20(staging, ".gitattributes"),
+      resolve21(staging, ".gitattributes"),
       "*.json text eol=lf\n*.md text eol=lf\n"
     );
     await writeValidatedJsonAtomic(
-      resolve20(staging, ".forum", "protocol.json"),
+      resolve21(staging, ".forum", "protocol.json"),
       "protocol",
       {
         protocolVersion: "1.0",
@@ -14494,7 +14705,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve20(staging, ".forum", "forum.json"),
+      resolve21(staging, ".forum", "forum.json"),
       "forum",
       {
         schemaVersion: "1.0",
@@ -14506,7 +14717,7 @@ async function initLocalForum(input, paths = createAgentForumPaths()) {
       }
     );
     await writeValidatedJsonAtomic(
-      resolve20(staging, "members", identity.memberId, "profile.json"),
+      resolve21(staging, "members", identity.memberId, "profile.json"),
       "member-profile",
       publicProfile(identity, timestamp)
     );
@@ -14556,7 +14767,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     lockPath: forumLockPath(paths, registration.forumId),
     command: "identity publish"
   });
-  const profilePath = resolve20(
+  const profilePath = resolve21(
     registration.path,
     "members",
     identity.memberId,
@@ -14587,8 +14798,8 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       );
     }
     const protocol = JSON.parse(
-      await readFile15(
-        resolve20(registration.path, ".forum", "protocol.json"),
+      await readFile16(
+        resolve21(registration.path, ".forum", "protocol.json"),
         "utf8"
       )
     );
@@ -14605,7 +14816,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     let previous;
     let existing;
     try {
-      previous = await readFile15(profilePath, "utf8");
+      previous = await readFile16(profilePath, "utf8");
       existing = JSON.parse(previous);
       const validation = validateProtocolDocument("member-profile", existing, {
         mode: "read"
@@ -15960,7 +16171,7 @@ import { createHash as createHash2, randomUUID as randomUUID6 } from "node:crypt
 import {
   cp,
   mkdir as mkdir7,
-  readFile as readFile16,
+  readFile as readFile17,
   readdir as readdir10,
   rename as rename6,
   rm as rm11,
@@ -15968,7 +16179,7 @@ import {
   writeFile as writeFile2
 } from "node:fs/promises";
 import { homedir as homedir3 } from "node:os";
-import { dirname as dirname5, relative as relative3, resolve as resolve21, sep as sep3 } from "node:path";
+import { dirname as dirname5, relative as relative3, resolve as resolve22, sep as sep3 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 import { spawnSync as spawnSync2 } from "node:child_process";
 var SkillInstallationError = class extends Error {
@@ -15983,14 +16194,14 @@ function emptyState() {
   return { formatVersion: 1, installations: [] };
 }
 function stateFile(homeDirectory) {
-  return resolve21(homeDirectory, ".AgentForum", "state", "installations.json");
+  return resolve22(homeDirectory, ".AgentForum", "state", "installations.json");
 }
 function namedSkillDestination(target2, skillName, homeDirectory = homedir3()) {
   if (commonTargets.has(target2)) {
-    return resolve21(homeDirectory, ".agents", "skills", skillName);
+    return resolve22(homeDirectory, ".agents", "skills", skillName);
   }
   if (target2 === "claude-code") {
-    return resolve21(homeDirectory, ".claude", "skills", skillName);
+    return resolve22(homeDirectory, ".claude", "skills", skillName);
   }
   throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target2}`);
 }
@@ -16024,7 +16235,7 @@ async function pathExists4(path2) {
 }
 async function loadState2(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile16(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile17(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -16060,7 +16271,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
   const entries = await readdir10(current, { withFileTypes: true });
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    const absolute = resolve21(current, entry.name);
+    const absolute = resolve22(current, entry.name);
     if (entry.isSymbolicLink()) {
       if (!allowSymbolicLinks) {
         throw new SkillInstallationError(
@@ -16081,7 +16292,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
     }
     if (!entry.isFile()) continue;
     const relativePath2 = relative3(root, absolute).split(sep3).join("/");
-    files[relativePath2] = createHash2("sha256").update(await readFile16(absolute)).digest("hex");
+    files[relativePath2] = createHash2("sha256").update(await readFile17(absolute)).digest("hex");
   }
   return files;
 }
@@ -16093,11 +16304,11 @@ function sameFiles(left, right) {
 async function resolveSkillSource(explicit) {
   const candidates = [
     explicit,
-    resolve21(dirname5(fileURLToPath2(import.meta.url)), ".."),
-    resolve21(process.cwd(), "skills", "agent-forum")
+    resolve22(dirname5(fileURLToPath2(import.meta.url)), ".."),
+    resolve22(process.cwd(), "skills", "agent-forum")
   ].filter((candidate) => Boolean(candidate));
   for (const candidate of candidates) {
-    if (await pathExists4(resolve21(candidate, "SKILL.md"))) return candidate;
+    if (await pathExists4(resolve22(candidate, "SKILL.md"))) return candidate;
   }
   throw new SkillInstallationError(
     "SKILL_SOURCE_NOT_FOUND",
@@ -16128,8 +16339,8 @@ async function replaceDirectory(source, destination) {
 async function installSkill(options) {
   const homeDirectory = options.homeDirectory ?? homedir3();
   const coreSource = await resolveSkillSource(options.sourceDirectory);
-  const viewerSource = resolve21(dirname5(coreSource), "agent-forum-viewer");
-  if (!await pathExists4(resolve21(viewerSource, "SKILL.md"))) {
+  const viewerSource = resolve22(dirname5(coreSource), "agent-forum-viewer");
+  if (!await pathExists4(resolve22(viewerSource, "SKILL.md"))) {
     throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-viewer/SKILL.md");
   }
   const payloads = [
@@ -16137,8 +16348,8 @@ async function installSkill(options) {
     { source: viewerSource, destination: viewerSkillDestination(options.target, homeDirectory) }
   ];
   if (options.target !== "pi") {
-    const dashboardSource = resolve21(dirname5(coreSource), "agent-forum-dashboard");
-    if (!await pathExists4(resolve21(dashboardSource, "SKILL.md"))) {
+    const dashboardSource = resolve22(dirname5(coreSource), "agent-forum-dashboard");
+    if (!await pathExists4(resolve22(dashboardSource, "SKILL.md"))) {
       throw new SkillInstallationError("SKILL_SOURCE_NOT_FOUND", "could not locate skills/agent-forum-dashboard/SKILL.md");
     }
     payloads.push({ source: dashboardSource, destination: dashboardSkillDestination(options.target, homeDirectory) });
@@ -16617,8 +16828,8 @@ init_lock();
 init_paths();
 import { randomBytes as randomBytes2, randomUUID as randomUUID7 } from "node:crypto";
 import { spawn as spawn3 } from "node:child_process";
-import { mkdir as mkdir8, readFile as readFile17, readdir as readdir11, rm as rm12 } from "node:fs/promises";
-import { dirname as dirname6, resolve as resolve22 } from "node:path";
+import { mkdir as mkdir8, readFile as readFile18, readdir as readdir11, rm as rm12 } from "node:fs/promises";
+import { dirname as dirname6, resolve as resolve23 } from "node:path";
 init_local_config();
 init_forum_sync();
 init_errors2();
@@ -17019,7 +17230,7 @@ async function startViewerServer(input) {
 // src/services/viewer.ts
 function sessionPath(paths, id) {
   if (!/^[0-9a-f-]{36}$/u.test(id)) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", "invalid Viewer session ID");
-  return resolve22(paths.viewerDirectory, `${id}.json`);
+  return resolve23(paths.viewerDirectory, `${id}.json`);
 }
 async function isProcessAlive(pid) {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
@@ -17040,7 +17251,7 @@ async function waitForProcessExit(pid, timeoutMs = 5e3) {
 }
 async function readSession(path2) {
   try {
-    const value = JSON.parse(await readFile17(path2, "utf8"));
+    const value = JSON.parse(await readFile18(path2, "utf8"));
     const url = new URL(value.url);
     const validUrl = url.protocol === "http:" && url.hostname === "127.0.0.1" && /^\/session\/[0-9a-f]{32}\/$/u.test(url.pathname);
     return value.formatVersion === 1 && /^[0-9a-f-]{36}$/u.test(value.sessionId) && Number.isSafeInteger(value.pid) && value.pid > 0 && validUrl ? value : void 0;
@@ -17057,7 +17268,7 @@ async function listViewerSessions(paths = createAgentForumPaths()) {
   }
   const sessions = [];
   for (const name of names.filter((name2) => name2.endsWith(".json"))) {
-    const path2 = resolve22(paths.viewerDirectory, name);
+    const path2 = resolve23(paths.viewerDirectory, name);
     const session = await readSession(path2);
     if (session && await isProcessAlive(session.pid)) sessions.push(session);
     else await rm12(path2, { force: true });
@@ -17073,7 +17284,7 @@ async function cleanViewerSessions(paths = createAgentForumPaths()) {
   }
   let removed = 0;
   for (const name of names.filter((name2) => name2.endsWith(".json") || name2.endsWith(".ready"))) {
-    const path2 = resolve22(paths.viewerDirectory, name);
+    const path2 = resolve23(paths.viewerDirectory, name);
     const session = name.endsWith(".json") ? await readSession(path2) : void 0;
     if (!session || !await isProcessAlive(session.pid)) {
       await rm12(path2, { force: true });
@@ -17208,7 +17419,7 @@ async function launchViewerInline(input, paths = createAgentForumPaths()) {
 }
 function viewerServerLaunchArgs(entryPath, commandArgs, executablePath = process.execPath) {
   if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
-  return resolve22(entryPath) === resolve22(executablePath) ? [...commandArgs] : [entryPath, ...commandArgs];
+  return resolve23(entryPath) === resolve23(executablePath) ? [...commandArgs] : [entryPath, ...commandArgs];
 }
 async function openViewer(input, paths = createAgentForumPaths()) {
   const context = await resolveContext({
@@ -17219,7 +17430,7 @@ async function openViewer(input, paths = createAgentForumPaths()) {
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const entryPath = input.entryPath ?? process.argv[1];
   const lock = await acquireForumLock({
-    lockPath: resolve22(paths.locksDirectory, `${context.forumId}-${context.roomId}-viewer.lock`),
+    lockPath: resolve23(paths.locksDirectory, `${context.forumId}-${context.roomId}-viewer.lock`),
     command: "viewer open"
   });
   try {
@@ -17318,7 +17529,7 @@ async function generateViewerHtml(input, paths = createAgentForumPaths()) {
   const refresh = await refreshForumFromRemote(context.forumAlias, paths);
   if (refresh.outcome === "updated") await invalidateDashboard(paths);
   const cached = await getForumSnapshot(context.forumAlias, paths);
-  const output2 = input.output ?? resolve22(paths.viewerDirectory, `${context.roomId}.html`);
+  const output2 = input.output ?? resolve23(paths.viewerDirectory, `${context.roomId}.html`);
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir8(dirname6(output2), { recursive: true });

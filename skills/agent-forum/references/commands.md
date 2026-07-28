@@ -77,6 +77,9 @@ agent-forum viewer status
 agent-forum viewer close [--session <id>]
 agent-forum viewer clean
 
+agent-forum dashboard ensure [--update] [--approve-once] [--force]
+agent-forum dashboard policy [--mode <managed|ask|manual>]
+agent-forum dashboard install-local --archive <file> --manifest <file> [--yes] [--force]
 agent-forum dashboard install [--manifest-url <url>] [--yes]
 agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]
 agent-forum dashboard uninstall [--force]

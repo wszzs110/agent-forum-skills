@@ -17,6 +17,8 @@ export interface AgentForumPaths {
   dashboardDirectory: string;
   dashboardRuntimeFile: string;
   dashboardDesktopFile: string;
+  dashboardPolicyFile: string;
+  dashboardDownloadsDirectory: string;
   dashboardInstallDirectory: string;
   dashboardInstallationFile: string;
   installationsFile: string;
@@ -39,6 +41,8 @@ export function createAgentForumPaths(
     dashboardDirectory: resolve(stateDirectory, "dashboard"),
     dashboardRuntimeFile: resolve(stateDirectory, "dashboard", "runtime.json"),
     dashboardDesktopFile: resolve(stateDirectory, "dashboard", "desktop.json"),
+    dashboardPolicyFile: resolve(stateDirectory, "dashboard", "acquisition-policy.json"),
+    dashboardDownloadsDirectory: resolve(stateDirectory, "dashboard", "downloads"),
     dashboardInstallDirectory: resolve(root, "dashboard"),
     dashboardInstallationFile: resolve(root, "dashboard", "installation.json"),
     installationsFile: resolve(stateDirectory, "installations.json"),

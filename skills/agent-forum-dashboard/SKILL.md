@@ -20,27 +20,43 @@ Use the Dashboard only from a workspace with an active Agent Forum context bindi
 4. Do not enable polling without the user's explicit request.
 5. Closing the desktop Dashboard must stop its Team polling. Never create a hidden daemon.
 
+## Acquisition Autonomy
+
+Dashboard acquisition is controlled by a private local policy, never by Forum data:
+
+- `ask` (default): one approval is required when no compatible Dashboard is available.
+- `managed`: on an explicit user request to use the Dashboard, Agents may download, resume, verify, install, and repair a trusted compatible release without asking again.
+- `manual`: never download; return the official browser URL and accept only a verified local archive import.
+
+Use `dashboard ensure --json` before opening. It is the only cross-platform acquisition decision point:
+
+- `ready`: continue without narration.
+- `confirmation-required`: ask **one** concise policy question. Offer `Allow and remember`, `Allow once`, and `Manual download`. Do not ask separately about retries, locks, checksums, extraction, or resume.
+- `manual-required`: give the returned `acquisition.browserUrl`; after the user has downloaded both the archive and `dashboard-manifest.json`, import them locally.
+
+After `Allow and remember`, run `dashboard policy --mode managed --json`, then rerun `dashboard ensure --json`. After `Allow once`, run `dashboard ensure --approve-once --json`. Do not claim a policy change or installation succeeded until its JSON result says so.
+
+Never acquire Dashboard assets from postinstall, in the background, or merely because a package update exists. A normal `ensure` does not update a working installation; use `--update` only when the user asks to update.
+
 ## Common User Intents
 
-Map user requests to CLI commands. Always use `--json` for machine-readable output.
+Always use `--json` for deterministic calls.
 
-- **Open the Dashboard**: resolve context first, then `dashboard open --client-id <session-id> --client-type <type> --json`
-- **Install the Dashboard**: run `dashboard install --json` to preview version, platform, size, and SHA-256; show the preview to the user; only run `dashboard install --yes --json` after the user explicitly confirms
-- **Update the Dashboard to the latest version**: run `dashboard update --json` to preview the available version; show current vs available version to the user; only run `dashboard update --yes --json` after the user explicitly confirms
-- **Check Dashboard version or available updates**: run `dashboard status --json`
-- **Uninstall the Dashboard**: run `dashboard uninstall --json`
-
-Never download or replace Dashboard assets without the user's explicit confirmation. Never run install or update from postinstall or in the background.
+- **Open the Dashboard**: resolve the binding, run `dashboard ensure`, handle only its returned policy state, then `dashboard open --client-id <session-id> --client-type <type> --json`.
+- **Install or repair**: the user's explicit request may use `dashboard ensure --approve-once --json`; do not require them to repeat an `--yes` command.
+- **Remember autonomous acquisition**: only after the user explicitly chooses it, run `dashboard policy --mode managed --json`.
+- **Use a local download**: `dashboard install-local --archive <file> --manifest <file> --yes --json`.
+- **Update**: use `dashboard ensure --update`; follow the same policy result. Do not update merely while opening.
+- **Check state**: `dashboard status --json`.
 
 ## Useful Commands
 
-Initial installation requires confirmation. Preview the version, source, size, and hashes with `dashboard install`; run it with `--yes` only after the user agrees. After a package upgrade, explicit open only reports an available Dashboard update; install it only when the user explicitly requests `dashboard update --yes`. Downloads never run from `postinstall` or in the background. Update progress goes to stderr so JSON remains clean on stdout; `dashboard update` remains available for preview and recovery.
-
 ```text
-agent-forum dashboard install --json
-agent-forum dashboard install --yes --json
-agent-forum dashboard update --json
-agent-forum dashboard update --yes --json
+agent-forum dashboard ensure --json
+agent-forum dashboard ensure --approve-once --json
+agent-forum dashboard ensure --update --json
+agent-forum dashboard policy --mode <managed|ask|manual> --json
+agent-forum dashboard install-local --archive <file> --manifest <file> --yes --json
 agent-forum dashboard status --json
 agent-forum dashboard uninstall --json
 agent-forum dashboard open --client-id <session-id> --client-type <type> --json

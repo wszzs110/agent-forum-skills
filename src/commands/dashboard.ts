@@ -8,7 +8,9 @@ import { ExitCode } from "../errors.js";
 import { createAgentForumPaths } from "../storage/paths.js";
 import { DASHBOARD_VERSION, VERSION } from "../version.js";
 import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashboardSnapshot, setDashboardForumPolling, setDashboardRoomPinned } from "../services/dashboard.js";
-import { getDashboardInstallationStatus, inspectDashboardRelease, installDashboard, uninstallDashboard } from "../services/dashboard-installer.js";
+import { getDashboardInstallationStatus, uninstallDashboard } from "../services/dashboard-installer.js";
+import { ensureDashboard } from "../services/dashboard-ensure.js";
+import { getDashboardAcquisitionPolicy, setDashboardAcquisitionPolicy, type DashboardAcquisitionPolicy } from "../services/dashboard-policy.js";
 import { attachExistingDashboardDesktop, closeExistingDashboardDesktop, detachExistingDashboardDesktop } from "../services/dashboard-desktop.js";
 import { resolveContext } from "../services/context.js";
 import { commandError, invalidArgument } from "./error-result.js";
@@ -22,26 +24,59 @@ export function dashboardUpdateAvailable(installedVersion: string | undefined, d
 
 export async function executeDashboardCommand(args: readonly string[], options: { onProgress?: (text: string) => void } = {}): Promise<CommandExecution> {
   const subcommand = args[0];
-  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <install|update|uninstall|open|attach|heartbeat|detach|status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
+  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <ensure|policy|install|update|install-local|uninstall|open|attach|heartbeat|detach|status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard ensure [--update] [--approve-once] [--force]\n  agent-forum dashboard policy [--mode <managed|ask|manual>]\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard install-local --archive <file> --manifest <file> [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
   try {
     if (subcommand === "status") {
       if (args.length !== 1) return invalidArgument("dashboard status accepts no options");
-      const [result, installation] = await Promise.all([dashboardStatus(), getDashboardInstallationStatus()]);
-      return { exitCode: ExitCode.Success, command: "dashboard.status", data: { ...result, installation }, human: `Desktop: ${installation.status}; ${result.clients.length} active Dashboard client(s).\n` };
+      const [result, installation, policy] = await Promise.all([dashboardStatus(), getDashboardInstallationStatus(), getDashboardAcquisitionPolicy()]);
+      return { exitCode: ExitCode.Success, command: "dashboard.status", data: { ...result, installation, policy }, human: `Desktop: ${installation.status}; acquisition policy: ${policy.policy}; ${result.clients.length} active Dashboard client(s).\n` };
     }
-    if (subcommand === "install" || subcommand === "update") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--manifest-url"], flags: ["--yes", "--force"] });
+    if (subcommand === "policy") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--mode"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      if (parsed.values.size === 0) {
+        const result = await getDashboardAcquisitionPolicy();
+        return { exitCode: ExitCode.Success, command: "dashboard.policy", data: result, human: `Dashboard acquisition policy: ${result.policy}.\n` };
+      }
+      const mode = parsed.values.get("--mode");
+      if (mode !== "managed" && mode !== "ask" && mode !== "manual") return invalidArgument("--mode must be managed, ask, or manual");
+      const result = await setDashboardAcquisitionPolicy(mode as DashboardAcquisitionPolicy);
+      return { exitCode: ExitCode.Success, command: "dashboard.policy", data: result, human: `Dashboard acquisition policy set to ${result.policy}.\n` };
+    }
+    if (subcommand === "ensure" || subcommand === "install" || subcommand === "update" || subcommand === "install-local") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--manifest-url", "--manifest", "--archive"], flags: ["--yes", "--force", "--update", "--approve-once"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const manifestUrl = parsed.values.get("--manifest-url");
-      if (!parsed.flags.has("--yes")) {
-        const release = await inspectDashboardRelease({ ...(manifestUrl ? { manifestUrl } : {}) });
-        return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: { action: "confirmation-required", version: release.version, platform: release.asset.platform, arch: release.asset.arch, size: release.asset.size, source: release.asset.url, sha256: release.asset.sha256 }, human: `Dashboard ${release.version} for ${release.asset.platform}-${release.asset.arch}\nSource: ${release.asset.url}\nSize: ${release.asset.size} bytes\nSHA-256: ${release.asset.sha256}\nRun again with --yes to confirm the download.\n` };
-      }
-      if (subcommand === "update") await closeExistingDashboardDesktop().catch(() => false);
+      const manifestPath = parsed.values.get("--manifest");
+      const archivePath = parsed.values.get("--archive");
+      const localImport = subcommand === "install-local";
+      if (localImport && (!manifestPath || !archivePath)) return invalidArgument("dashboard install-local requires --archive and --manifest");
+      if (localImport && manifestUrl) return invalidArgument("dashboard install-local does not accept --manifest-url");
+      if (archivePath && !manifestPath && !manifestUrl) return invalidArgument("--archive requires --manifest for offline verification or --manifest-url");
+      const update = subcommand === "update" || parsed.flags.has("--update");
+      if (subcommand === "update" || (localImport && update)) await closeExistingDashboardDesktop().catch(() => false);
       let lastPercent = -1;
-      const result = await installDashboard({ ...(manifestUrl ? { manifestUrl } : {}), update: subcommand === "update", force: parsed.flags.has("--force"), ...(options.onProgress ? { onProgress: (received: number, total: number, attempt: number) => { const percent = Math.floor(received * 100 / total); if (percent !== lastPercent) { lastPercent = percent; options.onProgress!(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`); } } } : {}) });
-      options.onProgress?.("\n");
-      return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: result, human: `Dashboard ${result.action}: ${result.installation.version}\n` };
+      const result = await ensureDashboard({
+        ...(manifestUrl ? { manifestUrl } : {}),
+        ...(manifestPath ? { manifestPath } : {}),
+        ...(archivePath ? { archivePath } : {}),
+        update,
+        force: parsed.flags.has("--force"),
+        // install/update --yes 是兼容入口；ensure 的 --approve-once 是跨 Agent 的原子当次授权。
+        approveOnce: parsed.flags.has("--approve-once") || parsed.flags.has("--yes") || localImport,
+        ...(options.onProgress ? { onProgress: (received: number, total: number, attempt: number) => {
+          const percent = Math.floor(received * 100 / total);
+          if (percent !== lastPercent) { lastPercent = percent; options.onProgress!(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`); }
+        } } : {}),
+      });
+      if (result.status === "ready") options.onProgress?.("\n");
+      const command = subcommand === "ensure" ? "dashboard.ensure" : `dashboard.${subcommand}`;
+      const human = result.status === "ready"
+        ? `Dashboard ${result.result?.action ?? "ready"}.\n`
+        : result.status === "manual-required"
+          ? `Dashboard requires a local archive. Download it from ${result.acquisition?.browserUrl} and run dashboard install-local --archive <file> --manifest <file> --yes.\n`
+          : `Dashboard ${result.action} requires one-time approval. Run dashboard ensure --approve-once, or set dashboard policy --mode managed.\n`;
+      return { exitCode: ExitCode.Success, command, data: result, human };
     }
     if (subcommand === "uninstall") {
       const parsed = parseCommandOptions(args.slice(1), { values: [], flags: ["--force"] });
@@ -87,7 +122,7 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       const installed = await getDashboardInstallationStatus();
       // Desktop archive 体积较大；显式打开只提示可用更新，绝不下载或替换用户当前版本。
       const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
-      const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard update --yes to install it.` : "";
+      const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard ensure --update to follow your acquisition policy.` : "";
       if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...(identity ? { identityId: identity } : {}) })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, updateAvailable }, human: `Dashboard already running; client attached.${updateHint}\n` };
       const moduleDirectory = dirname(fileURLToPath(import.meta.url));
       const entrypoint = [resolve(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
@@ -97,12 +132,12 @@ export async function executeDashboardCommand(args: readonly string[], options: 
         const modified = installed.status === "modified" && installed.modifiedFiles?.length
           ? ` (changed files: ${installed.modifiedFiles.slice(0, 5).join(", ")}${installed.modifiedFiles.length > 5 ? ", …" : ""})`
           : "";
-        return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard install" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard update --yes`);
+        return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard ensure --update`);
       }
       const executable = installed.status === "installed" ? installed.executable! : deno;
       const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve(dirname(entrypoint!), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint!];
       const dashboardCli = installed.status === "installed" ? resolve(dirname(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
-      if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard update --yes");
+      if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard ensure --update");
       // CEF 可能在工作目录写入诊断或缓存。固定使用私有 state 目录，绝不让运行时文件污染已校验的安装 payload。
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir(dashboardRuntimeDirectory, { recursive: true, mode: 0o700 });

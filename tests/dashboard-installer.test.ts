@@ -224,6 +224,89 @@ test("Dashboard release selection uses an independent Dashboard version", async 
   } finally { await rm(item.root, { recursive: true, force: true }); }
 });
 
+test("Dashboard download resumes a retained partial archive with HTTP Range", async () => {
+  const item = await fixture();
+  const paths = createAgentForumPaths(resolve(item.root, "home"));
+  const ranges: string[] = [];
+  let assetRequests = 0;
+  const resumableFetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("manifest.json")) return Response.json(item.manifest);
+    assetRequests += 1;
+    const range = new Headers(init?.headers).get("range");
+    if (range) ranges.push(range);
+    if (assetRequests === 1) {
+      const halfway = Math.ceil(item.bytes.byteLength / 2);
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(item.bytes.subarray(0, halfway));
+          await new Promise((resolveWait) => setTimeout(resolveWait, 5));
+          controller.error(new Error("simulated interrupted connection"));
+        },
+      });
+      return new Response(stream, { headers: { "content-length": String(item.bytes.byteLength) } });
+    }
+    const offset = Number((range ?? "bytes=0-").match(/^bytes=(\d+)-$/u)?.[1] ?? "0");
+    const remaining = item.bytes.subarray(offset);
+    return new Response(remaining, { status: 206, headers: { "content-length": String(remaining.byteLength) } });
+  }) as typeof fetch;
+  try {
+    const result = await installDashboard({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: resumableFetcher }, paths);
+    assert.equal(result.action, "installed");
+    assert.equal(assetRequests, 2);
+    assert.deepEqual(ranges, [`bytes=${Math.ceil(item.bytes.byteLength / 2)}-`]);
+  } finally { await rm(item.root, { recursive: true, force: true }); }
+});
+
+test("Dashboard restarts resume a retained partial archive with HTTP Range", async () => {
+  const item = await fixture();
+  const paths = createAgentForumPaths(resolve(item.root, "home"));
+  const ranges: string[] = [];
+  const interruptedFetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("manifest.json")) return Response.json(item.manifest);
+    const range = new Headers(init?.headers).get("range");
+    if (range) ranges.push(range);
+    const offset = Number((range ?? "bytes=0-").match(/^bytes=(\d+)-$/u)?.[1] ?? "0");
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        if (offset === 0) controller.enqueue(item.bytes.subarray(0, Math.ceil(item.bytes.byteLength / 2)));
+        await new Promise((resolveWait) => setTimeout(resolveWait, 5));
+        controller.error(new Error("simulated process interruption"));
+      },
+    });
+    return new Response(stream, { status: offset === 0 ? 200 : 206, headers: { "content-length": String(item.bytes.byteLength - offset) } });
+  }) as typeof fetch;
+  const resumedFetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("manifest.json")) return Response.json(item.manifest);
+    const range = new Headers(init?.headers).get("range");
+    assert.equal(range, `bytes=${Math.ceil(item.bytes.byteLength / 2)}-`);
+    const offset = Number(range!.match(/^bytes=(\d+)-$/u)?.[1]);
+    const remaining = item.bytes.subarray(offset);
+    return new Response(remaining, { status: 206, headers: { "content-length": String(remaining.byteLength) } });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      installDashboard({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: interruptedFetcher }, paths),
+      (error) => error instanceof ServiceError && error.code === "DASHBOARD_DOWNLOAD_FAILED",
+    );
+    const result = await installDashboard({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: resumedFetcher }, paths);
+    assert.equal(result.action, "installed");
+    assert.deepEqual(ranges, [`bytes=${Math.ceil(item.bytes.byteLength / 2)}-`, `bytes=${Math.ceil(item.bytes.byteLength / 2)}-`]);
+  } finally { await rm(item.root, { recursive: true, force: true }); }
+});
+
+test("Dashboard imports a browser-downloaded archive and manifest without fetching", async () => {
+  const item = await fixture();
+  const paths = createAgentForumPaths(resolve(item.root, "home"));
+  const manifestPath = resolve(item.root, "dashboard-manifest.json");
+  await writeFile(manifestPath, `${JSON.stringify(item.manifest)}\n`);
+  const offlineFetcher = (() => { throw new Error("offline import must not fetch"); }) as typeof fetch;
+  try {
+    const result = await installDashboard({ manifestPath, archivePath: resolve(item.root, "dashboard.tar.gz"), platform: "win32", arch: "x64", fetcher: offlineFetcher }, paths);
+    assert.equal(result.action, "installed");
+    assert.equal((await getDashboardInstallationStatus(paths)).status, "installed");
+  } finally { await rm(item.root, { recursive: true, force: true }); }
+});
+
 test("Dashboard release selection rejects unsupported platforms, Dashboard-version drift, and unsafe manifests", async () => {
   const item = await fixture();
   try {

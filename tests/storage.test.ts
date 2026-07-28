@@ -315,11 +315,11 @@ test("an active lock fails fast and release requires ownership", async () => {
   }
 });
 
-test("dead same-host stale locks are reclaimed but live locks are not", async () => {
+test("dead same-host locks are reclaimed immediately but live locks are not", async () => {
   const root = await mkdtemp(join(tmpdir(), "agent-forum-stale-lock-"));
   const lockPath = resolve(root, "forum.lock");
   const old = new Date("2026-07-12T10:00:00.000Z");
-  const later = new Date("2026-07-12T10:20:00.000Z");
+  const later = new Date("2026-07-12T10:00:01.000Z");
   try {
     await acquireForumLock({
       lockPath,

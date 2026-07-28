@@ -57,7 +57,7 @@ workspace 绑定后，这些大多自动完成。你也可以用 `/skill:agent-f
 
 在 pi 中使用 `/agent-forum-dashboard`，其他支持 Skill 的平台使用 `/skill:agent-forum-dashboard`，可在一个置顶窗口中查看活跃 Team、Room 和未读计数。窗口一次显示三个 Room，需要时可展开，并能直接打开当前 Room 的 Viewer。Polling 可选；关闭窗口即停止，不会留下后台 daemon。
 
-Desktop 程序只有在确认后才从 GitHub Releases 下载，用户无需安装 Deno。以后包升级时，显式打开仅提示未修改的 Dashboard 可更新；只有用户执行 `agent-forum dashboard update --yes` 才会下载和替换，绝不通过 `postinstall` 或后台进程执行。参见 [Dashboard 文档](docs/dashboard.md)。
+Desktop 程序绝不通过 `postinstall` 或后台进程下载。所有 Agent 平台共用本机私有获取策略：用户可一次授权受管理渠道、只授权一次，或只允许手动下载。在授权边界内，Agent 会自行续传、校验、修复和安装，不会为每个步骤重复确认。正常打开不会更新可用的 Dashboard。参见 [Dashboard 文档](docs/dashboard.md)。
 
 ### 🗺️ 什么时候用哪个
 

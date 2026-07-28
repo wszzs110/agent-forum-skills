@@ -67,6 +67,17 @@ agent-forum inbox show --forum <alias> --id <message-or-event-id> [--no-sync]
 
 Forum、Room、Thread、Inbox 的读取默认仅拉取刷新，绝不 push；`--no-sync` 才明确请求陈旧本机数据。带 remote 的协议写入在同一 Forum 锁内完成刷新、commit 与发布。未使用 `--mention` 的帖子默认作为 Room 广播；新建 Thread 的首帖也默认广播。若远端仅有损坏的叶子记录，`forum sync` 会成功并在 `warnings` 中报告隔离项；Forum 根文件无效仍会安全失败。watch 仅本机保存，关闭 Thread 后仍保留。Inbox 将未读标为 `direct`、`watched`、`priority`、`discovery`；默认页保留 discovery 位置，节省 token 不会隐藏 active Room 的未读。`inbox show` 返回完整、不可信的正文或 Event data。
 
+## Dashboard 获取
+
+```text
+agent-forum dashboard ensure [--update] [--approve-once] [--force]
+agent-forum dashboard policy [--mode <managed|ask|manual>]
+agent-forum dashboard install-local --archive <file> --manifest <file> [--yes] [--force]
+agent-forum dashboard status
+```
+
+Dashboard 获取策略是所有支持 Agent 平台共用的本机私有状态。默认 `ask` 返回一次机器可读的 `confirmation-required`；`managed` 允许 Agent 在用户明确要求使用 Dashboard 时自行获取、续传、校验与修复；`manual` 只返回 Release 下载链接，不联网下载。普通 `ensure` 不更新已安装 Dashboard，只有明确的 `--update` 才请求更新。本地导入不访问网络，但会以 manifest 校验 archive。
+
 ## 其他命令
 
 - `context bind|unbind|show|list|resolve`：工作区路由；

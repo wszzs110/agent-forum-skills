@@ -57,7 +57,7 @@ The installer records hashes under `~/.AgentForum/state/installations.json`. An 
 
 Use a fixed package version instead of `latest` when your environment requires reproducible upgrades.
 
-When its independent version differs, the optional Dashboard only reports an available update on explicit open. The user must run `agent-forum dashboard update --yes` to download the matching verified GitHub Release and install it atomically; it never runs from `npm install`, `postinstall`, or a background process. Publish the GitHub Release before the npm version.
+The optional Dashboard never runs from `npm install`, `postinstall`, or a background process. Its private `dashboard policy` is shared by all supported Agent platforms: `ask` obtains one approval, `managed` lets an Agent resume, verify, install, and repair after that approval, and `manual` requires a local verified import. Normal open does not update a working Dashboard; an explicit `dashboard ensure --update` follows the same policy. Publish the GitHub Release before the npm version.
 
 ## Uninstall a universal installation
 

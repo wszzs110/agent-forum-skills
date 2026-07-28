@@ -10,25 +10,23 @@ function bundledCli(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "..", "skills", "agent-forum", "scripts", "agent-forum.mjs");
 }
 
-function executeCli(args: string[], cwd: string): Promise<CliEnvelope> {
+function executeCli(args: string[], cwd: string, onProgress?: (text: string) => void): Promise<CliEnvelope> {
   return new Promise((resolveResult, reject) => {
     const child = spawn(process.execPath, [bundledCli(), "--json", ...args], { cwd, shell: false, windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
-    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      stderr += text;
+      onProgress?.(text);
+    });
     child.on("error", reject);
     child.on("close", () => {
       try { resolveResult(JSON.parse(stdout) as CliEnvelope); }
       catch { reject(new Error(stderr.trim() || "agent-forum returned invalid JSON")); }
     });
   });
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -41,30 +39,31 @@ export default function (pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const parts = _args.trim().split(/\s+/).filter(Boolean);
       const subcommand = (parts[0] ?? "open").toLowerCase();
-      const hasYes = parts.includes("--yes");
-
-      // install / update：两步确认——先 preview，展示版本/大小/校验，用户再次输入 --yes 才执行
+      // 用户显式输入 install/update 即构成一次性授权；不再要求重复输入 --yes。
       if (subcommand === "install" || subcommand === "update") {
         try {
-          const cliArgs = hasYes
-            ? ["dashboard", subcommand, "--yes", "--json"]
-            : ["dashboard", subcommand, "--json"];
-          const result = await executeCli(cliArgs, ctx.cwd);
+          ctx.ui.setStatus("agent-forum-dashboard", `Dashboard ${subcommand}…`);
+          const result = await executeCli(
+            ["dashboard", "ensure", "--approve-once", ...(subcommand === "update" ? ["--update"] : [])],
+            ctx.cwd,
+            (text) => ctx.ui.setStatus("agent-forum-dashboard", text.trim() || `Dashboard ${subcommand}…`),
+          );
           if (!result.ok) {
             ctx.ui.notify(result.error?.message ?? `Dashboard ${subcommand} failed.`, "error");
             return;
           }
           const data = result.data;
-          if (data?.action === "confirmation-required") {
-            ctx.ui.notify(
-              `Dashboard ${data.version} (${data.platform}-${data.arch}, ${formatSize(data.size as number)})\nSHA-256: ${data.sha256}\n\nConfirm: /agent-forum-dashboard ${subcommand} --yes`,
-              "info",
-            );
+          if (data?.status === "manual-required") {
+            const acquisition = data.acquisition as Record<string, unknown> | undefined;
+            ctx.ui.notify(`Dashboard is configured for manual installation. Download: ${acquisition?.browserUrl ?? "GitHub Releases"}`, "info");
           } else {
-            ctx.ui.notify(`Dashboard ${subcommand} complete: v${data?.version ?? "done"}.`, "info");
+            const completed = data?.result as Record<string, unknown> | undefined;
+            ctx.ui.notify(`Dashboard ${completed?.action ?? "ready"}.`, "info");
           }
         } catch (error) {
           ctx.ui.notify(error instanceof Error ? error.message : `Dashboard ${subcommand} failed.`, "error");
+        } finally {
+          ctx.ui.setStatus("agent-forum-dashboard", undefined);
         }
         return;
       }
@@ -120,6 +119,39 @@ export default function (pi: ExtensionAPI) {
         const forumAlias = context.data.forumAlias as string;
         const roomId = context.data.roomId as string;
         const roomSlug = context.data.roomSlug as string | undefined;
+        let ensured = await executeCli(["dashboard", "ensure"], ctx.cwd);
+        if (!ensured.ok) {
+          ctx.ui.notify(ensured.error?.message ?? "Unable to check Dashboard installation.", "error");
+          return;
+        }
+        if (ensured.data?.status === "confirmation-required") {
+          const acquisition = ensured.data.acquisition as Record<string, unknown> | undefined;
+          const choice = await ctx.ui.select(
+            `Install Dashboard ${acquisition?.version ?? ""}?`,
+            ["Allow and remember", "Allow once", "Use manual download"],
+          );
+          if (!choice) return;
+          if (choice === "Use manual download") {
+            await executeCli(["dashboard", "policy", "--mode", "manual"], ctx.cwd);
+            ctx.ui.notify(`Dashboard manual download: ${acquisition?.browserUrl ?? "GitHub Releases"}`, "info");
+            return;
+          }
+          if (choice === "Allow and remember") {
+            const policy = await executeCli(["dashboard", "policy", "--mode", "managed"], ctx.cwd);
+            if (!policy.ok) {
+              ctx.ui.notify(policy.error?.message ?? "Unable to save Dashboard policy.", "error");
+              return;
+            }
+          }
+          ctx.ui.setStatus("agent-forum-dashboard", "Downloading Dashboard…");
+          ensured = await executeCli(["dashboard", "ensure", ...(choice === "Allow once" ? ["--approve-once"] : [])], ctx.cwd, (text) => ctx.ui.setStatus("agent-forum-dashboard", text.trim() || "Downloading Dashboard…"));
+          ctx.ui.setStatus("agent-forum-dashboard", undefined);
+        }
+        if (!ensured.ok || ensured.data?.status !== "ready") {
+          const acquisition = ensured.data?.acquisition as Record<string, unknown> | undefined;
+          ctx.ui.notify(ensured.error?.message ?? `Dashboard requires manual installation: ${acquisition?.browserUrl ?? "GitHub Releases"}`, "error");
+          return;
+        }
         const result = await executeCli([
           "dashboard", "open", "--client-id", clientId, "--client-type", "pi",
           "--forum", forumAlias, "--room", roomId,
