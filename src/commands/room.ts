@@ -36,7 +36,7 @@ function roomHelp(): CommandExecution {
         "reenable",
       ],
     },
-    human: `Room management\n\nUsage:\n  agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text>\n  agent-forum room list --forum <alias> [--no-sync]\n  agent-forum room list --all [--no-sync]\n  agent-forum room show --forum <alias> --room <id-or-slug> [--no-sync]\n  agent-forum room join --forum <alias> --room <id-or-slug> [--role <role>] [--responsibility <text>]\n  agent-forum room leave --forum <alias> --room <id-or-slug>\n  agent-forum room rename --forum <alias> --room <id-or-slug> --title <title> --reason <reason>\n  agent-forum room set-description --forum <alias> --room <id-or-slug> --description <text> --reason <reason>\n  agent-forum room archive|restore --forum <alias> --room <id-or-slug> --reason <reason>\n  agent-forum room deprecate --forum <alias> --room <id-or-slug> --reason <reason> [--replacement <id-or-slug>]\n  agent-forum room reenable --forum <alias> --room <id-or-slug> --reason <reason>\n`,
+    human: `Room management\n\nUsage:\n  agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text> [--allow-similar]\n  agent-forum room list --forum <alias> [--no-sync]\n  agent-forum room list --all [--no-sync]\n  agent-forum room show --forum <alias> --room <id-or-slug> [--no-sync]\n  agent-forum room join --forum <alias> --room <id-or-slug> [--role <role>] [--responsibility <text>]\n  agent-forum room leave --forum <alias> --room <id-or-slug>\n  agent-forum room rename --forum <alias> --room <id-or-slug> --title <title> --reason <reason>\n  agent-forum room set-description --forum <alias> --room <id-or-slug> --description <text> --reason <reason>\n  agent-forum room archive|restore --forum <alias> --room <id-or-slug> --reason <reason>\n  agent-forum room deprecate --forum <alias> --room <id-or-slug> --reason <reason> [--replacement <id-or-slug>]\n  agent-forum room reenable --forum <alias> --room <id-or-slug> --reason <reason>\n`,
   };
 }
 
@@ -76,6 +76,7 @@ export async function executeRoomCommand(
           "--description",
           "--identity",
         ],
+        flags: ["--allow-similar"],
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = valueOrError(parsed, "--forum");
@@ -92,6 +93,7 @@ export async function executeRoomCommand(
         slug,
         title,
         description,
+        allowSimilar: parsed.flags.has("--allow-similar"),
         ...(identityId ? { identityId } : {}),
       });
       return {

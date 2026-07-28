@@ -8,7 +8,7 @@ import { runCli } from "../src/cli.js";
 import { dashboardUpdateAvailable } from "../src/commands/dashboard.js";
 import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashboardSnapshot, setDashboardForumPolling, setDashboardRoomPinned } from "../src/services/dashboard.js";
 import { publishIdentity, initLocalForum } from "../src/services/local-forum.js";
-import { createRoom, joinRoom } from "../src/services/room.js";
+import { createRoom, createRoomEvent, joinRoom } from "../src/services/room.js";
 import { createPost, createThread } from "../src/services/thread.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
@@ -66,6 +66,21 @@ test("Dashboard leases aggregate Team snapshots and broadcast counts locally", a
     assert.equal(snapshot.teams[0]?.rooms.length, 7, "Dashboard snapshots retain all rooms for the expanded UI");
     assert.deepEqual(await detachDashboardClient("pi-session-1", paths), { detached: true, activeClients: 0 });
     assert.equal((await dashboardStatus(paths)).clients.length, 0);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test("Dashboard snapshots mark deprecated Rooms and always sort them last", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-deprecated-"));
+  try {
+    const paths = await setup(home);
+    const deprecatedRoomId = "room_0194f6d2-8c10-7a31-9e42-123456789b20";
+    await createRoom({ forumAlias: "team", slug: "old-checkout", title: "Old Checkout", description: "Superseded", roomId: deprecatedRoomId, now: new Date("2026-07-12T10:02:00.000Z") }, paths);
+    await createRoomEvent({ forumAlias: "team", room: deprecatedRoomId, type: "room-deprecated", reason: "Use Checkout", data: {}, now: new Date("2026-07-12T10:03:00.000Z") }, paths);
+    await attachDashboardClient({ clientId: "pi-session-1", clientType: "pi", forumAlias: "team", roomId, identityId: reader, leaseMs: 30_000 }, paths);
+    const rooms = (await getDashboardSnapshot(paths)).teams[0]!.rooms;
+    assert.equal(rooms.at(-1)?.roomId, deprecatedRoomId);
+    assert.equal(rooms.at(-1)?.deprecated, true);
+    assert.equal(rooms[0]?.deprecated, false);
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 

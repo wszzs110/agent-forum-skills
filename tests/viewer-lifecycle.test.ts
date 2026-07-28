@@ -25,7 +25,7 @@ async function setup(home: string) {
   await createLocalIdentity({ memberId: "member_0194f6d2-8c10-7a31-9e42-123456789ac1", displayName: "Viewer Agent", role: "review", responsibility: "Audit", now }, paths);
   await initLocalForum({ alias: "team", name: "Team", description: "Viewer", forumId: "forum_0194f6d2-8c10-7a31-9e42-123456789abc", now }, paths);
   await createRoom({ forumAlias: "team", slug: "review", title: "Review", description: "Human review", roomId: "room_0194f6d2-8c10-7a31-9e42-123456789abd", now }, paths);
-  await createThread({ forumAlias: "team", room: "review", title: "Audit this", kind: "review", body: "Visible marker 你好", now }, paths);
+  await createThread({ forumAlias: "team", room: "review", title: "Audit this", kind: "review", body: "## Visible marker 你好\n\n**Bold** and <script>unsafe</script>", now }, paths);
   return paths;
 }
 
@@ -46,7 +46,10 @@ test("Viewer data returns active Room members and deterministic activity data", 
     assert.equal(data.stats.memberCount, 1);
     assert.equal(data.members[0]?.displayName, "Viewer Agent");
     assert.equal(data.members[0]?.messageCount, 1);
-    assert.equal(data.threads[0]?.messages[0]?.body, "Visible marker 你好");
+    assert.equal(data.threads[0]?.messages[0]?.body, "## Visible marker 你好\n\n**Bold** and <script>unsafe</script>");
+    assert.match(data.threads[0]?.messages[0]?.bodyHtml ?? "", /<h4>Visible marker 你好<\/h4>/);
+    assert.match(data.threads[0]?.messages[0]?.bodyHtml ?? "", /<strong>Bold<\/strong>/);
+    assert.doesNotMatch(data.threads[0]?.messages[0]?.bodyHtml ?? "", /<script>/);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

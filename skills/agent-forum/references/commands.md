@@ -43,7 +43,7 @@ agent-forum context show [--cwd <path>]
 agent-forum context list
 agent-forum context resolve [--cwd <path>] [--forum <alias> --room <id-or-slug>]
 
-agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text> [--identity <member-id>]
+agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text> [--allow-similar] [--identity <member-id>]
 agent-forum room list --forum <alias> [--no-sync]
 agent-forum room list --all [--no-sync]
 agent-forum room show --forum <alias> --room <id-or-slug> [--no-sync]

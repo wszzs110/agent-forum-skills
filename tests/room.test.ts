@@ -126,6 +126,34 @@ test("room creation auto-joins the creator and list/show derive the initial stat
       createRoom(
         {
           forumAlias: "a-team",
+          slug: "checkout-work",
+          title: "Check-out",
+          description: "Same Room under a different spelling",
+        },
+        paths,
+      ),
+      (error) =>
+        error instanceof ServiceError &&
+        error.code === "ROOM_SIMILAR_EXISTS" &&
+        Array.isArray(error.details) &&
+        error.details[0]?.id === roomId,
+    );
+    const confirmedDistinct = await createRoom(
+      {
+        forumAlias: "a-team",
+        slug: "checkout-work",
+        title: "Check-out",
+        description: "A user-confirmed distinct scope",
+        allowSimilar: true,
+      },
+      paths,
+    );
+    assert.equal(confirmedDistinct.room.slug, "checkout-work");
+
+    await assert.rejects(
+      createRoom(
+        {
+          forumAlias: "a-team",
           slug: "other-room",
           title: "ID collision",
           description: "Must not replace the existing room",
@@ -429,6 +457,31 @@ test("Room deprecation is a reversible soft marker with an immutable history", a
   }
 });
 
+test("room CLI returns similar-Room candidates and accepts an explicit distinct-scope override", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-room-cli-similar-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  try {
+    const { paths } = await setupForum(home);
+    await createRoom({ forumAlias: "a-team", slug: "checkout", title: "Checkout", description: "Existing scope", roomId, now: createdAt }, paths);
+    const rejected = captureIo();
+    assert.equal(await runCli(["--json", "room", "create", "--forum", "a-team", "--slug", "checkout-work", "--title", "Check-out", "--description", "Same scope"], rejected.io), 1);
+    const rejectedResult = JSON.parse(rejected.stdout.join(""));
+    assert.equal(rejectedResult.error.code, "ROOM_SIMILAR_EXISTS");
+    assert.equal(rejectedResult.error.details[0].id, roomId);
+
+    const allowed = captureIo();
+    assert.equal(await runCli(["--json", "room", "create", "--forum", "a-team", "--slug", "checkout-work", "--title", "Check-out", "--description", "Distinct scope", "--allow-similar"], allowed.io), 0);
+    assert.equal(JSON.parse(allowed.stdout.join("")).data.room.slug, "checkout-work");
+  } finally {
+    process.env.HOME = previousHome;
+    process.env.USERPROFILE = previousUserProfile;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("room CLI rejects incomplete commands without touching user state", async () => {
   const output = captureIo();
   const exitCode = await runCli(
@@ -439,4 +492,12 @@ test("room CLI rejects incomplete commands without touching user state", async (
   const result = JSON.parse(output.stdout.join(""));
   assert.equal(result.ok, false);
   assert.equal(result.error.code, "INVALID_ARGUMENT");
+
+  const allowSimilarOutput = captureIo();
+  const allowSimilarExitCode = await runCli(
+    ["room", "create", "--allow-similar", "--forum", "a-team", "--json"],
+    allowSimilarOutput.io,
+  );
+  assert.equal(allowSimilarExitCode, 2);
+  assert.equal(JSON.parse(allowSimilarOutput.stdout.join("")).error.code, "INVALID_ARGUMENT");
 });

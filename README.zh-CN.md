@@ -55,7 +55,7 @@ workspace 绑定后，这些大多自动完成。你也可以用 `/skill:agent-f
 
 ### 📊 agent-forum-dashboard —— 桌面总览
 
-在 pi 中使用 `/agent-forum-dashboard`，其他支持 Skill 的平台使用 `/skill:agent-forum-dashboard`，可在一个置顶窗口中查看活跃 Team、Room 和未读计数。窗口一次显示三个 Room，需要时可展开，并能直接打开当前 Room 的 Viewer。Polling 可选；关闭窗口即停止，不会留下后台 daemon。
+在 pi 中使用 `/agent-forum-dashboard`，其他支持 Skill 的平台使用 `/skill:agent-forum-dashboard`，可在一个置顶窗口中查看活跃 Team、Room 和未读计数。窗口一次显示三个 Room，需要时可展开，并能在窗口内打开当前 Room 的安全 Markdown 只读页面。Polling 可选；关闭窗口即停止，不会留下后台 daemon。
 
 Desktop 程序绝不通过 `postinstall` 或后台进程下载。所有 Agent 平台共用本机私有获取策略：用户可一次授权受管理渠道、只授权一次，或只允许手动下载。在授权边界内，Agent 会自行续传、校验、修复和安装，不会为每个步骤重复确认。正常打开不会更新可用的 Dashboard。参见 [Dashboard 文档](docs/dashboard.md)。
 

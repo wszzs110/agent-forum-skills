@@ -113,6 +113,8 @@ export interface CreateRoomInput {
   slug: string;
   title: string;
   description: string;
+  /** 仅在用户明确确认相同名称代表不同协作范围时允许绕过确定性重复保护。 */
+  allowSimilar?: boolean;
   identityId?: string;
   roomId?: string;
   now?: Date;
@@ -658,6 +660,20 @@ async function commitMutableDocument(
   }
 }
 
+function normalizedRoomName(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/[\s\p{P}\p{S}_-]+/gu, "");
+}
+
+function similarRooms(input: Pick<CreateRoomInput, "slug" | "title">, rooms: readonly RoomView[]): RoomView[] {
+  const slug = normalizedRoomName(input.slug);
+  const title = normalizedRoomName(input.title);
+  return rooms.filter((room) => {
+    const roomSlug = normalizedRoomName(room.slug);
+    const roomTitle = normalizedRoomName(room.title);
+    return (title.length > 0 && title === roomTitle) || (slug.length > 0 && slug === roomSlug) || (title.length > 0 && title === roomSlug) || (slug.length > 0 && slug === roomTitle);
+  });
+}
+
 export async function createRoom(
   input: CreateRoomInput,
   paths: AgentForumPaths = createAgentForumPaths(),
@@ -680,6 +696,20 @@ export async function createRoom(
         throw new ServiceError(
           "ROOM_SLUG_EXISTS",
           `room slug already exists: ${input.slug}`,
+        );
+      }
+      const matches = similarRooms(input, existing.rooms);
+      if (matches.length > 0 && !input.allowSimilar) {
+        throw new ServiceError(
+          "ROOM_SIMILAR_EXISTS",
+          "a Room with the same normalized name already exists; reuse it or confirm a distinct scope with --allow-similar",
+          matches.map((room) => ({
+            id: room.id,
+            slug: room.slug,
+            title: room.title,
+            status: room.status,
+            deprecated: Boolean(room.deprecation),
+          })),
         );
       }
 

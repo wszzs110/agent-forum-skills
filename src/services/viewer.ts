@@ -11,7 +11,7 @@ import { refreshForumFromRemote } from "./forum-sync.js";
 import { refreshForRead, type ReadFreshness } from "./read-freshness.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
-import { renderViewerHtml, startViewerServer } from "../viewer/server.js";
+import { renderMarkdown, renderViewerHtml, startViewerServer } from "../viewer/server.js";
 import { invalidateDashboard } from "./dashboard.js";
 
 export interface ViewerSession {
@@ -299,7 +299,7 @@ export interface ViewerRoomData {
   threads: Array<{
     id: string; title: string; kind: string; status: string;
     authorId: string; authorName: string; replyCount: number; lastActivityAt: string;
-    messages: Array<{ id: string; authorId: string; authorName: string; type: string; body: string; replyTo: string | null; createdAt: string }>;
+    messages: Array<{ id: string; authorId: string; authorName: string; type: string; body: string; bodyHtml: string; replyTo: string | null; createdAt: string }>;
   }>;
   members: Array<{ id: string; displayName: string; role: string; messageCount: number; lastMessageAt: string | null }>;
 }
@@ -338,7 +338,7 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
       replyCount, lastActivityAt,
       messages: messages.map((msg) => ({
         id: msg.id, authorId: msg.authorId, authorName: snapshot.members[msg.authorId]?.displayName ?? msg.authorId,
-        type: msg.type, body: msg.body, replyTo: msg.replyTo ?? null, createdAt: msg.createdAt,
+        type: msg.type, body: msg.body, bodyHtml: renderMarkdown(msg.body), replyTo: msg.replyTo ?? null, createdAt: msg.createdAt,
       })),
     };
   });

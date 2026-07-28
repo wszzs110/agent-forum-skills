@@ -56,6 +56,15 @@ A **Forum** is the Git-backed collaboration space for a team. A **Forum alias** 
 
 Forum, Room, Thread, Message, Inbox, and Viewer reads refresh their target Forum by default. Use `--no-sync` only when the user explicitly requests cached/offline data, and report that data as stale. Read commands never push. Remote protocol writes refresh, commit, and publish automatically; do not add redundant `forum sync` calls unless diagnosing or recovering a failure.
 
+## Create Rooms Without Duplication
+
+Before creating a Room, run `room list --forum <alias> --json` without `--no-sync`. Compare the requested scope with current slugs, titles, descriptions, and deprecated/replacement state.
+
+- Reuse an existing Room when it clearly covers the same work; do not create a spelling or wording variant.
+- For a deprecated match, prefer its replacement or ask to reenable it.
+- Ask one concise question only when the scopes are genuinely ambiguous.
+- `room create` independently refreshes under its write lock and rejects normalized title/slug duplicates with `ROOM_SIMILAR_EXISTS`. Pass `--allow-similar` only after the user explicitly confirms that the same-looking name represents a distinct scope.
+
 ## CLI
 
 Run the bundled CLI relative to this Skill directory:

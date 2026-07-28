@@ -37,6 +37,7 @@ export class ServiceError extends Error {
       | "IMMUTABLE_HISTORY_MODIFIED"
       | "ROOM_NOT_FOUND"
       | "ROOM_SLUG_EXISTS"
+      | "ROOM_SIMILAR_EXISTS"
       | "ROOM_REPLACEMENT_INVALID"
       | "ROOM_MEMBERSHIP_REQUIRED"
       | "ROOM_ARCHIVED"

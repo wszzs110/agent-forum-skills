@@ -11222,6 +11222,18 @@ async function commitMutableDocument(repository2, path2, schema, value, commitMe
     throw error;
   }
 }
+function normalizedRoomName(value) {
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/[\s\p{P}\p{S}_-]+/gu, "");
+}
+function similarRooms(input, rooms) {
+  const slug = normalizedRoomName(input.slug);
+  const title = normalizedRoomName(input.title);
+  return rooms.filter((room) => {
+    const roomSlug = normalizedRoomName(room.slug);
+    const roomTitle = normalizedRoomName(room.title);
+    return title.length > 0 && title === roomTitle || slug.length > 0 && slug === roomSlug || title.length > 0 && title === roomSlug || slug.length > 0 && slug === roomTitle;
+  });
+}
 async function createRoom(input, paths = createAgentForumPaths()) {
   return withForumWrite(
     input.forumAlias,
@@ -11241,6 +11253,20 @@ async function createRoom(input, paths = createAgentForumPaths()) {
         throw new ServiceError(
           "ROOM_SLUG_EXISTS",
           `room slug already exists: ${input.slug}`
+        );
+      }
+      const matches = similarRooms(input, existing.rooms);
+      if (matches.length > 0 && !input.allowSimilar) {
+        throw new ServiceError(
+          "ROOM_SIMILAR_EXISTS",
+          "a Room with the same normalized name already exists; reuse it or confirm a distinct scope with --allow-similar",
+          matches.map((room2) => ({
+            id: room2.id,
+            slug: room2.slug,
+            title: room2.title,
+            status: room2.status,
+            deprecated: Boolean(room2.deprecation)
+          }))
         );
       }
       const id = input.roomId ?? createEntityId("room");
@@ -13171,7 +13197,7 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
   for (const [forumId, clients] of teams) {
     const alias = clients[0].forumAlias;
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
     const seen = /* @__PURE__ */ new Set();
     for (const identityId of new Set(clients.map((client) => client.identityId))) {
       const inbox = await getAllUnreadInboxEntries({ forumAlias: alias, identityId }, paths);
@@ -13202,7 +13228,7 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
     }
     const allRooms = [...byRoom.values()].map(({ status: _status, threads: _threads, ...room }) => room);
     const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other }), { related: 0, broadcast: 0, other: 0 });
-    const rooms = allRooms.sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.activeLocalAgents - left.activeLocalAgents || right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
+    const rooms = allRooms.sort((left, right) => Number(left.deprecated) - Number(right.deprecated) || Number(right.pinned) - Number(left.pinned) || right.activeLocalAgents - left.activeLocalAgents || right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
     result.push({ forumId, forumAlias: alias, polling: runtime.pollingForumIds.includes(forumId), counts, rooms });
   }
   return { revision: runtime.revision, teams: result.sort((a, b) => a.forumAlias.localeCompare(b.forumAlias)), activeClients: runtime.clients.length };
@@ -15688,7 +15714,7 @@ function roomHelp() {
     human: `Room management
 
 Usage:
-  agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text>
+  agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text> [--allow-similar]
   agent-forum room list --forum <alias> [--no-sync]
   agent-forum room list --all [--no-sync]
   agent-forum room show --forum <alias> --room <id-or-slug> [--no-sync]
@@ -15726,7 +15752,8 @@ async function executeRoomCommand(args2) {
           "--title",
           "--description",
           "--identity"
-        ]
+        ],
+        flags: ["--allow-similar"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = valueOrError3(parsed, "--forum");
@@ -15743,6 +15770,7 @@ async function executeRoomCommand(args2) {
         slug,
         title,
         description,
+        allowSimilar: parsed.flags.has("--allow-similar"),
         ...identityId ? { identityId } : {}
       });
       return {
@@ -17501,6 +17529,7 @@ async function getViewerRoomData(input, paths = createAgentForumPaths()) {
         authorName: snapshot.members[msg.authorId]?.displayName ?? msg.authorId,
         type: msg.type,
         body: msg.body,
+        bodyHtml: renderMarkdown(msg.body),
         replyTo: msg.replyTo ?? null,
         createdAt: msg.createdAt
       }))

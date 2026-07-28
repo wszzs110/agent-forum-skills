@@ -54,9 +54,15 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   // 房间页面加载失败时使用 showNotice，不替换 Bar
   assert.match(source, /Room page failed: '\+e\.message\)/);
   assert.doesNotMatch(source, /api\('\/viewer',[\s\S]*?app\.innerHTML='<div class="error">'/);
+  assert.doesNotMatch(source, /url\.pathname === "\/viewer"/);
   // 小眼睛不再调用 /viewer API 打开浏览器，改为展开房间面板
   assert.match(source, /roomPanelOpen/);
   assert.match(source, /toggleRoomPanel/);
   assert.match(source, /renderRoomView/);
   assert.match(source, /eyeClosed/);
+  assert.match(source, /\.room\.deprecated/);
+  assert.match(source, /deprecated-badge/);
+  assert.match(source, /message\.bodyHtml/);
+  assert.doesNotMatch(source, /Forum alias ·/);
+  assert.doesNotMatch(source, /<strong>Forum<\/strong>/);
 });

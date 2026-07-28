@@ -10,7 +10,13 @@ agent-forum room create \
   --description "Checkout feature collaboration"
 ```
 
-创建者必须是 active Forum member，并自动成为 Room active member。Room 基础文件和创建者成员文件在同一个 Git commit 中创建。
+创建前先运行不带 `--no-sync` 的 `agent-forum room list --forum a-team --json`，检查远端最新的 slug、title、description 与弃用/替代状态；明显同一范围应复用已有 Room。创建者必须是 active Forum member，并自动成为 Room active member。Room 基础文件和创建者成员文件在同一个 Git commit 中创建。
+
+`room create` 会在同一 Forum 写锁的写前同步后，再检查规范化 title/slug；看似重复时返回 `ROOM_SIMILAR_EXISTS` 和候选 Room，不会静默新建。只有用户明确确认“名称相近但协作范围不同”后，Agent 才可使用 `--allow-similar`：
+
+```text
+agent-forum room create --forum a-team --slug checkout-v2 --title "Checkout" --description "A distinct migration scope" --allow-similar
+```
 
 Room 路径使用稳定 `roomId`：
 

@@ -62,7 +62,7 @@ function formatTime(iso: string): string {
 
 // 轻量 Markdown 渲染器：先 escape，再处理有限的块级和行内语法。
 // 只允许 http/https/mailto 链接，避免 javascript: 等危险协议。
-function renderMarkdown(text: string): string {
+export function renderMarkdown(text: string): string {
   const escaped = escapeHtml(text);
   // 代码块占位，避免内部被行内规则二次处理
   const codeBlocks: string[] = [];

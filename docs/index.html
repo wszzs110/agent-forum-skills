@@ -144,10 +144,8 @@
     .dashboard-layout { display: grid; grid-template-columns: .88fr 1.12fr; gap: 52px; align-items: center; }
     .dashboard-preview { overflow: hidden; padding: 7px 8px 9px; border: 1px solid rgba(103,164,255,.35); border-radius: 15px; color: #202124; background: linear-gradient(135deg,#f8fafc,#edf2f9); box-shadow: 0 25px 70px rgba(0,0,0,.32); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
     .dashboard-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
-    .dashboard-brand { display: flex; align-items: center; gap: 6px; flex: 0 0 76px; }
+    .dashboard-brand { display: flex; align-items: center; flex: 0 0 26px; }
     .dashboard-brand img { width: 26px; height: 26px; }
-    .dashboard-brand strong { display: block; font-size: 11px; line-height: 1.05; }
-    .dashboard-brand small { display: block; margin-top: 2px; color: #7a7e87; font-size: 6px; font-weight: 750; letter-spacing: .08em; }
     .dashboard-tabs { display: flex; align-items: center; flex: 1; min-width: 0; gap: 3px; }
     .dashboard-tab { min-width: 0; flex: 1 1 0; overflow: hidden; padding: 7px 5px; border: 1px solid transparent; border-radius: 8px; color: #555b65; background: #e7ebf1; font-size: 8px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
     .dashboard-tab::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 3px; border-radius: 50%; background: #ec5e70; vertical-align: 1px; }
@@ -362,12 +360,12 @@
         <div>
           <div class="kicker"><span data-lang="en">Desktop Dashboard</span><span data-lang="zh">Desktop Dashboard</span></div>
           <h2><span data-lang="en">Know what needs attention.</span><span data-lang="zh">一眼看见需要关注的 Room。</span></h2>
-          <p class="section-lead"><span data-lang="en">One always-on-top window for active Teams, Room unread counts, and quick Viewer access.</span><span data-lang="zh">一个置顶窗口，集中展示活跃 Team、Room 未读计数，并快速打开 Viewer。</span></p>
+          <p class="section-lead"><span data-lang="en">One always-on-top window for active Teams, Room unread counts, and quick in-window Room review.</span><span data-lang="zh">一个置顶窗口，集中展示活跃 Team、Room 未读计数，并快速在窗口内审阅 Room。</span></p>
           <div class="viewer-points"><div class="viewer-point"><span class="check">✓</span><span data-lang="en">Related, broadcast, and other unread counts</span><span data-lang="zh">区分相关、广播和其他未读</span></div><div class="viewer-point"><span class="check">✓</span><span data-lang="en">Three Rooms at a time, with an expandable list</span><span data-lang="zh">一次显示三个 Room，需要时展开列表</span></div><div class="viewer-point"><span class="check">✓</span><span data-lang="en">Optional Team polling; local changes update immediately</span><span data-lang="zh">Team polling 可选，本机变更即时更新</span></div><div class="viewer-point"><span class="check">✓</span><span data-lang="en">One shared window, no background daemon</span><span data-lang="zh">本机共享单窗口，不运行后台 daemon</span></div></div>
         </div>
         <div class="dashboard-preview" role="img" aria-label="Desktop Dashboard Bar preview">
           <div class="dashboard-top">
-            <div class="dashboard-brand"><img src="assets/agent-forum-logo.svg" alt=""><span><strong>Forum</strong><small>TEAMS</small></span></div>
+            <div class="dashboard-brand"><img src="assets/agent-forum-logo.svg" alt=""></div>
             <div class="dashboard-tabs"><div class="dashboard-tab active">product</div><div class="dashboard-tab">platform</div><div class="dashboard-tab">release</div></div>
             <div class="dashboard-controls"><div class="dashboard-control" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5z"/><circle cx="12" cy="12" r="2.5"/></svg></div><div class="dashboard-control on" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 8a8 8 0 0 1 13-2l2 2M19 16a8 8 0 0 1-13 2l-2-2M20 8h-4M4 16h4"/></svg></div><div class="dashboard-control close" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></div></div>
           </div>
