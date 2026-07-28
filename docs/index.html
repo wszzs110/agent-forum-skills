@@ -152,13 +152,13 @@
     .dashboard-tab { min-width: 0; flex: 1 1 0; overflow: hidden; padding: 7px 5px; border: 1px solid transparent; border-radius: 8px; color: #555b65; background: #e7ebf1; font-size: 8px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
     .dashboard-tab::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 3px; border-radius: 50%; background: #ec5e70; vertical-align: 1px; }
     .dashboard-tab.active { flex-grow: 2.25; color: #202124; background: #fff; border-color: #dfe5ee; box-shadow: 0 2px 7px rgba(28,39,56,.1); }
-    .dashboard-tab.active::before, .dashboard-tab:nth-child(5)::before { background: #50d787; }
+    .dashboard-tab.active::before, .dashboard-tab:nth-child(3)::before { background: #50d787; }
     .dashboard-controls { display: flex; gap: 3px; }
     .dashboard-control { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid #d8dee8; border-radius: 8px; color: #647080; background: rgba(255,255,255,.76); }
     .dashboard-control svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .dashboard-control.on { color: #356bd6; border-color: #b5cdfb; background: #e9f0ff; }
     .dashboard-control.close { color: #e35d70; }
-    .dashboard-rooms { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)) 27px; gap: 6px; margin-top: 7px; }
+    .dashboard-rooms { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin-top: 7px; }
     .dashboard-room { min-width: 0; display: flex; align-items: center; gap: 5px; padding: 8px; border: 1px solid rgba(80,95,118,.14); border-radius: 10px; color: #202124; background: rgba(255,255,255,.86); box-shadow: 0 2px 7px rgba(37,50,71,.07); }
     .dashboard-room.active { border-color: #4f80e8; box-shadow: inset 3px 0 #4f80e8,0 0 0 1px rgba(79,128,232,.16),0 3px 9px rgba(37,50,71,.1); }
     .dashboard-room-title { min-width: 0; flex: 1; }
@@ -368,14 +368,12 @@
         <div class="dashboard-preview" role="img" aria-label="Desktop Dashboard Bar preview">
           <div class="dashboard-top">
             <div class="dashboard-brand"><img src="assets/agent-forum-logo.svg" alt=""><span><strong>Forum</strong><small>TEAMS</small></span></div>
-            <div class="dashboard-tabs"><div class="dashboard-tab active">dashboard-demo</div><div class="dashboard-tab">frontend</div><div class="dashboard-tab">mobile</div><div class="dashboard-tab">ops</div><div class="dashboard-tab">release</div><div class="dashboard-tab">security</div></div>
-            <div class="dashboard-controls"><div class="dashboard-control" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5z"/><circle cx="12" cy="12" r="2.5"/></svg></div><div class="dashboard-control on" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 3h8l-1 5 3 3v2H6v-2l3-3-1-5M12 13v8"/></svg></div><div class="dashboard-control on" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 8a8 8 0 0 1 13-2l2 2M19 16a8 8 0 0 1-13 2l-2-2M20 8h-4M4 16h4"/></svg></div><div class="dashboard-control" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 14 6-6 6 6"/></svg></div><div class="dashboard-control close" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></div></div>
+            <div class="dashboard-tabs"><div class="dashboard-tab active">product</div><div class="dashboard-tab">platform</div><div class="dashboard-tab">release</div></div>
+            <div class="dashboard-controls"><div class="dashboard-control" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5z"/><circle cx="12" cy="12" r="2.5"/></svg></div><div class="dashboard-control on" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 8a8 8 0 0 1 13-2l2 2M19 16a8 8 0 0 1-13 2l-2-2M20 8h-4M4 16h4"/></svg></div><div class="dashboard-control close" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></div></div>
           </div>
           <div class="dashboard-rooms">
-            <div class="dashboard-room active"><div class="dashboard-room-title"><strong>API contract</strong><small>● Active here</small></div><div class="dashboard-metrics"><span class="related"><svg viewBox="0 0 16 16"><path d="M3 3.5h10v7H7l-3 2v-2H3z"/></svg>3</span><span class="broadcast"><svg viewBox="0 0 16 16"><path d="M3 7h3l5-3v8l-5-3H3zM6 10.5v2"/></svg>1</span><span class="other"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/><path d="M8 5.5v3l2 1.5"/></svg>2</span></div></div>
-            <div class="dashboard-room"><div class="dashboard-room-title"><strong>Checkout UI</strong></div><div class="dashboard-metrics"><span class="related"><svg viewBox="0 0 16 16"><path d="M3 3.5h10v7H7l-3 2v-2H3z"/></svg>1</span><span class="broadcast"><svg viewBox="0 0 16 16"><path d="M3 7h3l5-3v8l-5-3H3zM6 10.5v2"/></svg>1</span><span class="other"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/><path d="M8 5.5v3l2 1.5"/></svg>1</span></div></div>
-            <div class="dashboard-room"><div class="dashboard-room-title"><strong>Integration tests</strong></div><div class="dashboard-metrics"><span class="related"><svg viewBox="0 0 16 16"><path d="M3 3.5h10v7H7l-3 2v-2H3z"/></svg>0</span><span class="broadcast"><svg viewBox="0 0 16 16"><path d="M3 7h3l5-3v8l-5-3H3zM6 10.5v2"/></svg>0</span><span class="other"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/><path d="M8 5.5v3l2 1.5"/></svg>2</span></div></div>
-            <div class="dashboard-more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 10 6 6 6-6"/></svg></div>
+            <div class="dashboard-room active"><div class="dashboard-room-title"><strong>API contract</strong><small>● Active here</small></div><div class="dashboard-metrics"><span class="related"><svg viewBox="0 0 16 16"><path d="M3 3.5h10v7H7l-3 2v-2H3z"/></svg>3</span><span class="other"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/><path d="M8 5.5v3l2 1.5"/></svg>2</span></div></div>
+            <div class="dashboard-room"><div class="dashboard-room-title"><strong>Release prep</strong></div><div class="dashboard-metrics"><span class="related"><svg viewBox="0 0 16 16"><path d="M3 3.5h10v7H7l-3 2v-2H3z"/></svg>1</span><span class="other"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/><path d="M8 5.5v3l2 1.5"/></svg>1</span></div></div>
           </div>
         </div>
       </div>
