@@ -42,6 +42,8 @@ export interface ForumSyncOptions {
   delay?: (milliseconds: number) => Promise<void>;
   random?: () => number;
   beforePush?: (attempt: number) => Promise<void>;
+  // 仅供持有同一 Forum 锁的写事务内部使用，避免 refresh/commit/push 之间出现竞态窗口。
+  lockAlreadyHeld?: boolean;
 }
 
 function output(result: GitCommandResult): string {
@@ -321,10 +323,12 @@ export async function syncForum(
   const maxRetries = options.maxRetries ?? 3;
   const delay = options.delay ?? defaultDelay;
   const random = options.random ?? Math.random;
-  const lock = await acquireForumLock({
-    lockPath: forumLockPath(paths, registration.forumId),
-    command: "forum sync",
-  });
+  const lock = options.lockAlreadyHeld
+    ? undefined
+    : await acquireForumLock({
+      lockPath: forumLockPath(paths, registration.forumId),
+      command: "forum sync",
+    });
   try {
     await openForum(forumAlias, paths, { requireClean: true });
     const remote = runGit(registration.path, ["remote", "get-url", "origin"]);
@@ -425,6 +429,6 @@ export async function syncForum(
       warnings: [...new Map(warnings.map((warning) => [`${warning.code}\0${warning.path ?? ""}\0${warning.message}`, warning])).values()],
     };
   } finally {
-    await lock.release();
+    await lock?.release();
   }
 }

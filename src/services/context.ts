@@ -23,7 +23,8 @@ import {
   type AgentForumPaths,
 } from "../storage/paths.js";
 import { ServiceError } from "./errors.js";
-import { showRoom, type RoomView } from "./room.js";
+import { showRoom, type RoomView, type RoomDeprecation } from "./room.js";
+import { refreshForRead, type ReadFreshness } from "./read-freshness.js";
 
 export type BindingTargetStatus = "active" | "archived" | "missing" | "unavailable";
 
@@ -34,6 +35,8 @@ export interface ContextTargetView {
   roomSlug: string | null;
   roomTitle: string | null;
   targetStatus: BindingTargetStatus;
+  deprecation?: RoomDeprecation;
+  freshness?: ReadFreshness;
   problem?: string;
 }
 
@@ -89,6 +92,7 @@ async function targetFromRegistration(
       roomSlug: result.room.slug,
       roomTitle: result.room.title,
       targetStatus: result.room.status,
+      ...(result.room.deprecation ? { deprecation: result.room.deprecation } : {}),
     };
   } catch (error) {
     if (error instanceof ServiceError && error.code === "ROOM_NOT_FOUND") {
@@ -193,9 +197,11 @@ export async function bindContext(
   }
   const cwd = selectedCwd(input.cwd);
   const context = await discoverGitWorkspace(cwd);
+  const freshness = await refreshForRead(input.forumAlias, {}, paths);
   const target = await requireTarget(input.forumAlias, input.room, paths, {
     active: true,
   });
+  target.freshness = freshness;
   const scope = input.workspace ? "workspace" : "branch";
   const branch =
     scope === "branch" ? requireBranch(context, input.branch, cwd) : undefined;

@@ -17,6 +17,7 @@ import {
   removeLocalForum,
 } from "../services/forum-remote.js";
 import { syncForum } from "../services/forum-sync.js";
+import { refreshAllForRead, refreshForRead } from "../services/read-freshness.js";
 import { initLocalForum } from "../services/local-forum.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import {
@@ -47,7 +48,7 @@ function forumHelp(): CommandExecution {
         "remove",
       ],
     },
-    human: `Forum management\n\nUsage:\n  agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]\n  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]\n  agent-forum forum publish --forum <alias> --remote <url>\n  agent-forum forum list\n  agent-forum forum status --forum <alias>\n  agent-forum forum show --forum <alias>\n  agent-forum forum rename --forum <alias> --name <name> --reason <reason>\n  agent-forum forum set-description --forum <alias> --description <text> --reason <reason>\n  agent-forum forum archive|restore --forum <alias> --reason <reason>\n  agent-forum forum sync --forum <alias>\n  agent-forum forum conflict list|show|retry|prepare-reissue|close ...\n  agent-forum forum remove --forum <alias> [--keep-clone]\n`,
+    human: `Forum management\n\nUsage:\n  agent-forum forum init-local --alias <alias> --name <name> --description <text> [--branch <branch>] [--identity <member-id>]\n  agent-forum forum add --alias <alias> --remote <url> [--branch <branch>]\n  agent-forum forum publish --forum <alias> --remote <url>\n  agent-forum forum list [--no-sync]\n  agent-forum forum status --forum <alias> [--no-sync]\n  agent-forum forum show --forum <alias> [--no-sync]\n  agent-forum forum rename --forum <alias> --name <name> --reason <reason>\n  agent-forum forum set-description --forum <alias> --description <text> --reason <reason>\n  agent-forum forum archive|restore --forum <alias> --reason <reason>\n  agent-forum forum sync --forum <alias>\n  agent-forum forum conflict list|show|retry|prepare-reissue|close ...\n  agent-forum forum remove --forum <alias> [--keep-clone]\n`,
   };
 }
 
@@ -137,51 +138,55 @@ export async function executeForumCommand(
     }
 
     if (subcommand === "list") {
-      const parsed = parseCommandOptions(args.slice(1), { values: [] });
+      const parsed = parseCommandOptions(args.slice(1), { values: [], flags: ["--no-sync"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
+      const freshness = await refreshAllForRead({ noSync: parsed.flags.has("--no-sync") });
       const result = await listRemoteForums();
       return {
         exitCode: ExitCode.Success,
         command: "forum.list",
-        data: result,
+        data: { ...result, freshness },
         human:
           result.forums.length === 0
-            ? "No forums.\n"
+            ? "No Forums.\n"
             : `${result.forums
                 .map(
                   (forum) =>
                     `${forum.alias}\t${forum.health}\t${forum.expectedBranch}\t${forum.remote.displayUrl ?? "no-remote"}`,
                 )
-                .join("\n")}\n`,
+                .join("\n")}\n${freshness.some((item) => item.state === "stale") ? "warning: one or more Forums are using stale local data\n" : ""}`,
       };
     }
 
     if (subcommand === "status") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--forum"],
+        flags: ["--no-sync"],
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = valueOrError(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
+      const freshness = await refreshForRead(forumAlias, { noSync: parsed.flags.has("--no-sync") });
       const result = await getForumRemoteStatus(forumAlias);
       return {
         exitCode: ExitCode.Success,
         command: "forum.status",
-        data: result,
+        data: { ...result, freshness },
         human: `forum: ${result.alias}\nhealth: ${result.health}\nbranch: ${result.currentBranch ?? "detached"}\nremote: ${result.remote.displayUrl ?? "not configured"}\nahead: ${result.remote.ahead ?? "unknown"}\nbehind: ${result.remote.behind ?? "unknown"}\n`,
       };
     }
 
     if (subcommand === "show") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum"] });
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum"], flags: ["--no-sync"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = valueOrError(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
+      const freshness = await refreshForRead(forumAlias, { noSync: parsed.flags.has("--no-sync") });
       const result = await showForum(forumAlias);
       return {
         exitCode: ExitCode.Success,
         command: "forum.show",
-        data: result,
+        data: { ...result, freshness },
         human: `${result.forum.name}\nstatus: ${result.forum.status}\n${result.forum.description}\n`,
       };
     }

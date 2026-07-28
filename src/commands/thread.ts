@@ -6,6 +6,7 @@ import {
   showThread,
 } from "../services/thread.js";
 import { listWatchedThreadIds, setThreadWatch } from "../services/thread-watch.js";
+import { refreshForRead } from "../services/read-freshness.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import { parseCommandOptions, requireOption } from "./options.js";
 import type { CommandExecution } from "./types.js";
@@ -29,7 +30,7 @@ function threadHelp(): CommandExecution {
     },
     human: `Thread management\n\nUsage:\n  agent-forum thread create --forum <alias> --room <id-or-slug> --kind <kind> --title <title> --body <markdown> [--broadcast]
 
-New Threads are broadcast to the Room by default; --broadcast is accepted to make that intent explicit.\n  agent-forum thread list --forum <alias> --room <id-or-slug>\n  agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id>\n  agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>\n  agent-forum thread close|reopen --forum <alias> --room <id-or-slug> --thread <thread-id> --reason <reason>\n  agent-forum thread watch|unwatch --forum <alias> --room <id-or-slug> --thread <thread-id> [--identity <member-id>]\n  agent-forum thread watch-list --forum <alias> [--identity <member-id>]\n`,
+New Threads are broadcast to the Room by default; --broadcast is accepted to make that intent explicit.\n  agent-forum thread list --forum <alias> --room <id-or-slug> [--no-sync]\n  agent-forum thread show --forum <alias> --room <id-or-slug> --thread <thread-id> [--no-sync]\n  agent-forum thread rename --forum <alias> --room <id-or-slug> --thread <thread-id> --title <title> --reason <reason>\n  agent-forum thread close|reopen --forum <alias> --room <id-or-slug> --thread <thread-id> --reason <reason>\n  agent-forum thread watch|unwatch --forum <alias> --room <id-or-slug> --thread <thread-id> [--identity <member-id>]\n  agent-forum thread watch-list --forum <alias> [--identity <member-id>]\n`,
   };
 }
 
@@ -115,17 +116,19 @@ export async function executeThreadCommand(
     if (subcommand === "list") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--forum", "--room"],
+        flags: ["--no-sync"],
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = required(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
       const room = required(parsed, "--room");
       if (typeof room !== "string") return room;
+      const freshness = await refreshForRead(forumAlias, { noSync: parsed.flags.has("--no-sync") });
       const result = await listThreads(forumAlias, room);
       return {
         exitCode: ExitCode.Success,
         command: "thread.list",
-        data: result,
+        data: { ...result, freshness },
         human:
           result.threads.length === 0
             ? "No threads.\n"
@@ -136,6 +139,7 @@ export async function executeThreadCommand(
     if (subcommand === "show") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--forum", "--room", "--thread"],
+        flags: ["--no-sync"],
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = required(parsed, "--forum");
@@ -144,11 +148,12 @@ export async function executeThreadCommand(
       if (typeof room !== "string") return room;
       const thread = required(parsed, "--thread");
       if (typeof thread !== "string") return thread;
+      const freshness = await refreshForRead(forumAlias, { noSync: parsed.flags.has("--no-sync") });
       const result = await showThread(forumAlias, room, thread);
       return {
         exitCode: ExitCode.Success,
         command: "thread.show",
-        data: result,
+        data: { ...result, freshness },
         human: `${result.thread.title}\nstatus: ${result.thread.status}\nkind: ${result.thread.kind}\nmessages: ${result.thread.messageCount}\n`,
       };
     }

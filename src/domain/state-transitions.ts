@@ -10,6 +10,8 @@ export const knownLifecycleEventTypes = [
   "room-description-changed",
   "room-archived",
   "room-restored",
+  "room-deprecated",
+  "room-reenabled",
   "thread-renamed",
   "thread-closed",
   "thread-reopened",
@@ -42,6 +44,7 @@ export interface RoomState {
   title: string;
   description: string;
   status: "active" | "archived";
+  deprecation?: { replacementRoomId?: string };
 }
 
 export interface ThreadState {
@@ -115,6 +118,21 @@ function restore<T extends ForumState | RoomState>(state: T): T {
   return { ...state, status: "active" };
 }
 
+function optionalRoomId(data: Record<string, unknown>): string | undefined {
+  const value = data.replacementRoomId;
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "string" ||
+    !/^room_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value)
+  ) {
+    throw new StateTransitionError(
+      "INVALID_EVENT_DATA",
+      "replacementRoomId must be a valid room ID when provided",
+    );
+  }
+  return value;
+}
+
 export function applyLifecycleEvent<T extends LifecycleState>(
   state: T,
   event: LifecycleEventInput,
@@ -154,6 +172,40 @@ export function applyLifecycleEvent<T extends LifecycleState>(
         return archive(room) as T;
       case "room-restored":
         return restore(room) as T;
+      case "room-deprecated": {
+        if (room.status !== "active") {
+          throw new StateTransitionError(
+            "INVALID_STATE_TRANSITION",
+            "cannot deprecate an archived room",
+          );
+        }
+        if (room.deprecation) {
+          throw new StateTransitionError(
+            "INVALID_STATE_TRANSITION",
+            "room is already deprecated",
+          );
+        }
+        const replacementRoomId = optionalRoomId(event.data);
+        if (replacementRoomId === room.id) {
+          throw new StateTransitionError(
+            "INVALID_EVENT_DATA",
+            "replacementRoomId cannot be the deprecated room itself",
+          );
+        }
+        return {
+          ...room,
+          deprecation: replacementRoomId ? { replacementRoomId } : {},
+        } as T;
+      }
+      case "room-reenabled":
+        if (!room.deprecation) {
+          throw new StateTransitionError(
+            "INVALID_STATE_TRANSITION",
+            "room is not deprecated",
+          );
+        }
+        const { deprecation: _deprecation, ...reenabled } = room;
+        return reenabled as T;
       default:
         break;
     }

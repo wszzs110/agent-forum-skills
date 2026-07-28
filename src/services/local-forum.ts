@@ -37,6 +37,7 @@ import {
   type AgentForumPaths,
 } from "../storage/paths.js";
 import { ServiceError } from "./errors.js";
+import { syncForum, type ForumSyncResult } from "./forum-sync.js";
 
 export interface InitLocalForumInput {
   alias: string;
@@ -64,6 +65,7 @@ export interface PublishIdentityResult {
   path: string;
   action: "published" | "unchanged";
   commit?: string;
+  synchronization?: { before: ForumSyncResult; after?: ForumSyncResult };
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -251,6 +253,10 @@ export async function publishIdentity(
   );
 
   try {
+    const remoteConfigured = runGit(registration.path, ["remote", "get-url", "origin"]).status === 0;
+    const before = remoteConfigured
+      ? await syncForum(alias, paths, { lockAlreadyHeld: true })
+      : undefined;
     const topLevel = requireGit(registration.path, [
       "rev-parse",
       "--show-toplevel",
@@ -326,6 +332,7 @@ export async function publishIdentity(
         identityId: identity.memberId,
         path: profilePath,
         action: "unchanged",
+        ...(before ? { synchronization: { before } } : {}),
       };
     }
 
@@ -337,6 +344,7 @@ export async function publishIdentity(
       ...publicProfile(identity, currentUtcTimestamp(now)),
       createdAt,
     };
+    let committed = false;
     try {
       await writeValidatedJsonAtomic(
         profilePath,
@@ -362,6 +370,7 @@ export async function publishIdentity(
           identityId: identity.memberId,
           path: profilePath,
           action: "unchanged",
+          ...(before ? { synchronization: { before } } : {}),
         };
       }
       const commit = commitPaths(
@@ -369,6 +378,10 @@ export async function publishIdentity(
         [profilePath],
         `Publish identity ${identity.memberId}`,
       );
+      committed = true;
+      const after = remoteConfigured
+        ? await syncForum(alias, paths, { lockAlreadyHeld: true })
+        : undefined;
       return {
         alias,
         forumId: registration.forumId,
@@ -376,13 +389,17 @@ export async function publishIdentity(
         path: profilePath,
         action: "published",
         commit,
+        ...(before && after ? { synchronization: { before, after } } : {}),
       };
     } catch (error) {
-      runGit(registration.path, ["reset", "--", profilePath]);
-      if (previous === undefined) {
-        await rm(profilePath, { force: true });
-      } else {
-        await writeFileAtomic(profilePath, previous, { overwrite: true });
+      // commit 之后的同步失败必须保留可恢复的本地提交，不能伪装成未写入。
+      if (!committed) {
+        runGit(registration.path, ["reset", "--", profilePath]);
+        if (previous === undefined) {
+          await rm(profilePath, { force: true });
+        } else {
+          await writeFileAtomic(profilePath, previous, { overwrite: true });
+        }
       }
       throw error;
     }

@@ -207,6 +207,8 @@ test("forum status reports local-only commits and remove protects unpublished wo
       },
       source.paths,
     );
+    // 协议写入会自动发布；用独立本地提交覆盖 remove 对遗留未发布提交的保护。
+    requireGit(source.forum.path, ["commit", "--allow-empty", "-m", "Unpublished local commit"]);
     const ahead = await getForumRemoteStatus("a-team", source.paths);
     assert.equal(ahead.remote.ahead, 1);
     assert.equal(ahead.remote.behind, 0);

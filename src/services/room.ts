@@ -47,11 +47,36 @@ import {
 } from "../storage/paths.js";
 import { createImmutableEvent } from "../storage/protocol-store.js";
 import { ServiceError } from "./errors.js";
+import { syncForum, type ForumSyncResult } from "./forum-sync.js";
 
 export interface ProtocolWarning {
   code: string;
   path: string;
   message: string;
+}
+
+export interface MemberSummary {
+  memberId: string;
+  displayName: string;
+  role: string;
+}
+
+export interface RoomDeprecation {
+  state: "deprecated";
+  eventId: string;
+  changedAt: string;
+  changedBy: MemberSummary;
+  reason: string;
+  replacementRoomId?: string;
+}
+
+export interface RoomEventHistoryItem {
+  id: string;
+  type: string;
+  actorId: string;
+  createdAt: string;
+  reason: string;
+  data: Record<string, unknown>;
 }
 
 export interface RoomView {
@@ -60,9 +85,12 @@ export interface RoomView {
   title: string;
   description: string;
   status: "active" | "archived";
+  // 保留历史 createdBy 字段；creator 是面向展示的派生信息。
   createdBy: string;
+  creator?: MemberSummary;
   createdAt: string;
   lastActivityAt: string;
+  deprecation?: RoomDeprecation;
 }
 
 export interface RoomListResult {
@@ -106,7 +134,9 @@ export interface RoomEventInput {
     | "room-renamed"
     | "room-description-changed"
     | "room-archived"
-    | "room-restored";
+    | "room-restored"
+    | "room-deprecated"
+    | "room-reenabled";
   reason: string;
   data: Record<string, unknown>;
   identityId?: string;
@@ -116,6 +146,21 @@ export interface RoomEventInput {
 
 export interface ForumContext {
   registration: LocalForumRegistration;
+}
+
+export interface WriteSynchronization {
+  before: ForumSyncResult;
+  after: ForumSyncResult;
+}
+
+function withWriteSynchronization<T>(
+  value: T,
+  synchronization: WriteSynchronization | undefined,
+): T {
+  if (!synchronization || !value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  return Object.assign(value as object, { synchronization }) as T;
 }
 
 export async function readJsonDocument(
@@ -242,6 +287,26 @@ async function readForumMember(
   return profile;
 }
 
+async function readMemberSummary(
+  registration: LocalForumRegistration,
+  memberId: string,
+): Promise<MemberSummary> {
+  try {
+    const profile = await readJsonDocument(
+      resolve(registration.path, "members", memberId, "profile.json"),
+      "member-profile",
+    );
+    return {
+      memberId,
+      displayName: typeof profile.displayName === "string" ? profile.displayName : memberId,
+      role: typeof profile.role === "string" ? profile.role : "",
+    };
+  } catch {
+    // 历史 Forum 可能没有完整 profile；展示必须安全降级，不能阻断 Room 读取。
+    return { memberId, displayName: memberId, role: "" };
+  }
+}
+
 async function readRoomEvents(
   registration: LocalForumRegistration,
   roomId: string,
@@ -340,6 +405,7 @@ async function readRoomDirectory(
     status: "active",
   };
   let lastActivityAt = String(base.createdAt);
+  let deprecation: RoomDeprecation | undefined;
   const eventResult = await readRoomEvents(registration, roomDirectoryName);
   const warnings = [...eventResult.warnings];
   for (const event of eventResult.events) {
@@ -366,12 +432,33 @@ async function readRoomDirectory(
         type: String(event.type),
         data: event.data as Record<string, unknown>,
       });
+      if (event.type === "room-deprecated") {
+        const replacementRoomId = (event.data as Record<string, unknown>).replacementRoomId;
+        deprecation = {
+          state: "deprecated",
+          eventId: String(event.id),
+          changedAt: String(event.createdAt),
+          changedBy: await readMemberSummary(registration, String(event.actorId)),
+          reason: String(event.reason),
+          ...(typeof replacementRoomId === "string" ? { replacementRoomId } : {}),
+        };
+      } else if (event.type === "room-reenabled") {
+        deprecation = undefined;
+      }
       lastActivityAt = String(event.createdAt);
     } catch (error) {
       warnings.push(protocolWarning(eventPath, error));
     }
   }
 
+  const createdBy = String(base.createdBy);
+  if (deprecation) {
+    warnings.push({
+      code: "ROOM_DEPRECATED",
+      path: roomPath,
+      message: `room was deprecated by ${deprecation.changedBy.displayName} at ${deprecation.changedAt}`,
+    });
+  }
   return {
     room: {
       id: String(base.id),
@@ -379,9 +466,11 @@ async function readRoomDirectory(
       title: state.title,
       description: state.description,
       status: state.status,
-      createdBy: String(base.createdBy),
+      createdBy,
+      creator: await readMemberSummary(registration, createdBy),
       createdAt: String(base.createdAt),
       lastActivityAt,
+      ...(deprecation ? { deprecation } : {}),
     },
     warnings,
   };
@@ -426,7 +515,7 @@ export async function showRoom(
   forumAlias: string,
   room: string,
   paths: AgentForumPaths = createAgentForumPaths(),
-): Promise<{ room: RoomView; warnings: ProtocolWarning[] }> {
+): Promise<{ room: RoomView; warnings: ProtocolWarning[]; history: RoomEventHistoryItem[] }> {
   const result = await listRooms(forumAlias, paths);
   const found = result.rooms.find(
     (candidate) => candidate.id === room || candidate.slug === room,
@@ -438,7 +527,20 @@ export async function showRoom(
       result.warnings,
     );
   }
-  return { room: found, warnings: result.warnings };
+  const { registration } = await openForum(forumAlias, paths);
+  const events = await readRoomEvents(registration, found.id);
+  return {
+    room: found,
+    warnings: result.warnings,
+    history: events.events.map((event) => ({
+      id: String(event.id),
+      type: String(event.type),
+      actorId: String(event.actorId),
+      createdAt: String(event.createdAt),
+      reason: String(event.reason),
+      data: event.data as Record<string, unknown>,
+    })),
+  };
 }
 
 export async function withForumWrite<T>(
@@ -459,6 +561,12 @@ export async function withForumWrite<T>(
     command,
   });
   try {
+    // 写操作必须在同一把 Forum 锁中完成“同步前检查 → commit → 发布”，
+    // 不能在命令层串联两个独立锁，否则并发 Agent 可在中间插入提交。
+    const remoteConfigured = runGit(registration.path, ["remote", "get-url", "origin"]).status === 0;
+    const before = remoteConfigured
+      ? await syncForum(forumAlias, paths, { lockAlreadyHeld: true })
+      : undefined;
     await openForum(forumAlias, paths, { requireClean: true });
     await readForumMember(registration, identity);
     configureForumCommitIdentity(
@@ -466,7 +574,14 @@ export async function withForumWrite<T>(
       identity.displayName,
       identity.memberId,
     );
-    return await operation(registration, identity);
+    const value = await operation(registration, identity);
+    const after = remoteConfigured
+      ? await syncForum(forumAlias, paths, { lockAlreadyHeld: true })
+      : undefined;
+    return withWriteSynchronization(
+      value,
+      before && after ? { before, after } : undefined,
+    );
   } finally {
     await lock.release();
   }
@@ -618,6 +733,11 @@ export async function createRoom(
             description: input.description,
             status: "active",
             createdBy: identity.memberId,
+            creator: {
+              memberId: identity.memberId,
+              displayName: identity.displayName,
+              role: identity.role,
+            },
             createdAt: timestamp,
             lastActivityAt: timestamp,
           },
@@ -773,6 +893,15 @@ export async function createRoomEvent(
     input.type,
     async (registration, identity) => {
       const roomResult = await showRoom(input.forumAlias, input.room, paths);
+      if (input.type === "room-deprecated" && typeof input.data.replacementRoomId === "string") {
+        const replacement = await showRoom(input.forumAlias, input.data.replacementRoomId, paths);
+        if (replacement.room.id === roomResult.room.id) {
+          throw new ServiceError(
+            "ROOM_REPLACEMENT_INVALID",
+            "replacementRoomId cannot be the deprecated room itself",
+          );
+        }
+      }
       await requireActiveRoomMember(registration, roomResult.room.id, identity);
       const eventId = input.eventId ?? createEntityId("event");
       const timestamp = currentUtcTimestamp(input.now);
@@ -793,6 +922,9 @@ export async function createRoomEvent(
         title: roomResult.room.title,
         description: roomResult.room.description,
         status: roomResult.room.status,
+        ...(roomResult.room.deprecation
+          ? { deprecation: { ...(roomResult.room.deprecation.replacementRoomId ? { replacementRoomId: roomResult.room.deprecation.replacementRoomId } : {}) } }
+          : {}),
       };
       const nextState = applyLifecycleEvent(
         currentState,

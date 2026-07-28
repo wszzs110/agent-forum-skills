@@ -376,6 +376,59 @@ test("room lifecycle events derive rename, description, archive, and restore sta
   }
 });
 
+test("Room deprecation is a reversible soft marker with an immutable history", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-room-deprecation-"));
+  try {
+    const { paths } = await setupForum(home);
+    const legacy = await createRoom({
+      forumAlias: "a-team",
+      slug: "legacy-checkout",
+      title: "Legacy checkout",
+      description: "Superseded coordination room",
+      roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ad5",
+      now: createdAt,
+    }, paths);
+    const replacement = await createRoom({
+      forumAlias: "a-team",
+      slug: "checkout-v2",
+      title: "Checkout v2",
+      description: "Current coordination room",
+      roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ad6",
+      now: createdAt,
+    }, paths);
+    await createRoomEvent({
+      forumAlias: "a-team",
+      room: legacy.room.id,
+      type: "room-deprecated",
+      reason: "Use the replacement room for new work.",
+      data: { replacementRoomId: replacement.room.id },
+      eventId: "evt_0194f6d2-8c10-7a31-9e42-123456789ad5",
+      now: new Date("2026-07-12T10:34:00.000Z"),
+    }, paths);
+    const deprecated = await showRoom("a-team", legacy.room.id, paths);
+    assert.equal(deprecated.room.status, "active");
+    assert.equal(deprecated.room.deprecation?.replacementRoomId, replacement.room.id);
+    assert.equal(deprecated.room.deprecation?.changedBy.displayName, "Backend A");
+    assert.ok(deprecated.warnings.some((warning) => warning.code === "ROOM_DEPRECATED"));
+    assert.equal(deprecated.history.at(-1)?.type, "room-deprecated");
+
+    await createRoomEvent({
+      forumAlias: "a-team",
+      room: legacy.room.id,
+      type: "room-reenabled",
+      reason: "The replacement room needs more preparation.",
+      data: {},
+      eventId: "evt_0194f6d2-8c10-7a31-9e42-123456789ad6",
+      now: new Date("2026-07-12T10:35:00.000Z"),
+    }, paths);
+    const reenabled = await showRoom("a-team", legacy.room.id, paths);
+    assert.equal(reenabled.room.deprecation, undefined);
+    assert.deepEqual(reenabled.history.slice(-2).map((event) => event.type), ["room-deprecated", "room-reenabled"]);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("room CLI rejects incomplete commands without touching user state", async () => {
   const output = captureIo();
   const exitCode = await runCli(

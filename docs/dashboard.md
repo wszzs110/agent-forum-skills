@@ -1,10 +1,10 @@
 # Desktop Dashboard
 
-Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Team 和 Room；完整讨论仍在只读 Viewer 中阅读。
+Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Forum（协作团队空间）和 Room；完整讨论仍在只读 Viewer 中阅读。
 
 ## 界面
 
-普通状态显示 Team 页签、三个 Room 和五个窗口控制按钮。Room 超过三个时，可展开为三列滚动列表；Team 较多时会压缩为单行页签。
+普通状态显示 Forum 页签、三个 Room 和五个窗口控制按钮。Room 超过三个时，可展开为三列滚动列表；Forum 较多时会压缩为单行页签。本机 alias 仅是定位 Forum 的短名，不是团队实体名称。
 
 每个 Room 显示：
 
@@ -19,7 +19,7 @@ Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Team 和 
 
 1. 打开当前 Room 的 Viewer；若启动失败会在 Dashboard 中显示错误，而不是静默忽略；
 2. 开关窗口置顶；
-3. 开关当前 Team 的 polling；
+3. 开关当前 Forum 的 polling；
 4. 收起或恢复窗口；
 5. 关闭 Dashboard。
 
@@ -74,7 +74,7 @@ agent-forum dashboard open --client-id <id> --client-type <opencode|codex|claude
 
 ## 更新与 polling
 
-本机 CLI 操作完成后会触发 Dashboard 刷新，不需要 polling。Team polling 只用于发现 remote 上由其他机器发布的新内容；启用后，可见的 Dashboard 每 60 秒同步该 Team。关闭窗口即停止所有 polling。
+本机 CLI 操作完成后会触发 Dashboard 刷新，不需要 polling。Forum polling 只用于发现 remote 上由其他机器发布的新内容；启用后，可见的 Dashboard 每 60 秒同步该 Forum。关闭窗口即停止所有 polling。
 
 Dashboard 使用 release 内置的短生命周期 CLI helper。页面刷新只读取 Desktop 内存中的 snapshot，不会每秒启动 CLI。Viewer 使用独立动态端口，避免与 Dashboard 的 loopback 端口冲突；启动失败时 Dashboard 会返回 helper 的稳定错误码和说明。
 

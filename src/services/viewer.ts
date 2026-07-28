@@ -8,6 +8,7 @@ import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js
 import { resolveContext } from "./context.js";
 import { findForum, loadLocalConfig } from "../config/local-config.js";
 import { refreshForumFromRemote } from "./forum-sync.js";
+import { refreshForRead, type ReadFreshness } from "./read-freshness.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
 import { renderViewerHtml, startViewerServer } from "../viewer/server.js";
@@ -290,6 +291,7 @@ export async function openViewer(input: {
 }
 
 export interface ViewerRoomData {
+  freshness: ReadFreshness;
   room: { id: string; slug: string; title: string; description: string; status: string };
   forum: { alias: string; name: string; dataBranch: string };
   syncedAt: string;
@@ -306,6 +308,7 @@ export interface ViewerRoomData {
 export async function getViewerRoomData(input: { forumAlias?: string; room?: string; cwd?: string }, paths = createAgentForumPaths()): Promise<ViewerRoomData> {
   const context = await resolveContext({ ...(input.cwd ? { cwd: input.cwd } : {}), ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}), ...(input.room ? { room: input.room } : {}) }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  const freshness = await refreshForRead(context.forumAlias, {}, paths);
   const cached = await getForumSnapshot(context.forumAlias, paths);
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId || item.room.slug === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
@@ -347,6 +350,7 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
   });
   members.sort((a, b) => b.messageCount - a.messageCount || (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
   return {
+    freshness,
     room: { id: room.room.id, slug: room.room.slug, title: room.room.title, description: room.room.description, status: room.room.status },
     forum: { alias: snapshot.forumAlias, name: snapshot.forum.name, dataBranch: findForum(await loadLocalConfig(paths), snapshot.forumAlias).dataBranch },
     syncedAt: snapshot.generatedAt,

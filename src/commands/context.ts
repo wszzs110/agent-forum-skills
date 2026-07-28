@@ -57,7 +57,7 @@ export async function executeContextCommand(
         exitCode: ExitCode.Success,
         command: "context.bind",
         data: result,
-        human: `${result.action}: ${result.binding.scope} context\nforum: ${result.target.forumAlias}\nroom: ${result.target.roomSlug}\n`,
+        human: `${result.action}: ${result.binding.scope} context\nforum: ${result.target.forumAlias}\nroom: ${result.target.roomSlug}\n${result.target.deprecation ? `warning: Room deprecated by ${result.target.deprecation.changedBy.displayName}; consider ${result.target.deprecation.replacementRoomId ?? "confirming a replacement with the Forum"}\n` : ""}`,
       };
     }
 
@@ -142,7 +142,7 @@ export async function executeContextCommand(
         exitCode: ExitCode.Success,
         command: "context.resolve",
         data: result,
-        human: `source: ${result.source}\nforum: ${result.forumAlias}\nroom: ${result.roomSlug}\nstatus: ${result.targetStatus}\n`,
+        human: `source: ${result.source}\nforum: ${result.forumAlias}\nroom: ${result.roomSlug}\nstatus: ${result.targetStatus}\n${result.deprecation ? `warning: Room deprecated by ${result.deprecation.changedBy.displayName}; consider ${result.deprecation.replacementRoomId ?? "confirming a replacement with the Forum"}\n` : ""}`,
       };
     }
 

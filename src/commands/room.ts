@@ -7,6 +7,8 @@ import {
   listRooms,
   showRoom,
 } from "../services/room.js";
+import { listRemoteForums } from "../services/forum-remote.js";
+import { refreshAllForRead, refreshForRead } from "../services/read-freshness.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import {
   parseCommandOptions,
@@ -30,9 +32,11 @@ function roomHelp(): CommandExecution {
         "set-description",
         "archive",
         "restore",
+        "deprecate",
+        "reenable",
       ],
     },
-    human: `Room management\n\nUsage:\n  agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text>\n  agent-forum room list --forum <alias>\n  agent-forum room show --forum <alias> --room <id-or-slug>\n  agent-forum room join --forum <alias> --room <id-or-slug> [--role <role>] [--responsibility <text>]\n  agent-forum room leave --forum <alias> --room <id-or-slug>\n  agent-forum room rename --forum <alias> --room <id-or-slug> --title <title> --reason <reason>\n  agent-forum room set-description --forum <alias> --room <id-or-slug> --description <text> --reason <reason>\n  agent-forum room archive|restore --forum <alias> --room <id-or-slug> --reason <reason>\n`,
+    human: `Room management\n\nUsage:\n  agent-forum room create --forum <alias> --slug <slug> --title <title> --description <text>\n  agent-forum room list --forum <alias> [--no-sync]\n  agent-forum room list --all [--no-sync]\n  agent-forum room show --forum <alias> --room <id-or-slug> [--no-sync]\n  agent-forum room join --forum <alias> --room <id-or-slug> [--role <role>] [--responsibility <text>]\n  agent-forum room leave --forum <alias> --room <id-or-slug>\n  agent-forum room rename --forum <alias> --room <id-or-slug> --title <title> --reason <reason>\n  agent-forum room set-description --forum <alias> --room <id-or-slug> --description <text> --reason <reason>\n  agent-forum room archive|restore --forum <alias> --room <id-or-slug> --reason <reason>\n  agent-forum room deprecate --forum <alias> --room <id-or-slug> --reason <reason> [--replacement <id-or-slug>]\n  agent-forum room reenable --forum <alias> --room <id-or-slug> --reason <reason>\n`,
   };
 }
 
@@ -101,35 +105,74 @@ export async function executeRoomCommand(
     if (subcommand === "list") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--forum"],
+        flags: ["--all", "--no-sync"],
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
-      const forumAlias = valueOrError(parsed, "--forum");
-      if (typeof forumAlias !== "string") return forumAlias;
-      const result = await listRooms(forumAlias);
+      const all = parsed.flags.has("--all");
+      const requestedForum = parsed.values.get("--forum");
+      if (all === Boolean(requestedForum)) {
+        return invalidArgument("room list requires exactly one of --forum or --all");
+      }
+      const noSync = parsed.flags.has("--no-sync");
+      if (requestedForum) {
+        const freshness = await refreshForRead(requestedForum, { noSync });
+        const result = await listRooms(requestedForum);
+        return {
+          exitCode: ExitCode.Success,
+          command: "room.list",
+          data: { ...result, freshness },
+          human:
+            result.rooms.length === 0
+              ? "No Rooms.\n"
+              : `${result.rooms.map((item) => `${item.slug}\t${item.status}${item.deprecation ? " (deprecated)" : ""}\t${item.creator?.displayName ?? item.createdBy}\t${item.title}`).join("\n")}\n`,
+        };
+      }
+      const freshness = await refreshAllForRead({ noSync });
+      const forumStatuses = await listRemoteForums();
+      const forums: Array<{ forumAlias: string; rooms: Awaited<ReturnType<typeof listRooms>>; error?: { code: string; message: string } }> = [];
+      for (const forum of forumStatuses.forums) {
+        try {
+          forums.push({ forumAlias: forum.alias, rooms: await listRooms(forum.alias) });
+        } catch (error) {
+          forums.push({
+            forumAlias: forum.alias,
+            rooms: { rooms: [], warnings: [] },
+            error: {
+              code: error instanceof Error && "code" in error ? String(error.code) : "ROOM_LIST_FAILED",
+              message: error instanceof Error ? error.message : String(error),
+            },
+          });
+        }
+      }
       return {
         exitCode: ExitCode.Success,
         command: "room.list",
-        data: result,
-        human:
-          result.rooms.length === 0
-            ? "No rooms.\n"
-            : `${result.rooms.map((room) => `${room.slug}\t${room.status}\t${room.title}`).join("\n")}\n`,
+        data: { forums, freshness },
+        human: forums.length === 0
+          ? "No Forums.\n"
+          : `${forums.map((forum) => forum.error
+            ? `[${forum.forumAlias}] unavailable: ${forum.error.code}`
+            : `[${forum.forumAlias}]\n${forum.rooms.rooms.length ? forum.rooms.rooms.map((item) => `  ${item.slug}\t${item.status}${item.deprecation ? " (deprecated)" : ""}\t${item.creator?.displayName ?? item.createdBy}\t${item.title}`).join("\n") : "  No Rooms."}`).join("\n")}\n`,
       };
     }
 
     if (subcommand === "show") {
-      const parsed = commonRoomOptions(args.slice(1));
-      if ("exitCode" in parsed) return parsed;
+      const parsed = parseCommandOptions(args.slice(1), {
+        values: ["--forum", "--room"],
+        flags: ["--no-sync"],
+      });
+      if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = valueOrError(parsed, "--forum");
       if (typeof forumAlias !== "string") return forumAlias;
       const room = valueOrError(parsed, "--room");
       if (typeof room !== "string") return room;
+      const freshness = await refreshForRead(forumAlias, { noSync: parsed.flags.has("--no-sync") });
       const result = await showRoom(forumAlias, room);
       return {
         exitCode: ExitCode.Success,
         command: "room.show",
-        data: result,
-        human: `${result.room.title} (${result.room.slug})\nstatus: ${result.room.status}\n${result.room.description}\n`,
+        data: { ...result, freshness },
+        human: `${result.room.title} (${result.room.slug})\nstatus: ${result.room.status}\ncreator: ${result.room.creator?.displayName ?? result.room.createdBy}\n${result.room.deprecation ? `deprecated by: ${result.room.deprecation.changedBy.displayName} at ${result.room.deprecation.changedAt}\nreason: ${result.room.deprecation.reason}\n${result.room.deprecation.replacementRoomId ? `replacement: ${result.room.deprecation.replacementRoomId}\n` : ""}` : ""}${result.room.description}\n`,
       };
     }
 
@@ -186,14 +229,18 @@ export async function executeRoomCommand(
       subcommand === "rename" ||
       subcommand === "set-description" ||
       subcommand === "archive" ||
-      subcommand === "restore"
+      subcommand === "restore" ||
+      subcommand === "deprecate" ||
+      subcommand === "reenable"
     ) {
       const extra =
         subcommand === "rename"
           ? ["--title", "--reason"]
           : subcommand === "set-description"
             ? ["--description", "--reason"]
-            : ["--reason"];
+            : subcommand === "deprecate"
+              ? ["--reason", "--replacement"]
+              : ["--reason"];
       const parsed = commonRoomOptions(args.slice(1), extra);
       if ("exitCode" in parsed) return parsed;
       const forumAlias = valueOrError(parsed, "--forum");
@@ -210,13 +257,28 @@ export async function executeRoomCommand(
             ? "room-description-changed"
             : subcommand === "archive"
               ? "room-archived"
-              : "room-restored";
+              : subcommand === "restore"
+                ? "room-restored"
+                : subcommand === "deprecate"
+                  ? "room-deprecated"
+                  : "room-reenabled";
+      const replacement = parsed.values.get("--replacement");
+      let replacementRoomId: string | undefined;
+      if (replacement) {
+        const replacementResult = await showRoom(forumAlias, replacement);
+        if (replacementResult.room.id === room) {
+          return invalidArgument("--replacement cannot be the deprecated room itself");
+        }
+        replacementRoomId = replacementResult.room.id;
+      }
       const data =
         subcommand === "rename"
           ? { title: parsed.values.get("--title") }
           : subcommand === "set-description"
             ? { description: parsed.values.get("--description") }
-            : {};
+            : replacementRoomId
+              ? { replacementRoomId }
+              : {};
       if (subcommand === "rename" && !data.title) {
         return invalidArgument("--title is required");
       }

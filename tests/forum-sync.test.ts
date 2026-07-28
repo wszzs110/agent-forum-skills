@@ -14,7 +14,7 @@ import { ServiceError } from "../src/services/errors.js";
 import { addRemoteForum, publishLocalForum } from "../src/services/forum-remote.js";
 import { refreshForumFromRemote, syncForum } from "../src/services/forum-sync.js";
 import { initLocalForum } from "../src/services/local-forum.js";
-import { createRoom, createRoomEvent, listRooms } from "../src/services/room.js";
+import { createRoom, createRoomEvent, listRooms, showRoom } from "../src/services/room.js";
 import { createThread } from "../src/services/thread.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
@@ -85,7 +85,7 @@ test("forum sync pulls remote commits and pushes local commits", async () => {
       },
       shared.sourcePaths,
     );
-    assert.equal((await syncForum("source", shared.sourcePaths)).outcome, "pushed");
+    assert.equal((await syncForum("source", shared.sourcePaths)).outcome, "up-to-date");
     const updated = await syncForum("target", target.paths);
     assert.equal(updated.outcome, "updated");
     assert.equal((await listRooms("target", target.paths)).rooms.length, 1);
@@ -101,7 +101,7 @@ test("forum sync pulls remote commits and pushes local commits", async () => {
       },
       target.paths,
     );
-    assert.equal((await syncForum("target", target.paths)).outcome, "pushed");
+    assert.equal((await syncForum("target", target.paths)).outcome, "up-to-date");
     assert.equal(
       (await syncForum("source", shared.sourcePaths)).outcome,
       "updated",
@@ -139,7 +139,7 @@ test("remote invalid Message metadata is isolated without blocking sync or later
     assert.deepEqual(await listConflicts("target", target.paths), { conflicts: [] });
 
     await createRoom({ forumAlias: "target", slug: "still-works", title: "Still works", description: "A valid Room after an isolated bad message.", roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ada", now: new Date("2026-07-12T10:21:00.000Z") }, target.paths);
-    assert.equal((await syncForum("target", target.paths)).outcome, "pushed");
+    assert.equal((await syncForum("target", target.paths)).outcome, "up-to-date");
     assert.equal((await syncForum("source", shared.sourcePaths)).outcome, "updated");
     assert.ok((await listRooms("source", shared.sourcePaths)).rooms.some((item) => item.slug === "still-works"));
   } finally {
@@ -181,6 +181,8 @@ test("Viewer refresh never pushes or rebases local commits", async () => {
       },
       target.paths,
     );
+    // 协议写操作会自动发布；Viewer refresh 仍必须跳过任意遗留的本地提交。
+    requireGit(target.forum.path, ["commit", "--allow-empty", "-m", "Unpublished local commit"]);
     const before = requireGit(target.forum.path, ["rev-parse", "HEAD"]).stdout.trim();
     const refreshed = await refreshForumFromRemote("target", target.paths);
     assert.equal(refreshed.outcome, "skipped-local-commits");
@@ -191,7 +193,7 @@ test("Viewer refresh never pushes or rebases local commits", async () => {
   }
 });
 
-test("concurrent unique commits converge through non-fast-forward retry", async () => {
+test("automatic write publication leaves diagnostic syncs converged", async () => {
   const root = await mkdtemp(join(tmpdir(), "agent-forum-sync-race-"));
   try {
     const shared = await setupSharedForum(root);
@@ -245,8 +247,8 @@ test("concurrent unique commits converge through non-fast-forward retry", async 
     ]);
     assert.equal(
       firstResult.retries + secondResult.retries,
-      1,
-      "exactly one writer should retry after the push race",
+      0,
+      "writes publish before an explicit diagnostic sync, so no second push race remains",
     );
     await syncForum("source", shared.sourcePaths);
     assert.deepEqual(
@@ -258,7 +260,7 @@ test("concurrent unique commits converge through non-fast-forward retry", async 
   }
 });
 
-test("semantic validation blocks concurrent duplicate Room slugs", async () => {
+test("automatic write refresh rejects an already-published duplicate Room slug", async () => {
   const root = await mkdtemp(join(tmpdir(), "agent-forum-sync-slug-"));
   try {
     const shared = await setupSharedForum(root);
@@ -275,27 +277,19 @@ test("semantic validation blocks concurrent duplicate Room slugs", async () => {
       },
       first.paths,
     );
-    await createRoom(
-      {
-        forumAlias: "second",
-        slug: "duplicate",
-        title: "Second Duplicate",
-        description: "Second",
-        roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ae2",
-        now: createdAt,
-      },
-      second.paths,
-    );
-    await syncForum("first", first.paths);
-    const originalHead = requireGit(second.forum.path, ["rev-parse", "HEAD"]).stdout.trim();
     await assert.rejects(
-      syncForum("second", second.paths),
-      (error) =>
-        error instanceof ServiceError && error.code === "SEMANTIC_CONFLICT",
-    );
-    assert.equal(
-      requireGit(second.forum.path, ["rev-parse", "HEAD"]).stdout.trim(),
-      originalHead,
+      createRoom(
+        {
+          forumAlias: "second",
+          slug: "duplicate",
+          title: "Second Duplicate",
+          description: "Second",
+          roomId: "room_0194f6d2-8c10-7a31-9e42-123456789ae2",
+          now: createdAt,
+        },
+        second.paths,
+      ),
+      (error) => error instanceof ServiceError && error.code === "ROOM_SLUG_EXISTS",
     );
     await syncForum("source", shared.sourcePaths);
     assert.deepEqual(
@@ -307,7 +301,7 @@ test("semantic validation blocks concurrent duplicate Room slugs", async () => {
   }
 });
 
-test("semantic validation blocks concurrent field events", async () => {
+test("automatic write refresh serializes field events against the latest Room state", async () => {
   const root = await mkdtemp(join(tmpdir(), "agent-forum-sync-event-"));
   try {
     const shared = await setupSharedForum(root);
@@ -347,12 +341,7 @@ test("semantic validation blocks concurrent field events", async () => {
       },
       second.paths,
     );
-    await syncForum("first", first.paths);
-    await assert.rejects(
-      syncForum("second", second.paths),
-      (error) =>
-        error instanceof ServiceError && error.code === "SEMANTIC_CONFLICT",
-    );
+    assert.equal((await showRoom("second", "shared-room", second.paths)).room.title, "Second Name");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

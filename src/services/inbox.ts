@@ -16,7 +16,7 @@ import {
   type AgentForumPaths,
 } from "../storage/paths.js";
 import { ServiceError } from "./errors.js";
-import { syncForum, type ForumSyncResult } from "./forum-sync.js";
+import { refreshForumFromRemote, type ForumRefreshResult } from "./forum-sync.js";
 import { listIdentityAttention } from "./identity-attention.js";
 import { listWatchedThreadIds } from "./thread-watch.js";
 import { getForumSnapshot } from "./timeline-cache.js";
@@ -250,7 +250,8 @@ function classifyEntries(entries: InboxEntry[], attentionIds: Set<string>, watch
 export async function getAllUnreadInboxEntries(
   input: { forumAlias: string; identityId?: string; sync?: boolean },
   paths: AgentForumPaths = createAgentForumPaths(),
-): Promise<{ entries: InboxEntry[]; warnings: ProtocolWarning[]; sync: ForumSyncResult | null }> {
+): Promise<{ entries: InboxEntry[]; warnings: ProtocolWarning[]; sync: ForumRefreshResult | null }> {
+  const sync = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
@@ -264,7 +265,6 @@ export async function getAllUnreadInboxEntries(
       `identity is not an active Forum member: ${identity.memberId}`,
     );
   }
-  const sync = input.sync ? await syncForum(input.forumAlias, paths) : null;
   const [collected, cursor, attention, watches] = await Promise.all([
     collectRelevantEntries(input.forumAlias, identity.memberId, paths),
     loadCursor(paths, registration.forumId, identity.memberId),
@@ -293,9 +293,10 @@ function balancedPage(entries: InboxEntry[], limit: number): InboxEntry[] {
 }
 
 export async function showInboxEntry(
-  input: { forumAlias: string; identityId?: string; id: string },
+  input: { forumAlias: string; identityId?: string; id: string; sync?: boolean },
   paths: AgentForumPaths = createAgentForumPaths(),
-): Promise<{ entry: InboxEntry; content: { body?: string; reason?: string; data?: unknown }; cache: "hit" | "incremental" | "rebuilt" | "fallback" }> {
+): Promise<{ entry: InboxEntry; content: { body?: string; reason?: string; data?: unknown }; cache: "hit" | "incremental" | "rebuilt" | "fallback"; sync: ForumRefreshResult | null }> {
+  const sync = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
@@ -307,8 +308,8 @@ export async function showInboxEntry(
   try {
     const cached = await getForumSnapshot(input.forumAlias, paths);
     const item = cached.snapshot.rooms.flatMap((room) => [...room.events, ...room.threads.flatMap((thread) => thread.timeline)]).find((candidate) => candidate.id === entry.id);
-    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache };
-    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache };
+    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache, sync };
+    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache, sync };
   } catch {
     // 缓存仅用于加速；任意缓存问题均回退到协议读取。
   }
@@ -316,13 +317,13 @@ export async function showInboxEntry(
     const detail = await showThread(input.forumAlias, entry.roomId, entry.threadId, paths);
     const message = detail.messages.find((item) => item.id === entry.id);
     if (!message) throw new ServiceError("MESSAGE_NOT_FOUND", `message was not found: ${entry.id}`);
-    return { entry, content: { body: message.body }, cache: "fallback" as const };
+    return { entry, content: { body: message.body }, cache: "fallback" as const, sync };
   }
   const eventPath = entry.threadId
     ? resolve(registration.path, "rooms", entry.roomId, "threads", entry.threadId, "events", entry.id, "event.json")
     : resolve(registration.path, "rooms", entry.roomId, "events", entry.id, "event.json");
   const event = await readJsonDocument(eventPath, "event");
-  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback" as const };
+  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback" as const, sync };
 }
 
 export async function getInbox(
@@ -343,7 +344,7 @@ export async function getInbox(
   hasMore: boolean;
   markedRead: number;
   warnings: ProtocolWarning[];
-  sync: ForumSyncResult | null;
+  sync: ForumRefreshResult | null;
 }> {
   const limit = input.limit ?? 20;
   const summaryChars = input.summaryChars ?? 180;
@@ -353,6 +354,7 @@ export async function getInbox(
   if (!Number.isInteger(summaryChars) || summaryChars < 0 || summaryChars > 500) {
     throw new StorageError("SCHEMA_VALIDATION_FAILED", "inbox summaryChars must be between 0 and 500");
   }
+  const syncResult = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
@@ -366,7 +368,6 @@ export async function getInbox(
       `identity is not an active Forum member: ${identity.memberId}`,
     );
   }
-  const syncResult = input.sync ? await syncForum(input.forumAlias, paths) : null;
   const [collected, cursor, attention, watches] = await Promise.all([
     collectRelevantEntries(input.forumAlias, identity.memberId, paths),
     loadCursor(paths, registration.forumId, identity.memberId),
