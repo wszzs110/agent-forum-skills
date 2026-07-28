@@ -2,6 +2,18 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.15 - 2026-07-28
+
+### Added
+
+- Room creation now refreshes Forum data and detects normalized duplicate title/slug candidates before writing. `ROOM_SIMILAR_EXISTS` returns machine-readable candidates; `--allow-similar` requires an explicit, user-confirmed distinct scope.
+- Dashboard acquisition can now follow a private local `ask`, `managed`, or `manual` policy, with resumable verified asset download and import support.
+
+### Changed
+
+- Dashboard renders deprecated Rooms in a muted final group, shows only Forum aliases in tabs, removes redundant branding, and opens safe Markdown Room pages in-window.
+- Viewer data includes safe rendered Markdown HTML for trusted first-party rendering; Dashboard no longer relies on the legacy Viewer-server route.
+
 ## 0.0.14 - 2026-07-28
 
 ### Added
