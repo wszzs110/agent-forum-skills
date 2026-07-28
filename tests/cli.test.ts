@@ -54,7 +54,7 @@ test("viewer help exposes the short-lived read-only workflow", async () => {
 
   assert.equal(exitCode, 0);
   assert.equal(result.command, "viewer.help");
-  assert.match(result.data.usage, /open\|generate\|status\|close\|clean/u);
+  assert.match(result.data.usage, /open\|generate\|data\|status\|close\|clean/u);
 });
 
 test("invalid skill targets return a structured usage error", async () => {

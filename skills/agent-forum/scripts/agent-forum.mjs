@@ -12412,10 +12412,10 @@ async function readRoomMembers(repository2, roomId) {
   } catch {
     return members;
   }
-  for (const name of names) {
+  for (const name of names.filter((entry) => entry.endsWith(".json"))) {
     try {
-      const membership = await readJsonDocument(resolve13(directory, name, "membership.json"), "room-member");
-      members[name] = {
+      const membership = await readJsonDocument(resolve13(directory, name), "room-member");
+      members[String(membership.memberId)] = {
         role: String(membership.role),
         responsibility: String(membership.responsibility),
         status: String(membership.status)
@@ -16329,6 +16329,7 @@ import { randomBytes as randomBytes2, randomUUID as randomUUID7 } from "node:cry
 import { spawn as spawn3 } from "node:child_process";
 import { mkdir as mkdir8, readFile as readFile17, readdir as readdir11, rm as rm12 } from "node:fs/promises";
 import { dirname as dirname6, resolve as resolve22 } from "node:path";
+init_local_config();
 init_errors2();
 
 // src/viewer/server.ts
@@ -16957,6 +16958,67 @@ async function openViewer(input, paths = createAgentForumPaths()) {
     await lock.release();
   }
 }
+async function getViewerRoomData(input, paths = createAgentForumPaths()) {
+  const context = await resolveContext({ ...input.cwd ? { cwd: input.cwd } : {}, ...input.forumAlias ? { forumAlias: input.forumAlias } : {}, ...input.room ? { room: input.room } : {} }, paths);
+  if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  const cached = await getForumSnapshot(context.forumAlias, paths);
+  const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId || item.room.slug === context.roomId);
+  if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
+  const snapshot = cached.snapshot;
+  const memberStats = /* @__PURE__ */ new Map();
+  const activeMemberIds = Object.entries(room.members).filter(([, m]) => m.status === "active").map(([id]) => id);
+  for (const id of activeMemberIds) memberStats.set(id, { messageCount: 0, lastMessageAt: null });
+  let totalMessages = 0;
+  const threads = room.threads.map((cachedThread) => {
+    const messages = cachedThread.timeline.filter((item) => item.kind === "message");
+    const replyCount = messages.filter((m) => m.replyTo).length;
+    let lastActivityAt = cachedThread.thread.createdAt;
+    for (const msg of messages) {
+      totalMessages += 1;
+      if (msg.createdAt > lastActivityAt) lastActivityAt = msg.createdAt;
+      const stats = memberStats.get(msg.authorId);
+      if (stats) {
+        stats.messageCount += 1;
+        if (!stats.lastMessageAt || msg.createdAt > stats.lastMessageAt) stats.lastMessageAt = msg.createdAt;
+      }
+    }
+    const creator = snapshot.members[cachedThread.thread.createdBy];
+    return {
+      id: cachedThread.thread.id,
+      title: cachedThread.thread.title,
+      kind: cachedThread.thread.kind,
+      status: cachedThread.thread.status,
+      authorId: cachedThread.thread.createdBy,
+      authorName: creator?.displayName ?? cachedThread.thread.createdBy,
+      replyCount,
+      lastActivityAt,
+      messages: messages.map((msg) => ({
+        id: msg.id,
+        authorId: msg.authorId,
+        authorName: snapshot.members[msg.authorId]?.displayName ?? msg.authorId,
+        type: msg.type,
+        body: msg.body,
+        replyTo: msg.replyTo ?? null,
+        createdAt: msg.createdAt
+      }))
+    };
+  });
+  threads.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  const members = activeMemberIds.map((id) => {
+    const profile = snapshot.members[id];
+    const stats = memberStats.get(id);
+    return { id, displayName: profile?.displayName ?? id, role: profile?.role ?? room.members[id]?.role ?? "", messageCount: stats.messageCount, lastMessageAt: stats.lastMessageAt };
+  });
+  members.sort((a, b) => b.messageCount - a.messageCount || (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
+  return {
+    room: { id: room.room.id, slug: room.room.slug, title: room.room.title, description: room.room.description, status: room.room.status },
+    forum: { alias: snapshot.forumAlias, name: snapshot.forum.name, dataBranch: findForum(await loadLocalConfig(paths), snapshot.forumAlias).dataBranch },
+    syncedAt: snapshot.generatedAt,
+    stats: { threadCount: threads.length, messageCount: totalMessages, memberCount: members.length },
+    threads,
+    members
+  };
+}
 async function generateViewerHtml(input, paths = createAgentForumPaths()) {
   const context = await resolveContext({ ...input.cwd ? { cwd: input.cwd } : {}, ...input.forumAlias ? { forumAlias: input.forumAlias } : {}, ...input.room ? { room: input.room } : {} }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
@@ -16979,14 +17041,25 @@ async function executeViewerCommand(args2) {
     return {
       exitCode: ExitCode.Success,
       command: "viewer.help",
-      data: { usage: "agent-forum viewer <open|generate|status|close|clean> [options]" },
-      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
+      data: { usage: "agent-forum viewer <open|generate|data|status|close|clean> [options]" },
+      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer data [--forum <alias> --room <room>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
     };
   }
-  if (!["open", "generate", "status", "close", "clean", "serve", "launch"].includes(subcommand)) {
+  if (!["open", "generate", "status", "close", "clean", "serve", "launch", "data"].includes(subcommand)) {
     return invalidArgument(`unknown viewer subcommand: ${subcommand}`);
   }
   try {
+    if (subcommand === "data") {
+      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--cwd"] });
+      if ("error" in parsed2) return invalidArgument(parsed2.error);
+      const forumAlias2 = parsed2.values.get("--forum");
+      const room2 = parsed2.values.get("--room");
+      const cwd = parsed2.values.get("--cwd");
+      if (Boolean(forumAlias2) !== Boolean(room2)) return invalidArgument("--forum and --room must be provided together");
+      const result2 = await getViewerRoomData({ ...forumAlias2 ? { forumAlias: forumAlias2 } : {}, ...room2 ? { room: room2 } : {}, ...cwd ? { cwd } : {} });
+      return { exitCode: ExitCode.Success, command: "viewer.data", data: result2, human: `${result2.room.title}: ${result2.stats.threadCount} threads, ${result2.stats.messageCount} messages, ${result2.stats.memberCount} members
+` };
+    }
     if (subcommand === "status") {
       if (args2.length !== 1) return invalidArgument("viewer status accepts no options");
       const sessions = await listViewerSessions();

@@ -97,10 +97,11 @@ async function readRoomMembers(repository: string, roomId: string): Promise<Cach
   const directory = resolve(repository, "rooms", roomId, "members");
   let names: string[] = [];
   try { names = await readdir(directory); } catch { return members; }
-  for (const name of names) {
+  for (const name of names.filter((entry) => entry.endsWith(".json"))) {
     try {
-      const membership = await readJsonDocument(resolve(directory, name, "membership.json"), "room-member");
-      members[name] = {
+      // Room membership 按“一名成员一个 JSON 文件”存储，不是目录内 membership.json。
+      const membership = await readJsonDocument(resolve(directory, name), "room-member");
+      members[String(membership.memberId)] = {
         role: String(membership.role),
         responsibility: String(membership.responsibility),
         status: String(membership.status),

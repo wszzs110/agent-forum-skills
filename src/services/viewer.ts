@@ -6,6 +6,7 @@ import { writeJsonAtomic } from "../storage/atomic.js";
 import { acquireForumLock } from "../storage/lock.js";
 import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js";
 import { resolveContext } from "./context.js";
+import { findForum, loadLocalConfig } from "../config/local-config.js";
 import { refreshForumFromRemote } from "./forum-sync.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
@@ -286,6 +287,72 @@ export async function openViewer(input: {
   } finally {
     await lock.release();
   }
+}
+
+export interface ViewerRoomData {
+  room: { id: string; slug: string; title: string; description: string; status: string };
+  forum: { alias: string; name: string; dataBranch: string };
+  syncedAt: string;
+  stats: { threadCount: number; messageCount: number; memberCount: number };
+  threads: Array<{
+    id: string; title: string; kind: string; status: string;
+    authorId: string; authorName: string; replyCount: number; lastActivityAt: string;
+    messages: Array<{ id: string; authorId: string; authorName: string; type: string; body: string; replyTo: string | null; createdAt: string }>;
+  }>;
+  members: Array<{ id: string; displayName: string; role: string; messageCount: number; lastMessageAt: string | null }>;
+}
+
+// 为 Dashboard 房间面板提供结构化 JSON 数据，不启动 HTTP server 或子进程。
+export async function getViewerRoomData(input: { forumAlias?: string; room?: string; cwd?: string }, paths = createAgentForumPaths()): Promise<ViewerRoomData> {
+  const context = await resolveContext({ ...(input.cwd ? { cwd: input.cwd } : {}), ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}), ...(input.room ? { room: input.room } : {}) }, paths);
+  if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
+  const cached = await getForumSnapshot(context.forumAlias, paths);
+  const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId || item.room.slug === context.roomId);
+  if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
+  const snapshot = cached.snapshot;
+  // 聚合成员活跃度：统计每个 Room 成员在本房间的消息数和最后发言时间
+  const memberStats = new Map<string, { messageCount: number; lastMessageAt: string | null }>();
+  const activeMemberIds = Object.entries(room.members).filter(([, m]) => m.status === "active").map(([id]) => id);
+  for (const id of activeMemberIds) memberStats.set(id, { messageCount: 0, lastMessageAt: null });
+  let totalMessages = 0;
+  const threads = room.threads.map((cachedThread) => {
+    const messages = cachedThread.timeline.filter((item): item is Extract<typeof item, { kind: "message" }> => item.kind === "message");
+    const replyCount = messages.filter((m) => m.replyTo).length;
+    let lastActivityAt = cachedThread.thread.createdAt;
+    for (const msg of messages) {
+      totalMessages += 1;
+      if (msg.createdAt > lastActivityAt) lastActivityAt = msg.createdAt;
+      const stats = memberStats.get(msg.authorId);
+      if (stats) {
+        stats.messageCount += 1;
+        if (!stats.lastMessageAt || msg.createdAt > stats.lastMessageAt) stats.lastMessageAt = msg.createdAt;
+      }
+    }
+    const creator = snapshot.members[cachedThread.thread.createdBy];
+    return {
+      id: cachedThread.thread.id, title: cachedThread.thread.title, kind: cachedThread.thread.kind, status: cachedThread.thread.status,
+      authorId: cachedThread.thread.createdBy, authorName: creator?.displayName ?? cachedThread.thread.createdBy,
+      replyCount, lastActivityAt,
+      messages: messages.map((msg) => ({
+        id: msg.id, authorId: msg.authorId, authorName: snapshot.members[msg.authorId]?.displayName ?? msg.authorId,
+        type: msg.type, body: msg.body, replyTo: msg.replyTo ?? null, createdAt: msg.createdAt,
+      })),
+    };
+  });
+  threads.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  const members = activeMemberIds.map((id) => {
+    const profile = snapshot.members[id];
+    const stats = memberStats.get(id)!;
+    return { id, displayName: profile?.displayName ?? id, role: profile?.role ?? room.members[id]?.role ?? "", messageCount: stats.messageCount, lastMessageAt: stats.lastMessageAt };
+  });
+  members.sort((a, b) => b.messageCount - a.messageCount || (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
+  return {
+    room: { id: room.room.id, slug: room.room.slug, title: room.room.title, description: room.room.description, status: room.room.status },
+    forum: { alias: snapshot.forumAlias, name: snapshot.forum.name, dataBranch: findForum(await loadLocalConfig(paths), snapshot.forumAlias).dataBranch },
+    syncedAt: snapshot.generatedAt,
+    stats: { threadCount: threads.length, messageCount: totalMessages, memberCount: members.length },
+    threads, members,
+  };
 }
 
 export async function generateViewerHtml(input: { forumAlias?: string; room?: string; cwd?: string; output?: string }, paths = createAgentForumPaths()): Promise<{ output: string }> {

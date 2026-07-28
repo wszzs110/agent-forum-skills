@@ -1,6 +1,6 @@
 import { ExitCode } from "../errors.js";
 import { createAgentForumPaths } from "../storage/paths.js";
-import { cleanViewerSessions, closeViewerSession, generateViewerHtml, launchViewerInline, listViewerSessions, openViewer, runViewerServer } from "../services/viewer.js";
+import { cleanViewerSessions, closeViewerSession, generateViewerHtml, getViewerRoomData, launchViewerInline, listViewerSessions, openViewer, runViewerServer } from "../services/viewer.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import { parseCommandOptions } from "./options.js";
 import type { CommandExecution } from "./types.js";
@@ -11,14 +11,24 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
     return {
       exitCode: ExitCode.Success,
       command: "viewer.help",
-      data: { usage: "agent-forum viewer <open|generate|status|close|clean> [options]" },
-      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n",
+      data: { usage: "agent-forum viewer <open|generate|data|status|close|clean> [options]" },
+      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer data [--forum <alias> --room <room>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n",
     };
   }
-  if (!["open", "generate", "status", "close", "clean", "serve", "launch"].includes(subcommand)) {
+  if (!["open", "generate", "status", "close", "clean", "serve", "launch", "data"].includes(subcommand)) {
     return invalidArgument(`unknown viewer subcommand: ${subcommand}`);
   }
   try {
+    if (subcommand === "data") {
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--cwd"] });
+      if ("error" in parsed) return invalidArgument(parsed.error);
+      const forumAlias = parsed.values.get("--forum");
+      const room = parsed.values.get("--room");
+      const cwd = parsed.values.get("--cwd");
+      if (Boolean(forumAlias) !== Boolean(room)) return invalidArgument("--forum and --room must be provided together");
+      const result = await getViewerRoomData({ ...(forumAlias ? { forumAlias } : {}), ...(room ? { room } : {}), ...(cwd ? { cwd } : {}) });
+      return { exitCode: ExitCode.Success, command: "viewer.data", data: result, human: `${result.room.title}: ${result.stats.threadCount} threads, ${result.stats.messageCount} messages, ${result.stats.memberCount} members\n` };
+    }
     if (subcommand === "status") {
       if (args.length !== 1) return invalidArgument("viewer status accepts no options");
       const sessions = await listViewerSessions();

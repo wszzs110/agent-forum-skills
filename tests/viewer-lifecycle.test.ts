@@ -7,7 +7,7 @@ import { createLocalIdentity } from "../src/config/local-config.js";
 import { initLocalForum } from "../src/services/local-forum.js";
 import { createRoom } from "../src/services/room.js";
 import { createThread } from "../src/services/thread.js";
-import { closeViewerSession, generateViewerHtml, listViewerSessions, openViewer, viewerServerLaunchArgs } from "../src/services/viewer.js";
+import { closeViewerSession, generateViewerHtml, getViewerRoomData, listViewerSessions, openViewer, viewerServerLaunchArgs } from "../src/services/viewer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
 function isProcessAlive(pid: number): boolean {
@@ -33,6 +33,23 @@ test("自包含 CLI 启动 Viewer 时不将自身可执行文件误传为子命�
   const command = ["viewer", "serve", "--forum", "team"];
   assert.deepEqual(viewerServerLaunchArgs("/tmp/agent-forum-dashboard-cli", command, "/tmp/agent-forum-dashboard-cli"), command);
   assert.deepEqual(viewerServerLaunchArgs("/tmp/agent-forum.mjs", command, "/usr/bin/node"), ["/tmp/agent-forum.mjs", ...command]);
+});
+
+test("Viewer data returns active Room members and deterministic activity data", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-viewer-data-"));
+  try {
+    const paths = await setup(home);
+    const data = await getViewerRoomData({ forumAlias: "team", room: "review" }, paths);
+    assert.equal(data.room.title, "Review");
+    assert.equal(data.stats.threadCount, 1);
+    assert.equal(data.stats.messageCount, 1);
+    assert.equal(data.stats.memberCount, 1);
+    assert.equal(data.members[0]?.displayName, "Viewer Agent");
+    assert.equal(data.members[0]?.messageCount, 1);
+    assert.equal(data.threads[0]?.messages[0]?.body, "Visible marker 你好");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test("Viewer launcher becomes ready, reports status, and closes without blocking", async () => {
