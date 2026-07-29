@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
-import { getInbox, showInboxEntry } from "../src/services/inbox.js";
+import { runCli } from "../src/cli.js";
+import { getInbox, markInboxEntriesRead, showInboxEntry } from "../src/services/inbox.js";
 import { initLocalForum, publishIdentity } from "../src/services/local-forum.js";
 import { createRoom, joinRoom, leaveRoom } from "../src/services/room.js";
 import { createPost, createThread, createThreadEvent } from "../src/services/thread.js";
@@ -94,10 +95,42 @@ test("Inbox returns relevant unread entries newest-first and marks pages explici
     const remaining = await getInbox({ forumAlias: "team" }, paths);
     assert.equal(remaining.totalUnread, 1);
     assert.equal(remaining.entries[0]?.type, "question");
+    const precise = await markInboxEntriesRead({ forumAlias: "team", ids: [remaining.entries[0]!.id] }, paths);
+    assert.equal(precise.markedRead, 1);
+    assert.equal(precise.alreadyRead, 0);
+    const repeated = await markInboxEntriesRead({ forumAlias: "team", ids: [remaining.entries[0]!.id] }, paths);
+    assert.equal(repeated.markedRead, 0);
+    assert.equal(repeated.alreadyRead, 1);
+    await createPost({ forumAlias: "team", room: "checkout", thread: threadId, identityId: memberB, type: "status", body: "One more update.", now: new Date("2026-07-12T10:23:00.000Z") }, paths);
     const all = await getInbox({ forumAlias: "team", markAllRead: true }, paths);
     assert.equal(all.markedRead, 1);
     assert.equal((await getInbox({ forumAlias: "team" }, paths)).totalUnread, 0);
   } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Inbox CLI precisely marks selected IDs and exposes help", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-inbox-cli-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    const paths = await setup(home);
+    const created = await createThread({ forumAlias: "team", room: "checkout", identityId: memberB, title: "CLI read", kind: "question", body: "Inspect this exact entry.", threadId, now: new Date("2026-07-12T10:21:00.000Z") }, paths);
+    const output: string[] = [];
+    assert.equal(await runCli(["--json", "inbox", "mark-read", "--forum", "team", "--id", created.firstMessage.id, "--no-sync"], { stdout: (value) => output.push(value), stderr: () => undefined }), 0);
+    const envelope = JSON.parse(output.join(""));
+    assert.equal(envelope.command, "inbox.mark-read");
+    assert.equal(envelope.data.markedRead, 1);
+    assert.equal((await getInbox({ forumAlias: "team" }, paths)).totalUnread, 0);
+    const help: string[] = [];
+    assert.equal(await runCli(["inbox", "--help"], { stdout: (value) => help.push(value), stderr: () => undefined }), 0);
+    assert.match(help.join(""), /inbox mark-read/u);
+  } finally {
+    process.env.HOME = previousHome;
+    process.env.USERPROFILE = previousUserProfile;
     await rm(home, { recursive: true, force: true });
   }
 });

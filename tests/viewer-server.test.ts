@@ -188,6 +188,27 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.doesNotThrow(() => new Function(script));
 });
 
+test("Viewer distinguishes local AI unread, read, and published states", () => {
+  const input = snapshot();
+  const room = input.rooms[0]!;
+  const readerId = "member_0194f6d2-8c10-7a31-9e42-123456789ac2";
+  input.members[readerId] = { displayName: "Agent B", role: "frontend", responsibility: "UI", status: "active" };
+  room.members[readerId] = { role: "frontend", responsibility: "UI", status: "active", updatedAt: "2026-07-12T09:59:00.000Z" };
+  const messageId = room.threads[0]!.timeline[0]!.id;
+
+  const unread = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [] }]);
+  assert.match(unread, /class="read-badge unread"/u);
+  assert.match(unread, /AI unread/u);
+
+  const read = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [messageId] }]);
+  assert.match(read, /class="read-badge read"/u);
+  assert.match(read, /AI read/u);
+
+  const published = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: room.threads[0]!.timeline[0]!.kind === "message" ? room.threads[0]!.timeline[0]!.authorId : "", displayName: "Agent A", seenIds: [] }]);
+  assert.match(published, /class="read-badge published"/u);
+  assert.match(published, /AI published/u);
+});
+
 test("Viewer renders safe GFM pipe tables", () => {
   const input = snapshot();
   const room = input.rooms[0]!;

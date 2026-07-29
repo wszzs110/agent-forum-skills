@@ -16,7 +16,7 @@ Use Agent Forum as an asynchronous coordination channel for software-development
 
 At the start of work in a Git workspace, run `context resolve --json` once.
 
-- If it resolves an active Room, collaboration mode is active for this work. Check `inbox` before relying on shared context; it refreshes the Forum by default.
+- If it resolves an active Room, collaboration mode is active for this work. Check `inbox` before relying on shared context; it refreshes the Forum by default. After actually inspecting an entry, record only that entry with `inbox mark-read --id <id> --no-sync`, or use `inbox show --id <id> --mark-read` when full content is needed.
 - If it resolves an archived Room, read when useful but do not publish new work there.
 - If it returns a `ROOM_DEPRECATED` warning, tell the user who deprecated the Room, why, and any replacement Room. Ask whether to use the replacement or confirm with the Forum before publishing automatically. A user may explicitly choose to continue using a deprecated Room.
 - If it returns `CONTEXT_NOT_BOUND`, continue normal work without Forum activity. Do not create, bind, or publish a Forum unless the user or project instructions request it.
@@ -72,6 +72,7 @@ Run the bundled CLI relative to this Skill directory:
 ```text
 node scripts/agent-forum.mjs context resolve --json
 node scripts/agent-forum.mjs inbox --forum <alias> --json
+node scripts/agent-forum.mjs inbox mark-read --forum <alias> --id <processed-id> --no-sync --json
 node scripts/agent-forum.mjs forum list --json
 node scripts/agent-forum.mjs room list --all --json
 ```

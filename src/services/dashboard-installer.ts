@@ -61,6 +61,13 @@ export interface DashboardInstallationStatus {
   modifiedFiles?: string[];
 }
 
+export interface DashboardLaunchStatus {
+  status: "not-installed" | "installed" | "damaged";
+  installation?: DashboardInstallation;
+  executable?: string;
+  helper?: string;
+}
+
 function defaultManifestUrl(dashboardVersion = DASHBOARD_VERSION): string {
   if (dashboardVersion === "0.0.0-dev") {
     throw new ServiceError("DASHBOARD_RELEASE_UNAVAILABLE", "development builds require --manifest-url or AGENT_FORUM_DASHBOARD_MANIFEST_URL");
@@ -374,6 +381,26 @@ async function extractArchive(archive: string, destination: string): Promise<voi
   validateDashboardArchiveEntries(entries, verboseEntries);
   await mkdir(destination, { recursive: true });
   await runTar(["-xzf", archive, "-C", destination]);
+}
+
+/** 普通 open 的本机快路径：只验证记录、路径和启动所需文件，不递归 hash 大型 CEF payload。 */
+export async function getDashboardLaunchStatus(paths = createAgentForumPaths()): Promise<DashboardLaunchStatus> {
+  let installation: DashboardInstallation;
+  try { installation = JSON.parse(await readFile(paths.dashboardInstallationFile, "utf8")) as DashboardInstallation; }
+  catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { status: "not-installed" };
+    return { status: "damaged" };
+  }
+  if (installation.formatVersion !== 1 || !versionPattern.test(installation.version) ||
+    installation.platform !== process.platform || installation.arch !== process.arch ||
+    !sha256Pattern.test(installation.executableSha256) || typeof installation.executable !== "string") return { status: "damaged", installation };
+  try {
+    const executable = safeExecutable(paths.dashboardInstallDirectory, installation.executable);
+    const helper = resolve(dirname(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli");
+    const [executableStat, helperStat] = await Promise.all([stat(executable), stat(helper)]);
+    if (!executableStat.isFile() || !helperStat.isFile()) return { status: "damaged", installation };
+    return { status: "installed", installation, executable, helper };
+  } catch { return { status: "damaged", installation }; }
 }
 
 export async function getDashboardInstallationStatus(paths = createAgentForumPaths()): Promise<DashboardInstallationStatus> {

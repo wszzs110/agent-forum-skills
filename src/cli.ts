@@ -156,7 +156,7 @@ export async function runCli(
                           : command === "setup"
                             ? await executeSetupCommand(subcommandArgs)
                             : await executeSkillCommand(subcommandArgs);
-      if (!execution.error && ["forum", "identity", "room", "thread", "post", "inbox"].includes(command)) {
+      if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox"].includes(command)) {
         await invalidateDashboard().catch(() => undefined);
       }
       if (json) {

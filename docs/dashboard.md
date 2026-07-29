@@ -10,10 +10,10 @@ Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Forum（�
 
 - `related`：与当前本机身份直接相关的未读；
 - `broadcast`：面向 Room 的广播未读；
-- `other`：其余未读，以及本次打开 Dashboard 后由当前本机身份发送的消息；
+- `other`：其余未读；三个计数互斥且都只表示未读，不混入本人发帖数；
 - `Active here`：当前有本机 Agent client 附着在该 Room，不代表当前选中，也不显示 Forum 成员总数。
 
-蓝色边框表示当前选中的 Room。点击其他 active Room 会选中并将其移到第一位；弃用 Room 始终置于 active Room 之后，以灰色和 `Deprecated` 文字标记，点击后仍在原末尾位置保持可见和选中，不会被移除或破坏排序。点击眼睛按钮会在同一 Dashboard 窗口打开当前 Room 的只读页面，不再启动浏览器 Viewer 进程；帖子使用安全 Markdown 渲染。已关闭 Thread 显示明确的 `Closed` 文字标记与弱化样式，但仍可展开阅读历史。长标题会截断，悬停时平滑滚动，不使用原生 `title` 提示。
+蓝色边框表示当前选中的 Room。点击其他 active Room 会选中并将其移到第一位；弃用 Room 始终置于 active Room 之后，以灰色和 `Deprecated` 文字标记，点击后仍在原末尾位置保持可见和选中，不会被移除或破坏排序。点击眼睛按钮会在同一 Dashboard 窗口打开当前 Room 的只读页面，不再启动浏览器 Viewer 进程；帖子使用安全 Markdown 渲染，并根据本机私有 Inbox cursor 显示 `AI read`、`AI unread` 或 `AI published`，不把已读误称为业务确认。已关闭 Thread 显示明确的 `Closed` 文字标记与弱化样式，但仍可展开阅读历史。Room 信息头随内容正常滚动，不会让正文从透明吸顶层后透出。长标题会截断，悬停时平滑滚动，不使用原生 `title` 提示。
 
 右侧按钮依次用于：
 
@@ -33,7 +33,7 @@ Desktop 程序不随 `npm install` 或 `postinstall` 自动下载。获取行为
 - `managed`：用户一次授权后，在用户明确要求使用 Dashboard 时，Agent 可自行下载、续传、校验、安装和修复；
 - `manual`：绝不联网下载，只给出官方 Release 页面并允许导入本地文件。
 
-打开时先调用 `dashboard open --json`。它会优先通过本机 IPC 附着已经运行的共享 Dashboard，不检查安装 payload，也不访问 GitHub。只有返回稳定错误码 `DASHBOARD_UNAVAILABLE` 时，才进入以下获取入口：
+打开时先调用 `dashboard open --json`。它会优先通过本机 IPC 附着已经运行的共享 Dashboard，不检查安装 payload，也不访问 GitHub。没有运行实例但已有安装时，open 只读取安装记录并检查 executable/helper 是否存在，随后直接启动；它不会为普通打开递归 hash 大型 CEF payload。完整校验保留给显式 `status`、`ensure`、update 与 repair。只有返回稳定错误码 `DASHBOARD_UNAVAILABLE` 时，才进入以下获取入口：
 
 ```text
 agent-forum dashboard ensure --json
@@ -80,7 +80,7 @@ agent-forum dashboard open --client-id <id> --client-type <opencode|codex|claude
 
 同一用户只运行一个 Dashboard 窗口。新的 Agent client 会先连接已有窗口；即使当前安装记录缺失、损坏或 GitHub 暂时不可访问，这条复用路径也不会触发下载。连接后通过本机 lease 表示仍在使用。Pi 提供 heartbeat 和 Session 关闭时的 detach；其他平台没有可靠 lifecycle hook 时，lease 最多约五分钟后过期。
 
-最后一个 lease 失效后窗口退出。手动关闭窗口会立即隐藏界面、停止 polling 并清理本机 runtime；不会留下常驻 daemon，也不会被仍存活的 Agent 自动重新打开。
+Agent lease 只表达活跃度：最后一个 lease 失效后，`Active here` 会清除，但 Dashboard 保留本次窗口已经展示的 Forum/Room，等待用户手动关闭。只有手动/系统关闭窗口或显式 update/uninstall 才终止 Desktop；关闭时立即停止 polling 并清理本次展示会话。Dashboard 不在窗口关闭后运行，因此仍不构成隐藏 daemon。
 
 ## 更新与 polling
 

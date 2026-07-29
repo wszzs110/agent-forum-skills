@@ -59,6 +59,29 @@ test("Pi Dashboard 先复用运行实例，仅在明确不可用时获取安装"
   assert.ok(firstOpen >= 0 && firstEnsure > firstOpen, "running Desktop IPC attach must precede acquisition");
   assert.match(openHandler, /result\.error\?\.code === "DASHBOARD_UNAVAILABLE"/u);
   assert.match(openHandler, /finally \{\s*ctx\.ui\.setStatus\("agent-forum-dashboard", undefined\)/u);
+  assert.doesNotMatch(source, /executeCli\(\["dashboard", "(?:status|uninstall)", "--json"\]/u, "executeCli already adds the global JSON option");
+});
+
+test("Dashboard CLI open 先复用 IPC，再走轻量本机启动检查", async () => {
+  const source = await readFile(join(process.cwd(), "src", "commands", "dashboard.ts"), "utf8");
+  const start = source.indexOf('if (subcommand === "open")');
+  const end = source.indexOf('if (subcommand === "pin")', start);
+  assert.ok(start >= 0 && end > start);
+  const open = source.slice(start, end);
+  const attach = open.indexOf("attachExistingDashboardDesktop(");
+  const launchStatus = open.indexOf("getDashboardLaunchStatus(");
+  assert.ok(attach >= 0 && launchStatus > attach, "running Desktop attach must precede installation reads");
+  assert.doesNotMatch(open, /getDashboardInstallationStatus\(/u, "ordinary open must not recursively hash the installation");
+});
+
+test("Dashboard 最后一个 Agent 离开后等待用户手动关闭", async () => {
+  const source = await readFile(join(process.cwd(), "dashboard", "main.ts"), "utf8");
+  const detach = source.slice(source.indexOf('url.pathname === "/detach"'), source.indexOf('url.pathname === "/close"'));
+  const lease = source.slice(source.indexOf("const leaseTimer"), source.indexOf("async function shutdown"));
+  assert.doesNotMatch(detach, /shutdown\(/u);
+  assert.doesNotMatch(lease, /clients\.size === 0/u);
+  assert.match(lease, /runCli\(\["dashboard", "lease-status"\]\)/u, "lease checks must not run the expensive installation status command");
+  assert.match(source, /await attachLease\(initialClient, true\)/u);
 });
 
 test("Dashboard 选择弃用 Room 时保留末尾顺序和可见性", async () => {
@@ -116,6 +139,16 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.match(source, /t\.status==='closed'\?'<span class="rp-thread-status closed">Closed<\/span>'/u);
   assert.match(source, /\.rp-thread\.closed/);
   assert.match(source, /message\.bodyHtml/);
+  assert.match(source, /receiptBadge\(m\.localReceipt\)/u);
+  assert.match(source, /AI unread/u);
+  assert.match(source, /title="Related unread"/u);
+  assert.match(source, /title="Broadcast unread"/u);
+  assert.match(source, /title="Other unread"/u);
+  assert.match(source, /function refreshOpenRoomPanel\(/u, "an open Room page refreshes when the Dashboard revision changes");
+  const refreshStart = source.indexOf("function refreshOpenRoomPanel(");
+  const refreshEnd = source.indexOf("\nsetInterval(refresh", refreshStart);
+  assert.doesNotThrow(() => new Function(source.slice(refreshStart, refreshEnd)), "Room panel refresh script must remain valid JavaScript");
+  assert.doesNotMatch(source, /\.rp-header\{position:sticky/u, "duplicate Room information header scrolls with content");
   assert.doesNotMatch(source, /Forum alias ·/);
   assert.doesNotMatch(source, /<strong>Forum<\/strong>/);
 });

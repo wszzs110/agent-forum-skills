@@ -12,7 +12,7 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
       exitCode: ExitCode.Success,
       command: "viewer.help",
       data: { usage: "agent-forum viewer <open|generate|data|status|close|clean> [options]" },
-      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer data [--forum <alias> --room <room>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n",
+      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--identity <member-id>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--identity <member-id>] [--output <file>]\n  agent-forum viewer data [--forum <alias> --room <room>] [--identity <member-id> ...]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n",
     };
   }
   if (!["open", "generate", "status", "close", "clean", "serve", "launch", "data"].includes(subcommand)) {
@@ -20,13 +20,14 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
   }
   try {
     if (subcommand === "data") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--cwd"] });
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--cwd"], repeatableValues: ["--identity"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = parsed.values.get("--forum");
       const room = parsed.values.get("--room");
       const cwd = parsed.values.get("--cwd");
       if (Boolean(forumAlias) !== Boolean(room)) return invalidArgument("--forum and --room must be provided together");
-      const result = await getViewerRoomData({ ...(forumAlias ? { forumAlias } : {}), ...(room ? { room } : {}), ...(cwd ? { cwd } : {}) });
+      const identityIds = parsed.multiValues.get("--identity");
+      const result = await getViewerRoomData({ ...(forumAlias ? { forumAlias } : {}), ...(room ? { room } : {}), ...(cwd ? { cwd } : {}), ...(identityIds?.length ? { identityIds } : {}) });
       return { exitCode: ExitCode.Success, command: "viewer.data", data: result, human: `${result.room.title}: ${result.stats.threadCount} threads, ${result.stats.messageCount} messages, ${result.stats.memberCount} members\n` };
     }
     if (subcommand === "status") {
@@ -46,16 +47,17 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
       return { exitCode: ExitCode.Success, command: "viewer.close", data: result, human: `Closed ${result.closed.length} Viewer session(s).\n` };
     }
     if (subcommand === "launch") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--home"] });
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--home", "--identity"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = parsed.values.get("--forum");
       const room = parsed.values.get("--room");
       if (!forumAlias || !room) return invalidArgument("invalid internal Viewer launch arguments");
-      await launchViewerInline({ forumAlias, room }, createAgentForumPaths(parsed.values.get("--home")));
+      const identityId = parsed.values.get("--identity");
+      await launchViewerInline({ forumAlias, room, ...(identityId ? { identityId } : {}) }, createAgentForumPaths(parsed.values.get("--home")));
       return { exitCode: ExitCode.Success, command: "viewer.launch", data: {}, human: "" };
     }
     if (subcommand === "serve") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home"] });
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home", "--identity"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = parsed.values.get("--forum");
       const room = parsed.values.get("--room");
@@ -64,11 +66,12 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
       const idleMs = Number(parsed.values.get("--idle-ms"));
       if (!forumAlias || !room || !sessionId || !token || !Number.isInteger(idleMs) || idleMs < 1000) return invalidArgument("invalid internal Viewer server arguments");
       const home = parsed.values.get("--home");
-      await runViewerServer({ forumAlias, room, sessionId, token, idleMs }, createAgentForumPaths(home));
+      const identityId = parsed.values.get("--identity");
+      await runViewerServer({ forumAlias, room, sessionId, token, idleMs, ...(identityId ? { identityId } : {}) }, createAgentForumPaths(home));
       return { exitCode: ExitCode.Success, command: "viewer.serve", data: {}, human: "" };
     }
     const parsed = parseCommandOptions(args.slice(1), {
-      values: ["--forum", "--room", "--output", "--home"],
+      values: ["--forum", "--room", "--output", "--home", "--identity"],
       flags: ["--no-sync", "--no-open"],
     });
     if ("error" in parsed) return invalidArgument(parsed.error);
@@ -76,16 +79,17 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
     const room = parsed.values.get("--room");
     const home = parsed.values.get("--home");
     const paths = createAgentForumPaths(home);
+    const identityId = parsed.values.get("--identity");
     if (Boolean(forumAlias) !== Boolean(room)) return invalidArgument("--forum and --room must be provided together");
     if (parsed.flags.has("--no-sync")) return invalidArgument("viewer always synchronizes before rendering; --no-sync is no longer supported");
     if (subcommand === "generate") {
       if (parsed.flags.size > 0) return invalidArgument("viewer generate does not accept --no-sync or --no-open");
       const output = parsed.values.get("--output");
-      const result = await generateViewerHtml({ ...(forumAlias ? { forumAlias } : {}), ...(room ? { room } : {}), ...(output ? { output } : {}) }, paths);
+      const result = await generateViewerHtml({ ...(forumAlias ? { forumAlias } : {}), ...(room ? { room } : {}), ...(output ? { output } : {}), ...(identityId ? { identityId } : {}) }, paths);
       return { exitCode: ExitCode.Success, command: "viewer.generate", data: result, human: `Generated ${result.output}\n` };
     }
     if (parsed.values.has("--output")) return invalidArgument("viewer open does not accept --output");
-    const result = await openViewer({ ...(forumAlias ? { forumAlias } : {}), ...(room ? { room } : {}), openBrowser: !parsed.flags.has("--no-open") }, paths);
+    const result = await openViewer({ ...(forumAlias ? { forumAlias } : {}), ...(room ? { room } : {}), ...(identityId ? { identityId } : {}), openBrowser: !parsed.flags.has("--no-open") }, paths);
     return { exitCode: ExitCode.Success, command: "viewer.open", data: result, human: `${result.url}\n${result.browserOpened ? "Opened in the default browser." : "Open this URL manually."}${result.replacedSessionIds.length ? `\nReplaced ${result.replacedSessionIds.length} existing Viewer session(s) for this Forum Room.` : ""}\n` };
   } catch (error) {
     const handled = commandError(`viewer.${subcommand}`, error);

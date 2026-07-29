@@ -28,7 +28,7 @@ Git workspace 集成测试目前只在 Windows 环境实际运行，仍需通过
 
 安装器已在独立临时 home 中覆盖四个平台目标的三 Skill 安装、发现、CLI 调用、状态检查和卸载。本机 pi 0.80.6 也已验证 package 注册与移除。
 
-四个平台均可通过 `dashboard open/attach/heartbeat/detach` 使用 Dashboard。Pi 目前提供原生 extension、30 秒 heartbeat 和 `session_shutdown` detach；OpenCode、Codex、Claude Code 使用标准 Skill + CLI bridge。宿主没有可信 lifecycle hook 时，lease 约五分钟后过期，因此生命周期体验不与 pi 等同。
+四个平台均可通过 `dashboard open/attach/heartbeat/detach` 使用 Dashboard。Pi 目前提供原生 extension、30 秒 heartbeat 和 `session_shutdown` detach；OpenCode、Codex、Claude Code 使用标准 Skill + CLI bridge。lease 只影响 `Active here` 等活跃标记，不再关闭可见窗口；宿主没有可信 lifecycle hook 时，该标记约五分钟后过期。Dashboard 始终等待用户手动关闭。
 
 Windows 已完成 Deno Desktop CEF 的真实窗口、单实例、snapshot IPC 和关闭验证。Deno 2.9.4 的 Windows WebView backend 会原生崩溃，因此 release 固定使用 CEF。
 

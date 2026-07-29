@@ -12650,7 +12650,8 @@ async function readRoomMembers(repository2, roomId) {
       members[String(membership.memberId)] = {
         role: String(membership.role),
         responsibility: String(membership.responsibility),
-        status: String(membership.status)
+        status: String(membership.status),
+        updatedAt: String(membership.updatedAt)
       };
     } catch {
     }
@@ -12713,7 +12714,7 @@ async function readMembers(repository2) {
 async function loadCache(path2) {
   try {
     const value = JSON.parse(await readFile10(path2, "utf8"));
-    const compatible = value.formatVersion === 1 && typeof value.sourceHead === "string" && Array.isArray(value.rooms) && value.rooms.every((room) => room && typeof room === "object" && "members" in room) && value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
+    const compatible = value.formatVersion === 1 && typeof value.sourceHead === "string" && Array.isArray(value.rooms) && value.rooms.every((room) => room && typeof room === "object" && "members" in room && Object.values(room.members).every((member) => member && typeof member.updatedAt === "string")) && value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
     return compatible ? value : void 0;
   } catch {
     return void 0;
@@ -12813,6 +12814,42 @@ async function loadCursor(paths, forumId, memberId) {
       "SCHEMA_VALIDATION_FAILED",
       `inbox cursor contains invalid JSON: ${path2}`
     );
+  }
+}
+async function getInboxReadCursor(input, paths = createAgentForumPaths()) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const cursor = await loadCursor(paths, registration.forumId, identity.memberId);
+  return { memberId: identity.memberId, seenIds: cursor.seenIds, updatedAt: cursor.updatedAt };
+}
+async function appendSeenIds(forumId, memberId, ids, paths) {
+  if (ids.length === 0) return { markedRead: 0, alreadyRead: 0 };
+  const lock = await acquireForumLock({
+    lockPath: resolve14(paths.locksDirectory, `${forumId}-${memberId}-cursor.lock`),
+    command: "inbox mark read"
+  });
+  try {
+    const latest = await loadCursor(paths, forumId, memberId);
+    const seen = new Set(latest.seenIds);
+    const additions = [...new Set(ids)].filter((id) => !seen.has(id));
+    if (additions.length > 0) {
+      await writeValidatedJsonAtomic(
+        cursorPath(paths, forumId, memberId),
+        "inbox-cursor",
+        {
+          formatVersion: 1,
+          forumId,
+          memberId,
+          seenIds: [...latest.seenIds, ...additions],
+          updatedAt: currentUtcTimestamp()
+        },
+        { overwrite: true, mode: 384 }
+      );
+    }
+    return { markedRead: additions.length, alreadyRead: ids.length - additions.length };
+  } finally {
+    await lock.release();
   }
 }
 async function readEvents(directory, roomId, roomSlug, threadId, actorId, activeSince) {
@@ -12979,6 +13016,22 @@ async function getAllUnreadInboxEntries(input, paths = createAgentForumPaths()) 
     sync
   };
 }
+async function markInboxEntriesRead(input, paths = createAgentForumPaths()) {
+  const ids = [...new Set(input.ids)];
+  if (ids.length === 0) throw new ServiceError("PROTOCOL_DATA_DAMAGED", "at least one Inbox entry ID is required");
+  const sync = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const publicProfile2 = await readJsonDocument(resolve14(registration.path, "members", identity.memberId, "profile.json"), "member-profile");
+  if (publicProfile2.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
+  const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
+  const eligible = new Set(collected.entries.filter((entry) => entry.actorId !== identity.memberId).map((entry) => entry.id));
+  const unknown = ids.filter((id) => !eligible.has(id));
+  if (unknown.length > 0) throw new ServiceError("MESSAGE_NOT_FOUND", `Inbox entries were not found or are outside active Room membership: ${unknown.join(", ")}`);
+  const result = await appendSeenIds(registration.forumId, identity.memberId, ids, paths);
+  return { ids, ...result, warnings: collected.warnings, sync };
+}
 function balancedPage(entries, limit) {
   const ordered = [...entries].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
   if (limit < 3) return ordered.slice(0, limit);
@@ -13048,33 +13101,7 @@ async function getInbox(input, paths = createAgentForumPaths()) {
   const unread = classifyEntries(collected.entries, attentionIds, new Set(watches.threadIds)).filter((entry) => entry.actorId !== identity.memberId && !seen.has(entry.id)).sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
   const page = balancedPage(unread, limit);
   const idsToMark = input.markAllRead ? unread.map((entry) => entry.id) : input.markRead ? page.map((entry) => entry.id) : [];
-  if (idsToMark.length > 0) {
-    const lock = await acquireForumLock({
-      lockPath: resolve14(
-        paths.locksDirectory,
-        `${registration.forumId}-${identity.memberId}-cursor.lock`
-      ),
-      command: "inbox mark read"
-    });
-    try {
-      const latest = await loadCursor(paths, registration.forumId, identity.memberId);
-      const nextSeen = [.../* @__PURE__ */ new Set([...latest.seenIds, ...idsToMark])];
-      await writeValidatedJsonAtomic(
-        cursorPath(paths, registration.forumId, identity.memberId),
-        "inbox-cursor",
-        {
-          formatVersion: 1,
-          forumId: registration.forumId,
-          memberId: identity.memberId,
-          seenIds: nextSeen,
-          updatedAt: currentUtcTimestamp()
-        },
-        { overwrite: true, mode: 384 }
-      );
-    } finally {
-      await lock.release();
-    }
-  }
+  if (idsToMark.length > 0) await appendSeenIds(registration.forumId, identity.memberId, idsToMark, paths);
   const relevanceCounts = { direct: 0, watched: 0, priority: 0, discovery: 0 };
   for (const entry of unread) relevanceCounts[entry.relevance] += 1;
   const displayed = page.map((entry) => {
@@ -13100,20 +13127,26 @@ async function getInbox(input, paths = createAgentForumPaths()) {
 var clientIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 var clientTypes = /* @__PURE__ */ new Set(["pi", "opencode", "codex", "claude-code"]);
 function emptyRuntime() {
-  return { formatVersion: 1, clients: [], pollingForumIds: [], pinnedRoomIds: [], revision: 0, updatedAt: currentUtcTimestamp() };
+  return { formatVersion: 1, clients: [], viewTargets: [], pollingForumIds: [], pinnedRoomIds: [], revision: 0, updatedAt: currentUtcTimestamp() };
 }
-function validClient(value) {
+function validViewTarget(value) {
   if (!value || typeof value !== "object") return false;
   const item = value;
-  return typeof item.clientId === "string" && clientIdPattern.test(item.clientId) && typeof item.clientType === "string" && clientTypes.has(item.clientType) && typeof item.forumAlias === "string" && typeof item.forumId === "string" && typeof item.roomId === "string" && typeof item.identityId === "string" && (item.attachedAt === void 0 || typeof item.attachedAt === "string" && !Number.isNaN(Date.parse(item.attachedAt))) && typeof item.expiresAt === "string" && !Number.isNaN(Date.parse(item.expiresAt));
+  return typeof item.forumAlias === "string" && typeof item.forumId === "string" && typeof item.roomId === "string" && typeof item.identityId === "string";
+}
+function validClient(value) {
+  if (!validViewTarget(value)) return false;
+  const item = value;
+  return typeof item.clientId === "string" && clientIdPattern.test(item.clientId) && typeof item.clientType === "string" && clientTypes.has(item.clientType) && (item.attachedAt === void 0 || typeof item.attachedAt === "string" && !Number.isNaN(Date.parse(item.attachedAt))) && typeof item.expiresAt === "string" && !Number.isNaN(Date.parse(item.expiresAt));
 }
 async function loadRuntime(paths) {
   try {
     const value = JSON.parse(await readFile12(paths.dashboardRuntimeFile, "utf8"));
-    if (value.formatVersion !== 1 || !Array.isArray(value.clients) || !value.clients.every(validClient) || !Array.isArray(value.pollingForumIds) || !value.pollingForumIds.every((id) => typeof id === "string") || !Array.isArray(value.pinnedRoomIds) || !value.pinnedRoomIds.every((id) => typeof id === "string")) {
+    if (value.formatVersion !== 1 || !Array.isArray(value.clients) || !value.clients.every(validClient) || value.viewTargets !== void 0 && (!Array.isArray(value.viewTargets) || !value.viewTargets.every(validViewTarget)) || !Array.isArray(value.pollingForumIds) || !value.pollingForumIds.every((id) => typeof id === "string") || !Array.isArray(value.pinnedRoomIds) || !value.pinnedRoomIds.every((id) => typeof id === "string")) {
       throw new ServiceError("PROTOCOL_DATA_DAMAGED", "Dashboard runtime state is invalid");
     }
-    return { formatVersion: 1, clients: value.clients, pollingForumIds: value.pollingForumIds, pinnedRoomIds: value.pinnedRoomIds, revision: Number.isSafeInteger(value.revision) && value.revision >= 0 ? value.revision : 0, updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : currentUtcTimestamp() };
+    const viewTargets = value.viewTargets ?? value.clients.map(({ forumAlias, forumId, roomId, identityId }) => ({ forumAlias, forumId, roomId, identityId }));
+    return { formatVersion: 1, clients: value.clients, viewTargets, pollingForumIds: value.pollingForumIds, pinnedRoomIds: value.pinnedRoomIds, revision: Number.isSafeInteger(value.revision) && value.revision >= 0 ? value.revision : 0, updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : currentUtcTimestamp() };
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return emptyRuntime();
     throw error;
@@ -13150,7 +13183,11 @@ async function attachDashboardClient(input, paths = createAgentForumPaths()) {
     const previous = runtime.clients.find((item) => item.clientId === client.clientId);
     if (previous?.attachedAt) client.attachedAt = previous.attachedAt;
     runtime.clients = [...runtime.clients.filter((item) => item.clientId !== client.clientId), client];
-    if (!previous || previous.clientType !== client.clientType || previous.forumId !== client.forumId || previous.roomId !== client.roomId || previous.identityId !== client.identityId) runtime.revision += 1;
+    const target2 = { forumAlias: client.forumAlias, forumId: client.forumId, roomId: client.roomId, identityId: client.identityId };
+    if (input.resetView) runtime.viewTargets = runtime.clients.map(({ forumAlias, forumId, roomId, identityId }) => ({ forumAlias, forumId, roomId, identityId }));
+    const targetKey = (item) => `${item.forumId}\0${item.roomId}\0${item.identityId}`;
+    runtime.viewTargets = [...runtime.viewTargets.filter((item) => targetKey(item) !== targetKey(target2)), target2];
+    if (input.resetView || !previous || previous.clientType !== client.clientType || previous.forumId !== client.forumId || previous.roomId !== client.roomId || previous.identityId !== client.identityId) runtime.revision += 1;
     return { client, activeClients: runtime.clients.length };
   });
 }
@@ -13166,13 +13203,13 @@ async function dashboardStatus(paths = createAgentForumPaths()) {
   const runtime = await loadRuntime(paths);
   const activeClients = active(runtime);
   if (activeClients.length !== runtime.clients.length) {
-    return mutateRuntime("dashboard status", paths, (current) => ({ clients: current.clients, pollingForumIds: current.pollingForumIds, pinnedRoomIds: current.pinnedRoomIds, revision: current.revision }));
+    return mutateRuntime("dashboard status", paths, (current) => ({ clients: current.clients, viewTargets: current.viewTargets, pollingForumIds: current.pollingForumIds, pinnedRoomIds: current.pinnedRoomIds, revision: current.revision }));
   }
-  return { clients: activeClients, pollingForumIds: runtime.pollingForumIds, pinnedRoomIds: runtime.pinnedRoomIds, revision: runtime.revision };
+  return { clients: activeClients, viewTargets: runtime.viewTargets, pollingForumIds: runtime.pollingForumIds, pinnedRoomIds: runtime.pinnedRoomIds, revision: runtime.revision };
 }
 async function invalidateDashboard(paths = createAgentForumPaths()) {
   await mutateRuntime("dashboard invalidate", paths, (runtime) => {
-    if (runtime.clients.length > 0) runtime.revision += 1;
+    if (runtime.viewTargets.length > 0) runtime.revision += 1;
   });
 }
 async function setDashboardForumPolling(forumId, enabled, paths = createAgentForumPaths()) {
@@ -13192,14 +13229,16 @@ async function setDashboardRoomPinned(roomId, pinned, paths = createAgentForumPa
 async function getDashboardSnapshot(paths = createAgentForumPaths()) {
   const runtime = await dashboardStatus(paths);
   const teams = /* @__PURE__ */ new Map();
-  for (const client of runtime.clients) teams.set(client.forumId, [...teams.get(client.forumId) ?? [], client]);
+  for (const target2 of runtime.viewTargets) teams.set(target2.forumId, [...teams.get(target2.forumId) ?? [], target2]);
   const result = [];
-  for (const [forumId, clients] of teams) {
-    const alias = clients[0].forumAlias;
+  for (const [forumId, targets2] of teams) {
+    const alias = targets2[0].forumAlias;
+    const clients = runtime.clients.filter((client) => client.forumId === forumId);
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation), status: room.room.status, threads: new Map(room.threads.map((thread) => [thread.thread.id, thread.thread.status])) }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation) }]));
     const seen = /* @__PURE__ */ new Set();
-    for (const identityId of new Set(clients.map((client) => client.identityId))) {
+    const identityIds = [...new Set(targets2.map((target2) => target2.identityId))];
+    for (const identityId of identityIds) {
       const inbox = await getAllUnreadInboxEntries({ forumAlias: alias, identityId }, paths);
       for (const entry of inbox.entries) {
         if (seen.has(entry.id)) continue;
@@ -13208,28 +13247,13 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
         if (!room) continue;
         if (entry.relevance === "direct" || entry.relevance === "watched") room.counts.related += 1;
         else if (entry.audience === "broadcast") room.counts.broadcast += 1;
-        else if (!entry.threadId || room.threads.get(entry.threadId) === "open") room.counts.other += 1;
+        else room.counts.other += 1;
       }
     }
-    const attachedAtByIdentity = /* @__PURE__ */ new Map();
-    for (const client of clients) {
-      const attachedAt = client.attachedAt ?? client.expiresAt;
-      const current = attachedAtByIdentity.get(client.identityId);
-      if (!current || attachedAt < current) attachedAtByIdentity.set(client.identityId, attachedAt);
-    }
-    for (const sourceRoom of snapshot.rooms) {
-      const room = byRoom.get(sourceRoom.room.id);
-      if (!room) continue;
-      for (const thread of sourceRoom.threads) {
-        for (const item of thread.timeline) {
-          if (item.kind === "message" && attachedAtByIdentity.get(item.authorId) !== void 0 && item.createdAt >= attachedAtByIdentity.get(item.authorId)) room.counts.other += 1;
-        }
-      }
-    }
-    const allRooms = [...byRoom.values()].map(({ status: _status, threads: _threads, ...room }) => room);
+    const allRooms = [...byRoom.values()];
     const counts = allRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other }), { related: 0, broadcast: 0, other: 0 });
     const rooms = allRooms.sort((left, right) => Number(left.deprecated) - Number(right.deprecated) || Number(right.pinned) - Number(left.pinned) || right.activeLocalAgents - left.activeLocalAgents || right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
-    result.push({ forumId, forumAlias: alias, polling: runtime.pollingForumIds.includes(forumId), counts, rooms });
+    result.push({ forumId, forumAlias: alias, polling: runtime.pollingForumIds.includes(forumId), identityIds, counts, rooms });
   }
   return { revision: runtime.revision, teams: result.sort((a, b) => a.forumAlias.localeCompare(b.forumAlias)), activeClients: runtime.clients.length };
 }
@@ -13560,6 +13584,25 @@ async function extractArchive(archive2, destination) {
   await mkdir3(destination, { recursive: true });
   await runTar(["-xzf", archive2, "-C", destination]);
 }
+async function getDashboardLaunchStatus(paths = createAgentForumPaths()) {
+  let installation;
+  try {
+    installation = JSON.parse(await readFile13(paths.dashboardInstallationFile, "utf8"));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { status: "not-installed" };
+    return { status: "damaged" };
+  }
+  if (installation.formatVersion !== 1 || !versionPattern.test(installation.version) || installation.platform !== process.platform || installation.arch !== process.arch || !sha256Pattern.test(installation.executableSha256) || typeof installation.executable !== "string") return { status: "damaged", installation };
+  try {
+    const executable = safeExecutable(paths.dashboardInstallDirectory, installation.executable);
+    const helper = resolve16(dirname3(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli");
+    const [executableStat, helperStat] = await Promise.all([stat3(executable), stat3(helper)]);
+    if (!executableStat.isFile() || !helperStat.isFile()) return { status: "damaged", installation };
+    return { status: "installed", installation, executable, helper };
+  } catch {
+    return { status: "damaged", installation };
+  }
+}
 async function getDashboardInstallationStatus(paths = createAgentForumPaths()) {
   let installation;
   try {
@@ -13838,8 +13881,14 @@ function dashboardUpdateAvailable(installedVersion, dashboardVersion = DASHBOARD
 }
 async function executeDashboardCommand(args2, options = {}) {
   const subcommand = args2[0];
-  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <ensure|policy|install|update|install-local|uninstall|open|attach|heartbeat|detach|status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard ensure [--update] [--approve-once] [--force]\n  agent-forum dashboard policy [--mode <managed|ask|manual>]\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard install-local --archive <file> --manifest <file> [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
+  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <ensure|policy|install|update|install-local|uninstall|open|attach|heartbeat|detach|status|lease-status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard ensure [--update] [--approve-once] [--force]\n  agent-forum dashboard policy [--mode <managed|ask|manual>]\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard install-local --archive <file> --manifest <file> [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
   try {
+    if (subcommand === "lease-status") {
+      if (args2.length !== 1) return invalidArgument("dashboard lease-status accepts no options");
+      const result = await dashboardStatus();
+      return { exitCode: ExitCode.Success, command: "dashboard.lease-status", data: result, human: `${result.clients.length} active Dashboard client(s).
+` };
+    }
     if (subcommand === "status") {
       if (args2.length !== 1) return invalidArgument("dashboard status accepts no options");
       const [result, installation, policy] = await Promise.all([dashboardStatus(), getDashboardInstallationStatus(), getDashboardAcquisitionPolicy()]);
@@ -13953,28 +14002,24 @@ async function executeDashboardCommand(args2, options = {}) {
       const room = context.roomId;
       if (!forum || context.targetStatus !== "active") return invalidArgument("Dashboard requires an active bound Forum Room");
       const identity = parsed.values.get("--identity");
-      const installed = await getDashboardInstallationStatus();
+      const contextData = { forumAlias: forum, roomId: room, roomSlug: context.roomSlug };
+      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, ...contextData }, human: "Dashboard already running; client attached.\n" };
+      const installed = await getDashboardLaunchStatus();
       const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
       const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard ensure --update to follow your acquisition policy.` : "";
-      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, updateAvailable }, human: `Dashboard already running; client attached.${updateHint}
-` };
       const moduleDirectory = dirname4(fileURLToPath(import.meta.url));
       const entrypoint = [resolve18(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve18(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
       const deno = process.platform === "win32" ? resolve18(homedir2(), ".deno", "bin", "deno.exe") : "deno";
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && entrypoint && (process.platform !== "win32" || existsSync(deno));
-      if (installed.status !== "installed" && !developmentFallback) {
-        const modified = installed.status === "modified" && installed.modifiedFiles?.length ? ` (changed files: ${installed.modifiedFiles.slice(0, 5).join(", ")}${installed.modifiedFiles.length > 5 ? ", \u2026" : ""})` : "";
-        throw new ServiceError("DASHBOARD_UNAVAILABLE", installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard ensure --update`);
-      }
+      if (installed.status !== "installed" && !developmentFallback) throw new ServiceError("DASHBOARD_UNAVAILABLE", installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : "Dashboard installation is damaged; run agent-forum dashboard ensure --update");
       const executable = installed.status === "installed" ? installed.executable : deno;
       const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve18(dirname4(entrypoint), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint];
-      const dashboardCli = installed.status === "installed" ? resolve18(dirname4(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
-      if (installed.status === "installed" && !existsSync(dashboardCli)) throw new ServiceError("DASHBOARD_UNAVAILABLE", "Dashboard CLI helper is missing; run agent-forum dashboard ensure --update");
+      const dashboardCli = installed.status === "installed" ? installed.helper : process.execPath;
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir4(dashboardRuntimeDirectory, { recursive: true, mode: 448 });
       const child = spawn2(executable, executableArgs, { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve18(dirname4(executable), "AppIcon.ico") : resolve18(dirname4(entrypoint), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });
       child.unref();
-      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable }, human: `Dashboard started.${updateHint}
+      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable, ...contextData }, human: `Dashboard started.${updateHint}
 ` };
     }
     if (subcommand === "pin") {
@@ -13990,7 +14035,7 @@ async function executeDashboardCommand(args2, options = {}) {
 ` };
     }
     if (subcommand === "attach" || subcommand === "heartbeat") {
-      const parsed = parseCommandOptions(args2.slice(1), { values: ["--client-id", "--client-type", "--forum", "--room", "--identity", "--lease-ms"] });
+      const parsed = parseCommandOptions(args2.slice(1), { values: ["--client-id", "--client-type", "--forum", "--room", "--identity", "--lease-ms"], flags: ["--reset-view"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const clientId = requireOption(parsed, "--client-id");
       const clientType = requireOption(parsed, "--client-type");
@@ -14004,7 +14049,7 @@ async function executeDashboardCommand(args2, options = {}) {
       const leaseMs = leaseText === void 0 ? void 0 : Number(leaseText);
       if (leaseText !== void 0 && !Number.isInteger(leaseMs)) return invalidArgument("--lease-ms must be an integer");
       const identityId = parsed.values.get("--identity");
-      const result = await attachDashboardClient({ clientId, clientType, forumAlias, roomId, ...identityId ? { identityId } : {}, ...leaseMs !== void 0 ? { leaseMs } : {} });
+      const result = await attachDashboardClient({ clientId, clientType, forumAlias, roomId, ...identityId ? { identityId } : {}, ...leaseMs !== void 0 ? { leaseMs } : {}, resetView: parsed.flags.has("--reset-view") });
       return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: result, human: `Attached Dashboard client ${result.client.clientId}.
 ` };
     }
@@ -15543,24 +15588,48 @@ forum: ${forum}
 
 // src/commands/inbox.ts
 async function executeInboxCommand(args2) {
-  const show = args2[0] === "show";
-  const parsed = parseCommandOptions(show ? args2.slice(1) : args2, {
-    values: show ? ["--forum", "--identity", "--id"] : ["--forum", "--identity", "--limit", "--summary-chars"],
-    flags: show ? ["--no-sync"] : ["--sync", "--no-sync", "--mark-read", "--mark-all-read"]
+  const subcommand = args2[0];
+  if (subcommand === "help" || subcommand === "--help") {
+    return {
+      exitCode: ExitCode.Success,
+      command: "inbox.help",
+      data: { usage: "agent-forum inbox [show|mark-read] [options]" },
+      human: "Inbox\n\nUsage:\n  agent-forum inbox --forum <alias> [--identity <member-id>] [--limit <1..100>] [--mark-read|--mark-all-read] [--no-sync]\n  agent-forum inbox show --forum <alias> --id <message-or-event-id> [--identity <member-id>] [--mark-read] [--no-sync]\n  agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id> ...] [--identity <member-id>] [--no-sync]\n"
+    };
+  }
+  const show = subcommand === "show";
+  const markSpecific = subcommand === "mark-read";
+  const parsed = parseCommandOptions(show || markSpecific ? args2.slice(1) : args2, {
+    values: show ? ["--forum", "--identity", "--id"] : markSpecific ? ["--forum", "--identity"] : ["--forum", "--identity", "--limit", "--summary-chars"],
+    ...markSpecific ? { repeatableValues: ["--id"] } : {},
+    flags: show ? ["--no-sync", "--mark-read"] : markSpecific ? ["--no-sync"] : ["--sync", "--no-sync", "--mark-read", "--mark-all-read"]
   });
   if ("error" in parsed) return invalidArgument(parsed.error);
-  if (!show && parsed.flags.has("--mark-read") && parsed.flags.has("--mark-all-read")) return invalidArgument("--mark-read and --mark-all-read cannot be combined");
-  if (!show && parsed.flags.has("--sync") && parsed.flags.has("--no-sync")) return invalidArgument("--sync and --no-sync cannot be combined");
+  if (!show && !markSpecific && parsed.flags.has("--mark-read") && parsed.flags.has("--mark-all-read")) return invalidArgument("--mark-read and --mark-all-read cannot be combined");
+  if (!show && !markSpecific && parsed.flags.has("--sync") && parsed.flags.has("--no-sync")) return invalidArgument("--sync and --no-sync cannot be combined");
   const forumAlias = requireOption(parsed, "--forum");
   if (typeof forumAlias !== "string") return invalidArgument(forumAlias.error);
   try {
     const identityId = parsed.values.get("--identity");
+    if (markSpecific) {
+      const ids = parsed.multiValues.get("--id") ?? [];
+      if (ids.length === 0) return invalidArgument("inbox mark-read requires at least one --id");
+      const result2 = await markInboxEntriesRead({ forumAlias, ids, ...identityId ? { identityId } : {}, sync: !parsed.flags.has("--no-sync") });
+      return { exitCode: ExitCode.Success, command: "inbox.mark-read", data: result2, human: `Marked ${result2.markedRead} Inbox entr${result2.markedRead === 1 ? "y" : "ies"} read${result2.alreadyRead ? `; ${result2.alreadyRead} already read` : ""}.
+` };
+    }
     if (show) {
       const id = requireOption(parsed, "--id");
       if (typeof id !== "string") return invalidArgument(id.error);
       const result2 = await showInboxEntry({ forumAlias, id, ...identityId ? { identityId } : {}, sync: !parsed.flags.has("--no-sync") });
-      return { exitCode: ExitCode.Success, command: "inbox.show", data: result2, human: `${result2.entry.type}: ${result2.entry.id}
-${result2.content.body ?? result2.content.reason ?? ""}
+      let markedRead = 0;
+      if (parsed.flags.has("--mark-read")) {
+        const marked = await markInboxEntriesRead({ forumAlias, ids: [id], ...identityId ? { identityId } : {}, sync: false });
+        markedRead = marked.markedRead;
+      }
+      return { exitCode: ExitCode.Success, command: "inbox.show", data: { ...result2, markedRead }, human: `${result2.entry.type}: ${result2.entry.id}
+${result2.content.body ?? result2.content.reason ?? ""}${parsed.flags.has("--mark-read") ? `
+marked read: ${markedRead}` : ""}
 ` };
     }
     const limitText = parsed.values.get("--limit");
@@ -15576,7 +15645,8 @@ marked read: ${result.markedRead}
 unread: ${result.totalUnread}${result.hasMore ? " (more available)" : ""}
 ` };
   } catch (error) {
-    const handled = commandError(show ? "inbox.show" : "inbox", error);
+    const command = markSpecific ? "inbox.mark-read" : show ? "inbox.show" : "inbox";
+    const handled = commandError(command, error);
     if (handled) return handled;
     throw error;
   }
@@ -17086,7 +17156,28 @@ function statusBadge(status, kind) {
   const zh = normalized === "open" ? "\u8FDB\u884C\u4E2D" : normalized === "active" ? "\u6D3B\u8DC3" : normalized === "closed" ? "\u5DF2\u5173\u95ED" : normalized === "archived" ? "\u5DF2\u5F52\u6863" : status;
   return `<span class="status-badge ${kind}-status status-${escapeHtml(css)}">${biText(en, zh)}</span>`;
 }
-function renderItem(item, timeline, snapshot, index, treeIssue) {
+function readBadge(item, room, identities) {
+  if (identities.length === 0) return "";
+  const actorId = item.kind === "message" ? item.authorId : item.actorId;
+  const published = identities.filter((identity) => identity.memberId === actorId);
+  const recipients = identities.filter((identity) => {
+    if (identity.memberId === actorId) return false;
+    const membership = room.members[identity.memberId];
+    return membership?.status === "active" && typeof membership.updatedAt === "string" && item.createdAt >= membership.updatedAt;
+  });
+  const read = recipients.filter((identity) => identity.seenIds.includes(item.id));
+  const names = (items) => items.map((identity) => identity.displayName).join(", ");
+  if (identities.length === 1) {
+    if (published.length) return `<span class="read-badge published">${biText("AI published", "AI \u53D1\u5E03")}</span>`;
+    if (recipients.length === 0) return "";
+    return read.length ? `<span class="read-badge read">${biText("AI read", "AI \u5DF2\u8BFB")}</span>` : `<span class="read-badge unread">${biText("AI unread", "AI \u672A\u8BFB")}</span>`;
+  }
+  const parts = [];
+  if (published.length) parts.push(biText(`Published by ${names(published)}`, `${names(published)} \u53D1\u5E03`));
+  if (recipients.length) parts.push(biText(`${read.length}/${recipients.length} local AIs read`, `${read.length}/${recipients.length} \u4E2A\u672C\u673A AI \u5DF2\u8BFB`));
+  return parts.length ? `<span class="read-badge ${recipients.length > read.length ? "unread" : published.length ? "published" : "read"}">${parts.join(" \xB7 ")}</span>` : "";
+}
+function renderItem(item, timeline, snapshot, room, identities, index, treeIssue) {
   const actorId = item.kind === "message" ? item.authorId : item.actorId;
   const profile = snapshot.members[actorId];
   const actor = profile?.displayName ?? actorId;
@@ -17108,9 +17199,9 @@ function renderItem(item, timeline, snapshot, index, treeIssue) {
   const correctionZh = `\u8BF7\u5BA1\u67E5\u5E76\u7EA0\u6B63 Agent Forum \u4E2D\u7684\u6761\u76EE ${item.id}\uFF08Room: ${roomRef}\uFF09\u3002\u4FDD\u7559\u5386\u53F2\uFF0C\u53D1\u5E03\u65B0\u7684\u7EA0\u6B63\u6D88\u606F\u6216\u4E8B\u4EF6\u3002`;
   const replyAttributes = item.kind === "message" ? ` data-message-id="${escapeHtml(item.id)}" data-reply-to="${escapeHtml(item.replyTo ?? "")}"${treeIssue ? ` data-tree-issue="${treeIssue}"` : ""}` : "";
   const treeIssueNotice = treeIssue ? `<div class="tree-issue">${treeIssue === "cycle" ? biText("Reply cycle detected; shown as a separate branch.", "\u68C0\u6D4B\u5230\u56DE\u590D\u5FAA\u73AF\uFF1B\u5DF2\u4F5C\u4E3A\u72EC\u7ACB\u5206\u652F\u663E\u793A\u3002") : biText("Reply target unavailable; shown as a separate branch.", "\u56DE\u590D\u76EE\u6807\u4E0D\u53EF\u7528\uFF1B\u5DF2\u4F5C\u4E3A\u72EC\u7ACB\u5206\u652F\u663E\u793A\u3002")}</div>` : "";
-  return `<article class="item ${item.kind}" data-timeline-index="${index}"${replyAttributes}>${avatar}<div class="item-main"><div class="item-line"></div><div class="item-content"><header><span class="actor">${escapeHtml(actor)}</span>${profile ? `<span class="role">${escapeHtml(profile.role)}</span>` : ""}<span class="type ${badge}">${escapeHtml(item.type)}</span><time datetime="${escapeHtml(item.createdAt)}">${escapeHtml(formatTime(item.createdAt))}</time></header>${content}${treeIssueNotice}<footer><button class="copy btn-sm" data-copy="${escapeHtml(item.id)}" data-copy-en="${escapeHtml(item.id)}" data-copy-zh="${escapeHtml(item.id)}" data-en="Copy ID" data-zh="\u590D\u5236 ID">Copy ID</button><button class="copy btn-sm" data-copy="${escapeHtml(correctionEn)}" data-copy-en="${escapeHtml(correctionEn)}" data-copy-zh="${escapeHtml(correctionZh)}" data-en="Copy correction prompt" data-zh="\u590D\u5236\u7EA0\u6B63\u63D0\u793A">Copy correction prompt</button></footer></div></div></article>`;
+  return `<article class="item ${item.kind}" data-timeline-index="${index}"${replyAttributes}>${avatar}<div class="item-main"><div class="item-line"></div><div class="item-content"><header><span class="actor">${escapeHtml(actor)}</span>${profile ? `<span class="role">${escapeHtml(profile.role)}</span>` : ""}<span class="type ${badge}">${escapeHtml(item.type)}</span>${readBadge(item, room, identities)}<time datetime="${escapeHtml(item.createdAt)}">${escapeHtml(formatTime(item.createdAt))}</time></header>${content}${treeIssueNotice}<footer><button class="copy btn-sm" data-copy="${escapeHtml(item.id)}" data-copy-en="${escapeHtml(item.id)}" data-copy-zh="${escapeHtml(item.id)}" data-en="Copy ID" data-zh="\u590D\u5236 ID">Copy ID</button><button class="copy btn-sm" data-copy="${escapeHtml(correctionEn)}" data-copy-en="${escapeHtml(correctionEn)}" data-copy-zh="${escapeHtml(correctionZh)}" data-en="Copy correction prompt" data-zh="\u590D\u5236\u7EA0\u6B63\u63D0\u793A">Copy correction prompt</button></footer></div></div></article>`;
 }
-function renderThread({ thread, timeline }, snapshot) {
+function renderThread({ thread, timeline }, snapshot, room, identities) {
   const creator = snapshot.members[thread.createdBy]?.displayName ?? thread.createdBy;
   const threadId = escapeHtml(thread.id);
   const messageCount = thread.messageCount ?? timeline.filter((i) => i.kind === "message").length;
@@ -17119,10 +17210,10 @@ function renderThread({ thread, timeline }, snapshot) {
   const metaEn = `${kind} \xB7 ${messageCount} messages \xB7 ${escapeHtml(creator)} \xB7 ${escapeHtml(formatTime(thread.createdAt))}`;
   const metaZh = `${kind} \xB7 ${messageCount} \u6761\u6D88\u606F \xB7 ${escapeHtml(creator)} \xB7 ${escapeHtml(formatTime(thread.createdAt))}`;
   const tree = buildReplyTree(timeline);
-  const items = timeline.map((item, index) => renderItem(item, timeline, snapshot, index, item.kind === "message" ? tree.issues.get(item.id) : void 0)).join("");
+  const items = timeline.map((item, index) => renderItem(item, timeline, snapshot, room, identities, index, item.kind === "message" ? tree.issues.get(item.id) : void 0)).join("");
   return `<section class="thread" id="thread-${threadId}" data-title="${title.toLowerCase()}" data-thread-status="${escapeHtml(thread.status)}"><div class="thread-head"><div class="thread-icon status-${escapeHtml(thread.status.toLowerCase())}"></div><div class="thread-meta"><h2>${title}${statusBadge(thread.status, "thread")}</h2><div class="meta">${biHtml(metaEn, metaZh)}</div></div><div class="thread-actions"><button class="copy btn-sm" data-copy="${threadId}" data-copy-en="${threadId}" data-copy-zh="${threadId}" data-en="Copy thread ID" data-zh="\u590D\u5236 Thread ID">Copy thread ID</button></div></div><div class="thread-body">${items}</div></section>`;
 }
-function renderViewerHtml(snapshot, room, freshness = { state: "fresh" }) {
+function renderViewerHtml(snapshot, room, freshness = { state: "fresh" }, readIdentities = []) {
   const activeMembers = Object.entries(room.members ?? {}).filter(([, membership]) => membership.status === "active").map(([id, membership]) => {
     const profile = snapshot.members[id];
     return `<li><span class="member-name">${escapeHtml(profile?.displayName ?? id)}</span><span class="role">${escapeHtml(membership.role)}</span><span class="responsibility">${escapeHtml(membership.responsibility)}</span></li>`;
@@ -17134,14 +17225,14 @@ function renderViewerHtml(snapshot, room, freshness = { state: "fresh" }) {
     const count = t.thread.messageCount ?? t.timeline.filter((item) => item.kind === "message").length;
     return `<a class="outline-item" href="#thread-${id}" data-title="${title.toLowerCase()}" data-thread-status="${escapeHtml(status)}"><span class="outline-status status-${escapeHtml(status)}" aria-hidden="true"></span><span class="outline-title">${title}</span><span class="outline-count">${count}</span></a>`;
   }).join("");
-  const threads = room.threads.map((t) => renderThread(t, snapshot)).join("");
-  const roomEvents = room.events.length ? `<section class="thread events" id="thread-events" data-title="events"><div class="thread-head"><div class="thread-icon event"></div><div class="thread-meta"><h2>${biText("Room events", "Room \u4E8B\u4EF6")}</h2></div></div><div class="thread-body">${room.events.map((event, index) => renderItem(event, room.events, snapshot, index)).join("")}</div></section>` : "";
+  const threads = room.threads.map((t) => renderThread(t, snapshot, room, readIdentities)).join("");
+  const roomEvents = room.events.length ? `<section class="thread events" id="thread-events" data-title="events"><div class="thread-head"><div class="thread-icon event"></div><div class="thread-meta"><h2>${biText("Room events", "Room \u4E8B\u4EF6")}</h2></div></div><div class="thread-body">${room.events.map((event, index) => renderItem(event, room.events, snapshot, room, readIdentities, index)).join("")}</div></section>` : "";
   const warnings = snapshot.warnings.length ? `<aside class="warnings"><div class="warnings-head"><span class="warnings-icon">\u26A0</span><h2>${biText("Protocol warnings", "\u534F\u8BAE\u8B66\u544A")}</h2></div>${snapshot.warnings.map((warning) => `<div class="warning"><strong>${escapeHtml(warning.code)}</strong><span>${escapeHtml(warning.path)}</span><span>\u2014 ${escapeHtml(warning.message)}</span></div>`).join("")}</aside>` : "";
   const noThreads = `<div class="empty">${biText("No threads yet.", "\u8FD8\u6CA1\u6709 Thread\u3002")}</div>`;
   const roomArchived = room.room.status.toLowerCase() === "archived" ? `<aside class="room-state archived"><strong>${biText("Archived room", "\u5DF2\u5F52\u6863 Room")}</strong><span>${biText("This Room is read-only. Return to your Agent conversation to request a restore or correction.", "\u6B64 Room \u4E3A\u53EA\u8BFB\u72B6\u6001\u3002\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u8BF7\u6C42\u6062\u590D\u6216\u7EA0\u6B63\u3002")}</span></aside>` : "";
   const revision = snapshot.sourceHead;
   const freshnessNotice = freshness.state === "stale" ? `<aside class="sync-state stale"><strong>${biText("Content may be stale", "\u5185\u5BB9\u53EF\u80FD\u5DF2\u8FC7\u671F")}</strong><span>${escapeHtml(freshness.message ?? "Remote sync did not complete.")}</span><button type="button" onclick="location.reload()">${biText("Retry sync", "\u91CD\u8BD5\u540C\u6B65")}</button></aside>` : `<aside class="sync-state fresh"><strong>${biText("Remote sync complete", "\u8FDC\u7AEF\u540C\u6B65\u5B8C\u6210")}</strong><span>${biText("This page was generated after the latest successful pull-only sync.", "\u672C\u9875\u9762\u5728\u6700\u8FD1\u4E00\u6B21\u6210\u529F\u7684\u53EA\u62C9\u53D6\u540C\u6B65\u540E\u751F\u6210\u3002")}</span></aside>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><link rel="icon" type="image/svg+xml" href="${viewerFavicon}"><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}.appbar-main{min-width:0;flex:1}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 12px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.markdown .md-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-sm)}.markdown .md-table{width:100%;border-collapse:collapse;font-size:13px}.markdown .md-table th,.markdown .md-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;white-space:nowrap}.markdown .md-table th{background:var(--surface-2);font-weight:600;text-align:left}.markdown .md-table tbody tr:last-child td{border-bottom:0}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);padding:12px 14px;margin:0 0 20px}.warnings-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}.warnings h2{margin:0;font-size:13px;color:var(--warning)}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:3px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}.view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}.view-toggle button{border:0;border-radius:0;padding:6px 10px}.view-toggle button+button{border-left:1px solid var(--border)}.view-toggle button.active{background:var(--accent);color:#fff}.status-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}.room-status{margin-left:0}.status-open,.status-active{background:var(--accent-soft);color:var(--accent-2)}.status-closed,.status-archived{background:var(--neutral-bg);color:var(--neutral)}.status-unknown{background:var(--warning-bg);color:var(--warning)}.thread-icon.status-open,.thread-icon.status-active{background:var(--accent)}.thread-icon.status-closed{background:var(--neutral)}.thread-icon.status-archived{background:var(--neutral)}.outline-item{display:flex;align-items:center;gap:8px}.outline-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}.outline-status.status-open,.outline-status.status-active{background:var(--accent)}.outline-status.status-closed,.outline-status.status-archived{background:var(--neutral)}.outline-status.status-unknown{background:var(--warning)}.outline-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.outline-count{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}.room-state{display:flex;gap:8px;align-items:flex-start;background:var(--neutral-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--text-2)}.room-state strong{color:var(--neutral);white-space:nowrap}.tree-issue{display:none;margin:8px 0;padding:6px 9px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--warning);font-size:12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}body[data-view="tree"] .tree-issue{display:block}.tree-node{position:relative}.tree-children{margin:0 0 0 28px;padding-left:16px;border-left:2px solid var(--border-soft)}.tree-children>.tree-node{position:relative}.tree-children>.tree-node::before{content:"";position:absolute;top:30px;left:-18px;width:16px;border-top:2px solid var(--border-soft)}.tree-node>.item{padding-top:12px}.tree-node>.item:last-child{border-bottom:1px solid var(--border-soft)}.tree-node>.item .item-line{background:var(--accent-soft)}.tree-activity{margin:16px 0 2px;padding:12px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}.tree-activity h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.tree-activity-note{margin:0 0 8px;font-size:12px;color:var(--text-3)}.tree-activity .item{padding:10px 0}.tree-activity .item:last-child{border-bottom:0}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}.tree-children{margin-left:16px;padding-left:10px}.tree-children>.tree-node::before{left:-12px;width:10px}}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-main"><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${statusBadge(room.room.status, "room")} \xB7 ${biHtml("snapshot", "\u5FEB\u7167")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code></div></div><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search threads\u2026" data-placeholder-zh="\u641C\u7D22\u4E3B\u9898\u2026" placeholder="Search threads\u2026" autocomplete="off"></div><div class="toolbar"><div class="view-toggle" role="group" aria-label="Viewer mode"><button id="view-timeline" class="active" aria-pressed="true" data-en="Timeline" data-zh="\u65F6\u95F4\u7EBF">Timeline</button><button id="view-tree" aria-pressed="false" data-en="Tree" data-zh="\u6811\u72B6">Tree</button></div><button id="lang-toggle" data-en="\u4E2D\u6587" data-zh="EN">\u4E2D\u6587</button><button id="close" data-en="Close" data-zh="\u5173\u95ED">Close</button></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="\u4E3B\u9898">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Room events", "Room \u4E8B\u4EF6")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="\u6210\u5458">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "\u53EA\u8BFB\u89C6\u56FE\u3002\u5982\u9700\u7EA0\u6B63\uFF0C\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u63D0\u51FA\uFF1B\u6B64\u5904\u4E0D\u4F1A\u4FEE\u6539\u5386\u53F2\u3002")}</p>${roomArchived}${freshnessNotice}${warnings}${roomEvents}${threads || noThreads}<div class="search-empty" id="search-empty">${biText("No threads match your search.", "\u6CA1\u6709\u5339\u914D\u7684\u4E3B\u9898\u3002")}</div></main></div><script nonce="agent-forum">const revision="${escapeHtml(revision)}";let lang=navigator.language.startsWith('zh')?'zh':'en';function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();document.getElementById('lang-toggle').addEventListener('click',()=>{lang=lang==='en'?'zh':'en';applyLang();});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));function restoreTimeline(thread){const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]')).sort((a,b)=>Number(a.dataset.timelineIndex)-Number(b.dataset.timelineIndex));body.replaceChildren(...items);}function replyRelations(messages){const byId=new Map(messages.map(item=>[item.dataset.messageId,item]));const parents=new Map();messages.forEach(item=>{const id=item.dataset.messageId;const parent=item.dataset.replyTo;if(id&&parent&&parent!==id&&byId.has(parent))parents.set(id,parent);});const cut=new Set();messages.forEach(item=>{const visited=new Map();let current=item.dataset.messageId;while(current&&parents.has(current)){if(visited.has(current)){Array.from(visited.keys()).slice(visited.get(current)).forEach(id=>cut.add(id));break;}visited.set(current,visited.size);current=parents.get(current);}});const children=new Map(messages.map(item=>[item.dataset.messageId,[]]));const roots=[];messages.forEach(item=>{const id=item.dataset.messageId;const parent=id?parents.get(id):undefined;if(id&&parent&&!cut.has(id))children.get(parent).push(id);else roots.push(id);});return{byId,children,roots};}function renderTree(thread){restoreTimeline(thread);const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]'));const messages=items.filter(item=>item.classList.contains('message'));const events=items.filter(item=>item.classList.contains('event'));const relation=replyRelations(messages);body.replaceChildren();const appendNode=id=>{const item=relation.byId.get(id);if(!item)return;const node=document.createElement('div');node.className='tree-node';node.append(item);const children=relation.children.get(id)||[];if(children.length){const branch=document.createElement('div');branch.className='tree-children';children.forEach(childId=>branch.append(appendNode(childId)));node.append(branch);}return node;};relation.roots.forEach(id=>{const node=appendNode(id);if(node)body.append(node);});if(events.length){const activity=document.createElement('section');activity.className='tree-activity';const heading=document.createElement('h3');heading.dataset.en='Activity';heading.dataset.zh='\u6D3B\u52A8\u4E8B\u4EF6';heading.textContent=lang==='zh'?heading.dataset.zh:heading.dataset.en;const note=document.createElement('p');note.className='tree-activity-note';note.dataset.en='Lifecycle events are shown separately because they are not replies.';note.dataset.zh='\u751F\u547D\u5468\u671F\u4E8B\u4EF6\u72EC\u7ACB\u663E\u793A\uFF0C\u56E0\u4E3A\u5B83\u4EEC\u4E0D\u662F\u56DE\u590D\u3002';note.textContent=lang==='zh'?note.dataset.zh:note.dataset.en;activity.append(heading,note,...events);body.append(activity);}}const viewTimeline=document.getElementById('view-timeline');const viewTree=document.getElementById('view-tree');function setView(mode){document.body.dataset.view=mode;viewTimeline.classList.toggle('active',mode==='timeline');viewTree.classList.toggle('active',mode==='tree');viewTimeline.setAttribute('aria-pressed',String(mode==='timeline'));viewTree.setAttribute('aria-pressed',String(mode==='tree'));document.querySelectorAll('.thread').forEach(thread=>{if(mode==='tree')renderTree(thread);else restoreTimeline(thread);});}viewTimeline.addEventListener('click',()=>setView('timeline'));viewTree.addEventListener('click',()=>setView('tree'));const search=document.getElementById('search');const outlineItems=document.querySelectorAll('.outline-item');const threads=document.querySelectorAll('.thread');const searchEmpty=document.getElementById('search-empty');function runSearch(){const q=(search.value||'').trim().toLowerCase();let visibleCount=0;outlineItems.forEach(item=>{const title=item.dataset.title||'';const match=!q||title.includes(q);item.classList.toggle('hidden',!match);if(match)visibleCount++;});threads.forEach(t=>{const title=t.dataset.title||'';const match=!q||title.includes(q);t.classList.toggle('hidden',!match);});searchEmpty.style.display=visibleCount===0&&q?'block':'none';}if(search)search.addEventListener('input',runSearch);const observer=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const id=e.target.id;outlineItems.forEach(i=>i.classList.toggle('active',i.getAttribute('href')==='#'+id));}});},{rootMargin:'-72px 0px -70% 0px'});threads.forEach(t=>observer.observe(t));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<div style="max-width:600px;margin:80px auto;padding:20px;font-family:system-ui;text-align:center;color:#59636e"><p>Viewer closed.</p></div>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><link rel="icon" type="image/svg+xml" href="${viewerFavicon}"><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}.appbar-main{min-width:0;flex:1}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 12px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.markdown .md-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-sm)}.markdown .md-table{width:100%;border-collapse:collapse;font-size:13px}.markdown .md-table th,.markdown .md-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;white-space:nowrap}.markdown .md-table th{background:var(--surface-2);font-weight:600;text-align:left}.markdown .md-table tbody tr:last-child td{border-bottom:0}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);padding:12px 14px;margin:0 0 20px}.warnings-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}.warnings h2{margin:0;font-size:13px;color:var(--warning)}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:3px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.read-badge{display:inline-flex;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700}.read-badge.read{background:var(--success-bg);color:var(--success)}.read-badge.unread{background:var(--warning-bg);color:var(--warning)}.read-badge.published{background:var(--accent-soft);color:var(--accent-2)}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}.view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}.view-toggle button{border:0;border-radius:0;padding:6px 10px}.view-toggle button+button{border-left:1px solid var(--border)}.view-toggle button.active{background:var(--accent);color:#fff}.status-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}.room-status{margin-left:0}.status-open,.status-active{background:var(--accent-soft);color:var(--accent-2)}.status-closed,.status-archived{background:var(--neutral-bg);color:var(--neutral)}.status-unknown{background:var(--warning-bg);color:var(--warning)}.thread-icon.status-open,.thread-icon.status-active{background:var(--accent)}.thread-icon.status-closed{background:var(--neutral)}.thread-icon.status-archived{background:var(--neutral)}.outline-item{display:flex;align-items:center;gap:8px}.outline-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}.outline-status.status-open,.outline-status.status-active{background:var(--accent)}.outline-status.status-closed,.outline-status.status-archived{background:var(--neutral)}.outline-status.status-unknown{background:var(--warning)}.outline-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.outline-count{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}.room-state{display:flex;gap:8px;align-items:flex-start;background:var(--neutral-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--text-2)}.room-state strong{color:var(--neutral);white-space:nowrap}.tree-issue{display:none;margin:8px 0;padding:6px 9px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--warning);font-size:12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}body[data-view="tree"] .tree-issue{display:block}.tree-node{position:relative}.tree-children{margin:0 0 0 28px;padding-left:16px;border-left:2px solid var(--border-soft)}.tree-children>.tree-node{position:relative}.tree-children>.tree-node::before{content:"";position:absolute;top:30px;left:-18px;width:16px;border-top:2px solid var(--border-soft)}.tree-node>.item{padding-top:12px}.tree-node>.item:last-child{border-bottom:1px solid var(--border-soft)}.tree-node>.item .item-line{background:var(--accent-soft)}.tree-activity{margin:16px 0 2px;padding:12px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}.tree-activity h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.tree-activity-note{margin:0 0 8px;font-size:12px;color:var(--text-3)}.tree-activity .item{padding:10px 0}.tree-activity .item:last-child{border-bottom:0}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}.tree-children{margin-left:16px;padding-left:10px}.tree-children>.tree-node::before{left:-12px;width:10px}}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-main"><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${statusBadge(room.room.status, "room")} \xB7 ${biHtml("snapshot", "\u5FEB\u7167")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code></div></div><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search threads\u2026" data-placeholder-zh="\u641C\u7D22\u4E3B\u9898\u2026" placeholder="Search threads\u2026" autocomplete="off"></div><div class="toolbar"><div class="view-toggle" role="group" aria-label="Viewer mode"><button id="view-timeline" class="active" aria-pressed="true" data-en="Timeline" data-zh="\u65F6\u95F4\u7EBF">Timeline</button><button id="view-tree" aria-pressed="false" data-en="Tree" data-zh="\u6811\u72B6">Tree</button></div><button id="lang-toggle" data-en="\u4E2D\u6587" data-zh="EN">\u4E2D\u6587</button><button id="close" data-en="Close" data-zh="\u5173\u95ED">Close</button></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="\u4E3B\u9898">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Room events", "Room \u4E8B\u4EF6")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="\u6210\u5458">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "\u53EA\u8BFB\u89C6\u56FE\u3002\u5982\u9700\u7EA0\u6B63\uFF0C\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u63D0\u51FA\uFF1B\u6B64\u5904\u4E0D\u4F1A\u4FEE\u6539\u5386\u53F2\u3002")}</p>${roomArchived}${freshnessNotice}${warnings}${roomEvents}${threads || noThreads}<div class="search-empty" id="search-empty">${biText("No threads match your search.", "\u6CA1\u6709\u5339\u914D\u7684\u4E3B\u9898\u3002")}</div></main></div><script nonce="agent-forum">const revision="${escapeHtml(revision)}";let lang=navigator.language.startsWith('zh')?'zh':'en';function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();document.getElementById('lang-toggle').addEventListener('click',()=>{lang=lang==='en'?'zh':'en';applyLang();});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));function restoreTimeline(thread){const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]')).sort((a,b)=>Number(a.dataset.timelineIndex)-Number(b.dataset.timelineIndex));body.replaceChildren(...items);}function replyRelations(messages){const byId=new Map(messages.map(item=>[item.dataset.messageId,item]));const parents=new Map();messages.forEach(item=>{const id=item.dataset.messageId;const parent=item.dataset.replyTo;if(id&&parent&&parent!==id&&byId.has(parent))parents.set(id,parent);});const cut=new Set();messages.forEach(item=>{const visited=new Map();let current=item.dataset.messageId;while(current&&parents.has(current)){if(visited.has(current)){Array.from(visited.keys()).slice(visited.get(current)).forEach(id=>cut.add(id));break;}visited.set(current,visited.size);current=parents.get(current);}});const children=new Map(messages.map(item=>[item.dataset.messageId,[]]));const roots=[];messages.forEach(item=>{const id=item.dataset.messageId;const parent=id?parents.get(id):undefined;if(id&&parent&&!cut.has(id))children.get(parent).push(id);else roots.push(id);});return{byId,children,roots};}function renderTree(thread){restoreTimeline(thread);const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]'));const messages=items.filter(item=>item.classList.contains('message'));const events=items.filter(item=>item.classList.contains('event'));const relation=replyRelations(messages);body.replaceChildren();const appendNode=id=>{const item=relation.byId.get(id);if(!item)return;const node=document.createElement('div');node.className='tree-node';node.append(item);const children=relation.children.get(id)||[];if(children.length){const branch=document.createElement('div');branch.className='tree-children';children.forEach(childId=>branch.append(appendNode(childId)));node.append(branch);}return node;};relation.roots.forEach(id=>{const node=appendNode(id);if(node)body.append(node);});if(events.length){const activity=document.createElement('section');activity.className='tree-activity';const heading=document.createElement('h3');heading.dataset.en='Activity';heading.dataset.zh='\u6D3B\u52A8\u4E8B\u4EF6';heading.textContent=lang==='zh'?heading.dataset.zh:heading.dataset.en;const note=document.createElement('p');note.className='tree-activity-note';note.dataset.en='Lifecycle events are shown separately because they are not replies.';note.dataset.zh='\u751F\u547D\u5468\u671F\u4E8B\u4EF6\u72EC\u7ACB\u663E\u793A\uFF0C\u56E0\u4E3A\u5B83\u4EEC\u4E0D\u662F\u56DE\u590D\u3002';note.textContent=lang==='zh'?note.dataset.zh:note.dataset.en;activity.append(heading,note,...events);body.append(activity);}}const viewTimeline=document.getElementById('view-timeline');const viewTree=document.getElementById('view-tree');function setView(mode){document.body.dataset.view=mode;viewTimeline.classList.toggle('active',mode==='timeline');viewTree.classList.toggle('active',mode==='tree');viewTimeline.setAttribute('aria-pressed',String(mode==='timeline'));viewTree.setAttribute('aria-pressed',String(mode==='tree'));document.querySelectorAll('.thread').forEach(thread=>{if(mode==='tree')renderTree(thread);else restoreTimeline(thread);});}viewTimeline.addEventListener('click',()=>setView('timeline'));viewTree.addEventListener('click',()=>setView('tree'));const search=document.getElementById('search');const outlineItems=document.querySelectorAll('.outline-item');const threads=document.querySelectorAll('.thread');const searchEmpty=document.getElementById('search-empty');function runSearch(){const q=(search.value||'').trim().toLowerCase();let visibleCount=0;outlineItems.forEach(item=>{const title=item.dataset.title||'';const match=!q||title.includes(q);item.classList.toggle('hidden',!match);if(match)visibleCount++;});threads.forEach(t=>{const title=t.dataset.title||'';const match=!q||title.includes(q);t.classList.toggle('hidden',!match);});searchEmpty.style.display=visibleCount===0&&q?'block':'none';}if(search)search.addEventListener('input',runSearch);const observer=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const id=e.target.id;outlineItems.forEach(i=>i.classList.toggle('active',i.getAttribute('href')==='#'+id));}});},{rootMargin:'-72px 0px -70% 0px'});threads.forEach(t=>observer.observe(t));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<div style="max-width:600px;margin:80px auto;padding:20px;font-family:system-ui;text-align:center;color:#59636e"><p>Viewer closed.</p></div>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></body></html>`;
 }
 async function startViewerServer(input) {
   const room = input.snapshot.rooms.find(
@@ -17153,7 +17244,8 @@ async function startViewerServer(input) {
   let currentSnapshot = input.snapshot;
   let currentRoom = room;
   let freshness = input.refresh ? { state: "stale", message: "Waiting for remote sync." } : { state: "fresh" };
-  let html = renderViewerHtml(currentSnapshot, currentRoom, freshness);
+  let readIdentities = input.readIdentities ?? [];
+  let html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities);
   let revision = currentSnapshot.sourceHead;
   let refreshInFlight;
   const refresh = async () => {
@@ -17161,6 +17253,7 @@ async function startViewerServer(input) {
     if (!refreshInFlight) {
       refreshInFlight = input.refresh().then((result) => {
         freshness = result.freshness;
+        if (result.readIdentities) readIdentities = result.readIdentities;
         if (result.snapshot) {
           const nextRoom = result.snapshot.rooms.find((candidate) => candidate.room.id === room.room.id);
           if (nextRoom) {
@@ -17169,10 +17262,10 @@ async function startViewerServer(input) {
             revision = result.snapshot.sourceHead;
           }
         }
-        html = renderViewerHtml(currentSnapshot, currentRoom, freshness);
+        html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities);
       }).catch(() => {
         freshness = { state: "stale", message: "Remote sync failed unexpectedly." };
-        html = renderViewerHtml(currentSnapshot, currentRoom, freshness);
+        html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities);
       }).finally(() => {
         refreshInFlight = void 0;
       });
@@ -17267,7 +17360,7 @@ async function startViewerServer(input) {
       currentRoom = nextRoom;
       freshness = nextFreshness;
       revision = snapshot.sourceHead;
-      html = renderViewerHtml(currentSnapshot, currentRoom, freshness);
+      html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities);
     },
     close
   };
@@ -17394,6 +17487,15 @@ async function openBrowser(url) {
     });
   });
 }
+async function getViewerReadIdentities(forumAlias, identityIds, paths) {
+  const unique = [...new Set(identityIds)];
+  const config = await loadLocalConfig(paths);
+  return Promise.all(unique.map(async (identityId) => {
+    const cursor = await getInboxReadCursor({ forumAlias, ...identityId ? { identityId } : {} }, paths);
+    const profile = config.identities.find((identity) => identity.memberId === cursor.memberId);
+    return { memberId: cursor.memberId, displayName: profile?.displayName ?? cursor.memberId, seenIds: cursor.seenIds };
+  }));
+}
 async function runViewerServer(input, paths = createAgentForumPaths()) {
   const cached = await getForumSnapshot(input.forumAlias, paths);
   const room = cached.snapshot.rooms.find((item) => item.room.id === input.room || item.room.slug === input.room);
@@ -17403,6 +17505,7 @@ async function runViewerServer(input, paths = createAgentForumPaths()) {
     roomIdOrSlug: room.room.id,
     token: input.token,
     idleMs: input.idleMs,
+    readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths),
     refresh: async () => {
       try {
         const result = await refreshForumFromRemote(input.forumAlias, paths);
@@ -17423,7 +17526,7 @@ async function runViewerServer(input, paths = createAgentForumPaths()) {
           };
         }
         if (result.outcome === "updated") await invalidateDashboard(paths);
-        return { snapshot: (await getForumSnapshot(input.forumAlias, paths)).snapshot, freshness: { state: "fresh" } };
+        return { snapshot: (await getForumSnapshot(input.forumAlias, paths)).snapshot, freshness: { state: "fresh" }, readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths) };
       } catch (error) {
         const code = error instanceof ServiceError ? error.code : "SYNC_FAILED";
         return {
@@ -17440,6 +17543,7 @@ async function runViewerServer(input, paths = createAgentForumPaths()) {
     sessionId: input.sessionId,
     forumAlias: input.forumAlias,
     roomId: room.room.id,
+    ...input.identityId ? { identityId: input.identityId } : {},
     url: server.url,
     pid: process.pid,
     startedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -17460,6 +17564,7 @@ async function launchViewerInline(input, paths = createAgentForumPaths()) {
     sessionId: randomUUID7(),
     token: randomBytes2(16).toString("hex"),
     idleMs: input.idleMs ?? 30 * 6e4,
+    ...input.identityId ? { identityId: input.identityId } : {},
     openBrowser: true
   }, paths);
 }
@@ -17483,7 +17588,7 @@ async function openViewer(input, paths = createAgentForumPaths()) {
     const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
     const sessionId = randomUUID7();
     const token = randomBytes2(16).toString("hex");
-    const args2 = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 6e4), "--home", dirname6(paths.root)]);
+    const args2 = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 6e4), "--home", dirname6(paths.root), ...input.identityId ? ["--identity", input.identityId] : []]);
     const child = spawn3(process.execPath, args2, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError;
     child.once("error", (error) => {
@@ -17514,6 +17619,22 @@ async function getViewerRoomData(input, paths = createAgentForumPaths()) {
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId || item.room.slug === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   const snapshot = cached.snapshot;
+  const readIdentities = await getViewerReadIdentities(context.forumAlias, input.identityIds?.length ? input.identityIds : [void 0], paths);
+  const localReceipt = (item) => {
+    const publishedBy = readIdentities.filter((identity) => identity.memberId === item.authorId);
+    const recipients = readIdentities.filter((identity) => {
+      if (identity.memberId === item.authorId) return false;
+      const membership = room.members[identity.memberId];
+      return membership?.status === "active" && typeof membership.updatedAt === "string" && item.createdAt >= membership.updatedAt;
+    });
+    const seen = new Map(readIdentities.map((identity) => [identity.memberId, new Set(identity.seenIds)]));
+    const summary = (identity) => ({ id: identity.memberId, displayName: identity.displayName });
+    return {
+      publishedBy: publishedBy.map(summary),
+      readBy: recipients.filter((identity) => seen.get(identity.memberId)?.has(item.id)).map(summary),
+      unreadBy: recipients.filter((identity) => !seen.get(identity.memberId)?.has(item.id)).map(summary)
+    };
+  };
   const memberStats = /* @__PURE__ */ new Map();
   const activeMemberIds = Object.entries(room.members).filter(([, m]) => m.status === "active").map(([id]) => id);
   for (const id of activeMemberIds) memberStats.set(id, { messageCount: 0, lastMessageAt: null });
@@ -17549,7 +17670,8 @@ async function getViewerRoomData(input, paths = createAgentForumPaths()) {
         body: msg.body,
         bodyHtml: renderMarkdown(msg.body),
         replyTo: msg.replyTo ?? null,
-        createdAt: msg.createdAt
+        createdAt: msg.createdAt,
+        localReceipt: localReceipt(msg)
       }))
     };
   });
@@ -17580,7 +17702,7 @@ async function generateViewerHtml(input, paths = createAgentForumPaths()) {
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir8(dirname6(output2), { recursive: true });
-  const html = renderViewerHtml(cached.snapshot, room);
+  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths));
   await import("node:fs/promises").then(({ writeFile: writeFile3 }) => writeFile3(output2, html, { encoding: "utf8", mode: 384 }));
   return { output: output2 };
 }
@@ -17593,7 +17715,7 @@ async function executeViewerCommand(args2) {
       exitCode: ExitCode.Success,
       command: "viewer.help",
       data: { usage: "agent-forum viewer <open|generate|data|status|close|clean> [options]" },
-      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--output <file>]\n  agent-forum viewer data [--forum <alias> --room <room>]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
+      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--identity <member-id>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--identity <member-id>] [--output <file>]\n  agent-forum viewer data [--forum <alias> --room <room>] [--identity <member-id> ...]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
     };
   }
   if (!["open", "generate", "status", "close", "clean", "serve", "launch", "data"].includes(subcommand)) {
@@ -17601,13 +17723,14 @@ async function executeViewerCommand(args2) {
   }
   try {
     if (subcommand === "data") {
-      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--cwd"] });
+      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--cwd"], repeatableValues: ["--identity"] });
       if ("error" in parsed2) return invalidArgument(parsed2.error);
       const forumAlias2 = parsed2.values.get("--forum");
       const room2 = parsed2.values.get("--room");
       const cwd = parsed2.values.get("--cwd");
       if (Boolean(forumAlias2) !== Boolean(room2)) return invalidArgument("--forum and --room must be provided together");
-      const result2 = await getViewerRoomData({ ...forumAlias2 ? { forumAlias: forumAlias2 } : {}, ...room2 ? { room: room2 } : {}, ...cwd ? { cwd } : {} });
+      const identityIds = parsed2.multiValues.get("--identity");
+      const result2 = await getViewerRoomData({ ...forumAlias2 ? { forumAlias: forumAlias2 } : {}, ...room2 ? { room: room2 } : {}, ...cwd ? { cwd } : {}, ...identityIds?.length ? { identityIds } : {} });
       return { exitCode: ExitCode.Success, command: "viewer.data", data: result2, human: `${result2.room.title}: ${result2.stats.threadCount} threads, ${result2.stats.messageCount} messages, ${result2.stats.memberCount} members
 ` };
     }
@@ -17630,16 +17753,17 @@ async function executeViewerCommand(args2) {
 ` };
     }
     if (subcommand === "launch") {
-      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--home"] });
+      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--home", "--identity"] });
       if ("error" in parsed2) return invalidArgument(parsed2.error);
       const forumAlias2 = parsed2.values.get("--forum");
       const room2 = parsed2.values.get("--room");
       if (!forumAlias2 || !room2) return invalidArgument("invalid internal Viewer launch arguments");
-      await launchViewerInline({ forumAlias: forumAlias2, room: room2 }, createAgentForumPaths(parsed2.values.get("--home")));
+      const identityId2 = parsed2.values.get("--identity");
+      await launchViewerInline({ forumAlias: forumAlias2, room: room2, ...identityId2 ? { identityId: identityId2 } : {} }, createAgentForumPaths(parsed2.values.get("--home")));
       return { exitCode: ExitCode.Success, command: "viewer.launch", data: {}, human: "" };
     }
     if (subcommand === "serve") {
-      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home"] });
+      const parsed2 = parseCommandOptions(args2.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home", "--identity"] });
       if ("error" in parsed2) return invalidArgument(parsed2.error);
       const forumAlias2 = parsed2.values.get("--forum");
       const room2 = parsed2.values.get("--room");
@@ -17648,11 +17772,12 @@ async function executeViewerCommand(args2) {
       const idleMs = Number(parsed2.values.get("--idle-ms"));
       if (!forumAlias2 || !room2 || !sessionId || !token || !Number.isInteger(idleMs) || idleMs < 1e3) return invalidArgument("invalid internal Viewer server arguments");
       const home2 = parsed2.values.get("--home");
-      await runViewerServer({ forumAlias: forumAlias2, room: room2, sessionId, token, idleMs }, createAgentForumPaths(home2));
+      const identityId2 = parsed2.values.get("--identity");
+      await runViewerServer({ forumAlias: forumAlias2, room: room2, sessionId, token, idleMs, ...identityId2 ? { identityId: identityId2 } : {} }, createAgentForumPaths(home2));
       return { exitCode: ExitCode.Success, command: "viewer.serve", data: {}, human: "" };
     }
     const parsed = parseCommandOptions(args2.slice(1), {
-      values: ["--forum", "--room", "--output", "--home"],
+      values: ["--forum", "--room", "--output", "--home", "--identity"],
       flags: ["--no-sync", "--no-open"]
     });
     if ("error" in parsed) return invalidArgument(parsed.error);
@@ -17660,17 +17785,18 @@ async function executeViewerCommand(args2) {
     const room = parsed.values.get("--room");
     const home = parsed.values.get("--home");
     const paths = createAgentForumPaths(home);
+    const identityId = parsed.values.get("--identity");
     if (Boolean(forumAlias) !== Boolean(room)) return invalidArgument("--forum and --room must be provided together");
     if (parsed.flags.has("--no-sync")) return invalidArgument("viewer always synchronizes before rendering; --no-sync is no longer supported");
     if (subcommand === "generate") {
       if (parsed.flags.size > 0) return invalidArgument("viewer generate does not accept --no-sync or --no-open");
       const output2 = parsed.values.get("--output");
-      const result2 = await generateViewerHtml({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...output2 ? { output: output2 } : {} }, paths);
+      const result2 = await generateViewerHtml({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...output2 ? { output: output2 } : {}, ...identityId ? { identityId } : {} }, paths);
       return { exitCode: ExitCode.Success, command: "viewer.generate", data: result2, human: `Generated ${result2.output}
 ` };
     }
     if (parsed.values.has("--output")) return invalidArgument("viewer open does not accept --output");
-    const result = await openViewer({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, openBrowser: !parsed.flags.has("--no-open") }, paths);
+    const result = await openViewer({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...identityId ? { identityId } : {}, openBrowser: !parsed.flags.has("--no-open") }, paths);
     return { exitCode: ExitCode.Success, command: "viewer.open", data: result, human: `${result.url}
 ${result.browserOpened ? "Opened in the default browser." : "Open this URL manually."}${result.replacedSessionIds.length ? `
 Replaced ${result.replacedSessionIds.length} existing Viewer session(s) for this Forum Room.` : ""}
@@ -17786,7 +17912,7 @@ async function runCli(args2, io = defaultIo) {
     try {
       const subcommandArgs = positional2.slice(1);
       const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "dashboard" ? await executeDashboardCommand(subcommandArgs, { onProgress: io.stderr }) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : command === "setup" ? await executeSetupCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
-      if (!execution.error && ["forum", "identity", "room", "thread", "post", "inbox"].includes(command)) {
+      if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox"].includes(command)) {
         await invalidateDashboard().catch(() => void 0);
       }
       if (json) {

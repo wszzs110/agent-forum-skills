@@ -11,7 +11,8 @@ import { refreshForumFromRemote } from "./forum-sync.js";
 import { refreshForRead, type ReadFreshness } from "./read-freshness.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
-import { renderMarkdown, renderViewerHtml, startViewerServer } from "../viewer/server.js";
+import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerReadIdentity } from "../viewer/server.js";
+import { getInboxReadCursor } from "./inbox.js";
 import { invalidateDashboard } from "./dashboard.js";
 
 export interface ViewerSession {
@@ -19,6 +20,7 @@ export interface ViewerSession {
   sessionId: string;
   forumAlias: string;
   roomId: string;
+  identityId?: string;
   url: string;
   pid: number;
   startedAt: string;
@@ -161,12 +163,23 @@ async function openBrowser(url: string): Promise<boolean> {
   });
 }
 
+async function getViewerReadIdentities(forumAlias: string, identityIds: Array<string | undefined>, paths: AgentForumPaths): Promise<ViewerReadIdentity[]> {
+  const unique = [...new Set(identityIds)];
+  const config = await loadLocalConfig(paths);
+  return Promise.all(unique.map(async (identityId) => {
+    const cursor = await getInboxReadCursor({ forumAlias, ...(identityId ? { identityId } : {}) }, paths);
+    const profile = config.identities.find((identity) => identity.memberId === cursor.memberId);
+    return { memberId: cursor.memberId, displayName: profile?.displayName ?? cursor.memberId, seenIds: cursor.seenIds };
+  }));
+}
+
 export async function runViewerServer(input: {
   forumAlias: string;
   room: string;
   sessionId: string;
   token: string;
   idleMs: number;
+  identityId?: string;
   openBrowser?: boolean;
 }, paths = createAgentForumPaths()): Promise<void> {
   const cached = await getForumSnapshot(input.forumAlias, paths);
@@ -177,6 +190,7 @@ export async function runViewerServer(input: {
     roomIdOrSlug: room.room.id,
     token: input.token,
     idleMs: input.idleMs,
+    readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths),
     refresh: async () => {
       try {
         const result = await refreshForumFromRemote(input.forumAlias, paths);
@@ -197,7 +211,7 @@ export async function runViewerServer(input: {
           };
         }
         if (result.outcome === "updated") await invalidateDashboard(paths);
-        return { snapshot: (await getForumSnapshot(input.forumAlias, paths)).snapshot, freshness: { state: "fresh" as const } };
+        return { snapshot: (await getForumSnapshot(input.forumAlias, paths)).snapshot, freshness: { state: "fresh" as const }, readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths) };
       } catch (error) {
         const code = error instanceof ServiceError ? error.code : "SYNC_FAILED";
         return {
@@ -214,6 +228,7 @@ export async function runViewerServer(input: {
     sessionId: input.sessionId,
     forumAlias: input.forumAlias,
     roomId: room.room.id,
+    ...(input.identityId ? { identityId: input.identityId } : {}),
     url: server.url,
     pid: process.pid,
     startedAt: new Date().toISOString(),
@@ -225,7 +240,7 @@ export async function runViewerServer(input: {
   await rm(sessionPath(paths, input.sessionId), { force: true });
 }
 
-export async function launchViewerInline(input: { forumAlias: string; room: string; idleMs?: number }, paths = createAgentForumPaths()): Promise<void> {
+export async function launchViewerInline(input: { forumAlias: string; room: string; identityId?: string; idleMs?: number }, paths = createAgentForumPaths()): Promise<void> {
   const context = await resolveContext({ forumAlias: input.forumAlias, room: input.room }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   await replaceViewerSessions(context.forumAlias, context.roomId, paths);
@@ -235,6 +250,7 @@ export async function launchViewerInline(input: { forumAlias: string; room: stri
     sessionId: randomUUID(),
     token: randomBytes(16).toString("hex"),
     idleMs: input.idleMs ?? 30 * 60_000,
+    ...(input.identityId ? { identityId: input.identityId } : {}),
     openBrowser: true,
   }, paths);
 }
@@ -251,6 +267,7 @@ export async function openViewer(input: {
   cwd?: string;
   openBrowser?: boolean;
   idleMs?: number;
+  identityId?: string;
   entryPath?: string;
 }, paths = createAgentForumPaths()): Promise<ViewerSession & { browserOpened: boolean; replacedSessionIds: string[] }> {
   const context = await resolveContext({
@@ -268,7 +285,7 @@ export async function openViewer(input: {
     const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
     const sessionId = randomUUID();
     const token = randomBytes(16).toString("hex");
-    const args = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root)]);
+    const args = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root), ...(input.identityId ? ["--identity", input.identityId] : [])]);
     const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError: Error | undefined;
     child.once("error", (error) => { startError = error; });
@@ -290,6 +307,12 @@ export async function openViewer(input: {
   }
 }
 
+export interface ViewerLocalReceipt {
+  publishedBy: Array<{ id: string; displayName: string }>;
+  readBy: Array<{ id: string; displayName: string }>;
+  unreadBy: Array<{ id: string; displayName: string }>;
+}
+
 export interface ViewerRoomData {
   freshness: ReadFreshness;
   room: { id: string; slug: string; title: string; description: string; status: string };
@@ -299,13 +322,13 @@ export interface ViewerRoomData {
   threads: Array<{
     id: string; title: string; kind: string; status: string;
     authorId: string; authorName: string; replyCount: number; lastActivityAt: string;
-    messages: Array<{ id: string; authorId: string; authorName: string; type: string; body: string; bodyHtml: string; replyTo: string | null; createdAt: string }>;
+    messages: Array<{ id: string; authorId: string; authorName: string; type: string; body: string; bodyHtml: string; replyTo: string | null; createdAt: string; localReceipt: ViewerLocalReceipt }>;
   }>;
   members: Array<{ id: string; displayName: string; role: string; messageCount: number; lastMessageAt: string | null }>;
 }
 
 // 为 Dashboard 房间面板提供结构化 JSON 数据，不启动 HTTP server 或子进程。
-export async function getViewerRoomData(input: { forumAlias?: string; room?: string; cwd?: string }, paths = createAgentForumPaths()): Promise<ViewerRoomData> {
+export async function getViewerRoomData(input: { forumAlias?: string; room?: string; cwd?: string; identityIds?: string[] }, paths = createAgentForumPaths()): Promise<ViewerRoomData> {
   const context = await resolveContext({ ...(input.cwd ? { cwd: input.cwd } : {}), ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}), ...(input.room ? { room: input.room } : {}) }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const freshness = await refreshForRead(context.forumAlias, {}, paths);
@@ -313,6 +336,22 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId || item.room.slug === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   const snapshot = cached.snapshot;
+  const readIdentities = await getViewerReadIdentities(context.forumAlias, input.identityIds?.length ? input.identityIds : [undefined], paths);
+  const localReceipt = (item: { id: string; authorId: string; createdAt: string }): ViewerLocalReceipt => {
+    const publishedBy = readIdentities.filter((identity) => identity.memberId === item.authorId);
+    const recipients = readIdentities.filter((identity) => {
+      if (identity.memberId === item.authorId) return false;
+      const membership = room.members[identity.memberId];
+      return membership?.status === "active" && typeof membership.updatedAt === "string" && item.createdAt >= membership.updatedAt;
+    });
+    const seen = new Map(readIdentities.map((identity) => [identity.memberId, new Set(identity.seenIds)]));
+    const summary = (identity: ViewerReadIdentity) => ({ id: identity.memberId, displayName: identity.displayName });
+    return {
+      publishedBy: publishedBy.map(summary),
+      readBy: recipients.filter((identity) => seen.get(identity.memberId)?.has(item.id)).map(summary),
+      unreadBy: recipients.filter((identity) => !seen.get(identity.memberId)?.has(item.id)).map(summary),
+    };
+  };
   // 聚合成员活跃度：统计每个 Room 成员在本房间的消息数和最后发言时间
   const memberStats = new Map<string, { messageCount: number; lastMessageAt: string | null }>();
   const activeMemberIds = Object.entries(room.members).filter(([, m]) => m.status === "active").map(([id]) => id);
@@ -338,7 +377,7 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
       replyCount, lastActivityAt,
       messages: messages.map((msg) => ({
         id: msg.id, authorId: msg.authorId, authorName: snapshot.members[msg.authorId]?.displayName ?? msg.authorId,
-        type: msg.type, body: msg.body, bodyHtml: renderMarkdown(msg.body), replyTo: msg.replyTo ?? null, createdAt: msg.createdAt,
+        type: msg.type, body: msg.body, bodyHtml: renderMarkdown(msg.body), replyTo: msg.replyTo ?? null, createdAt: msg.createdAt, localReceipt: localReceipt(msg),
       })),
     };
   });
@@ -359,7 +398,7 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
   };
 }
 
-export async function generateViewerHtml(input: { forumAlias?: string; room?: string; cwd?: string; output?: string }, paths = createAgentForumPaths()): Promise<{ output: string }> {
+export async function generateViewerHtml(input: { forumAlias?: string; room?: string; cwd?: string; output?: string; identityId?: string }, paths = createAgentForumPaths()): Promise<{ output: string }> {
   const context = await resolveContext({ ...(input.cwd ? { cwd: input.cwd } : {}), ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}), ...(input.room ? { room: input.room } : {}) }, paths);
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const refresh = await refreshForumFromRemote(context.forumAlias, paths);
@@ -369,7 +408,7 @@ export async function generateViewerHtml(input: { forumAlias?: string; room?: st
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir(dirname(output), { recursive: true });
-  const html = renderViewerHtml(cached.snapshot, room);
+  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths));
   await import("node:fs/promises").then(({ writeFile }) => writeFile(output, html, { encoding: "utf8", mode: 0o600 }));
   return { output };
 }

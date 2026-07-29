@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
-import { initLocalForum } from "../src/services/local-forum.js";
-import { createRoom } from "../src/services/room.js";
+import { initLocalForum, publishIdentity } from "../src/services/local-forum.js";
+import { getInbox } from "../src/services/inbox.js";
+import { createRoom, joinRoom } from "../src/services/room.js";
 import { createThread, createThreadEvent } from "../src/services/thread.js";
 import { closeViewerSession, generateViewerHtml, getViewerRoomData, listViewerSessions, openViewer, viewerServerLaunchArgs } from "../src/services/viewer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
@@ -24,8 +25,12 @@ async function setup(home: string) {
   const now = new Date("2026-07-12T12:00:00.000Z");
   await createLocalIdentity({ memberId: "member_0194f6d2-8c10-7a31-9e42-123456789ac1", displayName: "Viewer Agent", role: "review", responsibility: "Audit", now }, paths);
   await initLocalForum({ alias: "team", name: "Team", description: "Viewer", forumId: "forum_0194f6d2-8c10-7a31-9e42-123456789abc", now }, paths);
+  const readerId = "member_0194f6d2-8c10-7a31-9e42-123456789ac2";
+  await createLocalIdentity({ memberId: readerId, displayName: "Reader Agent", role: "frontend", responsibility: "Read", setDefault: false, now }, paths);
+  await publishIdentity("team", readerId, paths, now);
   await createRoom({ forumAlias: "team", slug: "review", title: "Review", description: "Human review", roomId: "room_0194f6d2-8c10-7a31-9e42-123456789abd", now }, paths);
-  await createThread({ forumAlias: "team", room: "review", title: "Audit this", kind: "review", body: "## Visible marker 你好\n\n**Bold** and <script>unsafe</script>", threadId: "thread_0194f6d2-8c10-7a31-9e42-123456789abe", now }, paths);
+  await joinRoom({ forumAlias: "team", room: "review", identityId: readerId, now }, paths);
+  await createThread({ forumAlias: "team", room: "review", title: "Audit this", kind: "review", body: "## Visible marker 你好\n\n**Bold** and <script>unsafe</script>", threadId: "thread_0194f6d2-8c10-7a31-9e42-123456789abe", now: new Date("2026-07-12T12:00:01.000Z") }, paths);
   return paths;
 }
 
@@ -44,7 +49,7 @@ test("Viewer data returns active Room members and deterministic activity data", 
     assert.equal(data.room.title, "Review");
     assert.equal(data.stats.threadCount, 1);
     assert.equal(data.stats.messageCount, 1);
-    assert.equal(data.stats.memberCount, 1);
+    assert.equal(data.stats.memberCount, 2);
     assert.equal(data.members[0]?.displayName, "Viewer Agent");
     assert.equal(data.members[0]?.messageCount, 1);
     assert.equal(data.threads[0]?.status, "closed");
@@ -52,9 +57,27 @@ test("Viewer data returns active Room members and deterministic activity data", 
     assert.match(data.threads[0]?.messages[0]?.bodyHtml ?? "", /<h4>Visible marker 你好<\/h4>/);
     assert.match(data.threads[0]?.messages[0]?.bodyHtml ?? "", /<strong>Bold<\/strong>/);
     assert.doesNotMatch(data.threads[0]?.messages[0]?.bodyHtml ?? "", /<script>/);
+    assert.equal(data.threads[0]?.messages[0]?.localReceipt.publishedBy[0]?.displayName, "Viewer Agent");
+    assert.equal(data.threads[0]?.messages[0]?.localReceipt.readBy.length, 0);
+    assert.equal(data.threads[0]?.messages[0]?.localReceipt.unreadBy.length, 0);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+});
+
+test("Viewer data derives AI unread and read receipts from the private cursor", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-viewer-receipt-"));
+  const readerId = "member_0194f6d2-8c10-7a31-9e42-123456789ac2";
+  try {
+    const paths = await setup(home);
+    const before = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
+    assert.equal(before.threads[0]?.messages[0]?.localReceipt.unreadBy[0]?.displayName, "Reader Agent");
+    assert.equal(before.threads[0]?.messages[0]?.localReceipt.readBy.length, 0);
+    await getInbox({ forumAlias: "team", identityId: readerId, sync: false, markAllRead: true }, paths);
+    const after = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
+    assert.equal(after.threads[0]?.messages[0]?.localReceipt.readBy[0]?.displayName, "Reader Agent");
+    assert.equal(after.threads[0]?.messages[0]?.localReceipt.unreadBy.length, 0);
+  } finally { await rm(home, { recursive: true, force: true }); }
 });
 
 test("Viewer launcher becomes ready, reports status, and closes without blocking", async () => {

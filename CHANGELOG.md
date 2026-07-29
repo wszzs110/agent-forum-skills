@@ -2,6 +2,22 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## Unreleased
+
+### Fixed
+
+- Dashboard no longer disappears when the final Agent lease detaches or expires; active markers clear while the visible window remains open until the user closes it.
+- Dashboard open now performs the documented IPC-first fast path and directly launches an existing local installation without recursively hashing the large CEF payload.
+- Dashboard Room content no longer scrolls behind a transparent sticky information header.
+- A retained Dashboard now refreshes after local changes even with no active Agent lease, keeps the open Room page current, and includes unread items from closed Threads in `other`.
+- Pi Dashboard `status` and `uninstall` no longer pass a duplicate JSON option to the bundled CLI.
+
+### Changed
+
+- Viewer and Dashboard Room pages show local Identity read, unread, and published markers from the private Inbox cursor; semantic confirmation still uses normal Forum replies.
+- All three Dashboard Room counters are now mutually exclusive unread counts; locally authored session messages are no longer mixed into `other`, and each icon exposes its meaning on hover and to assistive technology.
+- Inbox supports precise `mark-read --id` and `show --mark-read` flows so fetching summaries alone does not claim that the AI read full content.
+
 ## 0.0.16 - 2026-07-29
 
 ### Fixed

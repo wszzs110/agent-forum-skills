@@ -8,7 +8,7 @@ import { ExitCode } from "../errors.js";
 import { createAgentForumPaths } from "../storage/paths.js";
 import { DASHBOARD_VERSION, VERSION } from "../version.js";
 import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashboardSnapshot, setDashboardForumPolling, setDashboardRoomPinned } from "../services/dashboard.js";
-import { getDashboardInstallationStatus, uninstallDashboard } from "../services/dashboard-installer.js";
+import { getDashboardInstallationStatus, getDashboardLaunchStatus, uninstallDashboard } from "../services/dashboard-installer.js";
 import { ensureDashboard } from "../services/dashboard-ensure.js";
 import { ServiceError } from "../services/errors.js";
 import { getDashboardAcquisitionPolicy, setDashboardAcquisitionPolicy, type DashboardAcquisitionPolicy } from "../services/dashboard-policy.js";
@@ -25,8 +25,13 @@ export function dashboardUpdateAvailable(installedVersion: string | undefined, d
 
 export async function executeDashboardCommand(args: readonly string[], options: { onProgress?: (text: string) => void } = {}): Promise<CommandExecution> {
   const subcommand = args[0];
-  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <ensure|policy|install|update|install-local|uninstall|open|attach|heartbeat|detach|status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard ensure [--update] [--approve-once] [--force]\n  agent-forum dashboard policy [--mode <managed|ask|manual>]\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard install-local --archive <file> --manifest <file> [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
+  if (!subcommand || subcommand === "help" || subcommand === "--help") return { exitCode: ExitCode.Success, command: "dashboard.help", data: { usage: "agent-forum dashboard <ensure|policy|install|update|install-local|uninstall|open|attach|heartbeat|detach|status|lease-status|snapshot|polling|pin>" }, human: "Dashboard\n\nUsage:\n  agent-forum dashboard ensure [--update] [--approve-once] [--force]\n  agent-forum dashboard policy [--mode <managed|ask|manual>]\n  agent-forum dashboard install [--manifest-url <url>] [--yes]\n  agent-forum dashboard update [--manifest-url <url>] [--yes] [--force]\n  agent-forum dashboard install-local --archive <file> --manifest <file> [--yes] [--force]\n  agent-forum dashboard uninstall [--force]\n  agent-forum dashboard open --client-id <id> --client-type <pi|opencode|codex|claude-code> [--cwd <path>] [--forum <alias> --room <room>] [--identity <member-id>]\n  agent-forum dashboard attach --client-id <id> --client-type <pi|opencode|codex|claude-code> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard heartbeat --client-id <id> --client-type <type> [--forum <alias> --room <room>] [--identity <member-id>] [--lease-ms <ms>]\n  agent-forum dashboard detach --client-id <id>\n  agent-forum dashboard status|snapshot\n  agent-forum dashboard polling --forum-id <forum-id> --enabled <true|false>\n  agent-forum dashboard pin --room-id <room-id> --enabled <true|false>\n" };
   try {
+    if (subcommand === "lease-status") {
+      if (args.length !== 1) return invalidArgument("dashboard lease-status accepts no options");
+      const result = await dashboardStatus();
+      return { exitCode: ExitCode.Success, command: "dashboard.lease-status", data: result, human: `${result.clients.length} active Dashboard client(s).\n` };
+    }
     if (subcommand === "status") {
       if (args.length !== 1) return invalidArgument("dashboard status accepts no options");
       const [result, installation, policy] = await Promise.all([dashboardStatus(), getDashboardInstallationStatus(), getDashboardAcquisitionPolicy()]);
@@ -124,31 +129,27 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       const forum = context.forumAlias; const room = context.roomId;
       if (!forum || context.targetStatus !== "active") return invalidArgument("Dashboard requires an active bound Forum Room");
       const identity = parsed.values.get("--identity");
-      const installed = await getDashboardInstallationStatus();
-      // Desktop archive 体积较大；显式打开只提示可用更新，绝不下载或替换用户当前版本。
+      const contextData = { forumAlias: forum, roomId: room, roomSlug: context.roomSlug };
+      // 已运行实例是最短本机快路径：不读取安装 payload，也不访问 GitHub。
+      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...(identity ? { identityId: identity } : {}) })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, ...contextData }, human: "Dashboard already running; client attached.\n" };
+      const installed = await getDashboardLaunchStatus();
+      // 普通 open 只检查启动所需文件；完整 payload hash 留给 status/ensure/update/repair。
       const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
       const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard ensure --update to follow your acquisition policy.` : "";
-      if (await attachExistingDashboardDesktop({ clientId, clientType, forumAlias: forum, roomId: room, ...(identity ? { identityId: identity } : {}) })) return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, reused: true, updateAvailable }, human: `Dashboard already running; client attached.${updateHint}\n` };
       const moduleDirectory = dirname(fileURLToPath(import.meta.url));
       const entrypoint = [resolve(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
       const deno = process.platform === "win32" ? resolve(homedir(), ".deno", "bin", "deno.exe") : "deno";
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && entrypoint && (process.platform !== "win32" || existsSync(deno));
-      if (installed.status !== "installed" && !developmentFallback) {
-        const modified = installed.status === "modified" && installed.modifiedFiles?.length
-          ? ` (changed files: ${installed.modifiedFiles.slice(0, 5).join(", ")}${installed.modifiedFiles.length > 5 ? ", …" : ""})`
-          : "";
-        throw new ServiceError("DASHBOARD_UNAVAILABLE", installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard ensure --update`);
-      }
+      if (installed.status !== "installed" && !developmentFallback) throw new ServiceError("DASHBOARD_UNAVAILABLE", installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : "Dashboard installation is damaged; run agent-forum dashboard ensure --update");
       const executable = installed.status === "installed" ? installed.executable! : deno;
       const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve(dirname(entrypoint!), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint!];
-      const dashboardCli = installed.status === "installed" ? resolve(dirname(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
-      if (installed.status === "installed" && !existsSync(dashboardCli)) throw new ServiceError("DASHBOARD_UNAVAILABLE", "Dashboard CLI helper is missing; run agent-forum dashboard ensure --update");
+      const dashboardCli = installed.status === "installed" ? installed.helper! : process.execPath;
       // CEF 可能在工作目录写入诊断或缓存。固定使用私有 state 目录，绝不让运行时文件污染已校验的安装 payload。
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir(dashboardRuntimeDirectory, { recursive: true, mode: 0o700 });
       const child = spawn(executable, executableArgs, { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve(dirname(executable), "AppIcon.ico") : resolve(dirname(entrypoint!), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
       child.unref();
-      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable }, human: `Dashboard started.${updateHint}\n` };
+      return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable, ...contextData }, human: `Dashboard started.${updateHint}\n` };
     }
     if (subcommand === "pin") {
       const parsed = parseCommandOptions(args.slice(1), { values: ["--room-id", "--enabled"] });
@@ -161,7 +162,7 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       return { exitCode: ExitCode.Success, command: "dashboard.pin", data: result, human: `Pin ${result.pinned ? "enabled" : "disabled"}: ${roomId}\n` };
     }
     if (subcommand === "attach" || subcommand === "heartbeat") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--client-id", "--client-type", "--forum", "--room", "--identity", "--lease-ms"] });
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--client-id", "--client-type", "--forum", "--room", "--identity", "--lease-ms"], flags: ["--reset-view"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const clientId = requireOption(parsed, "--client-id"); const clientType = requireOption(parsed, "--client-type");
       if (typeof clientId !== "string") return invalidArgument(clientId.error);
@@ -172,7 +173,7 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       const leaseText = parsed.values.get("--lease-ms"); const leaseMs = leaseText === undefined ? undefined : Number(leaseText);
       if (leaseText !== undefined && !Number.isInteger(leaseMs)) return invalidArgument("--lease-ms must be an integer");
       const identityId = parsed.values.get("--identity");
-      const result = await attachDashboardClient({ clientId, clientType: clientType as "pi" | "opencode" | "codex" | "claude-code", forumAlias, roomId, ...(identityId ? { identityId } : {}), ...(leaseMs !== undefined ? { leaseMs } : {}) });
+      const result = await attachDashboardClient({ clientId, clientType: clientType as "pi" | "opencode" | "codex" | "claude-code", forumAlias, roomId, ...(identityId ? { identityId } : {}), ...(leaseMs !== undefined ? { leaseMs } : {}), resetView: parsed.flags.has("--reset-view") });
       return { exitCode: ExitCode.Success, command: `dashboard.${subcommand}`, data: result, human: `Attached Dashboard client ${result.client.clientId}.\n` };
     }
     return invalidArgument(`unknown dashboard subcommand: ${subcommand}`);

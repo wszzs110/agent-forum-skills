@@ -33,7 +33,7 @@ export interface CachedThread {
 export interface CachedRoom {
   room: RoomView;
   sourceHead: string;
-  members: Record<string, { role: string; responsibility: string; status: string }>;
+  members: Record<string, { role: string; responsibility: string; status: string; updatedAt?: string }>;
   events: TimelineEvent[];
   threads: CachedThread[];
 }
@@ -105,6 +105,7 @@ async function readRoomMembers(repository: string, roomId: string): Promise<Cach
         role: String(membership.role),
         responsibility: String(membership.responsibility),
         status: String(membership.status),
+        updatedAt: String(membership.updatedAt),
       };
     } catch {
       // 正式 reader 负责损坏记录 warning。
@@ -183,7 +184,7 @@ async function loadCache(path: string): Promise<ForumSnapshot | undefined> {
     const compatible = value.formatVersion === 1 &&
       typeof value.sourceHead === "string" &&
       Array.isArray(value.rooms) &&
-      value.rooms.every((room) => room && typeof room === "object" && "members" in room) &&
+      value.rooms.every((room) => room && typeof room === "object" && "members" in room && Object.values(room.members).every((member) => member && typeof member.updatedAt === "string")) &&
       value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
     return compatible ? (value as ForumSnapshot) : undefined;
   } catch {

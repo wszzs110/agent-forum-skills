@@ -71,18 +71,21 @@ export default function (pi: ExtensionAPI) {
       // status：展示安装状态和版本
       if (subcommand === "status") {
         try {
-          const result = await executeCli(["dashboard", "status", "--json"], ctx.cwd);
+          ctx.ui.setStatus("agent-forum-dashboard", "Checking Dashboard installation…");
+          const result = await executeCli(["dashboard", "status"], ctx.cwd);
           if (!result.ok) {
             ctx.ui.notify(result.error?.message ?? "Dashboard status failed.", "error");
             return;
           }
           const inst = result.data?.installation as Record<string, unknown> | undefined;
           const inner = inst?.installation as Record<string, unknown> | undefined;
-          const version = (inner?.version as string) ?? "not installed";
+          const version = inner?.version as string | undefined;
           const status = (inst?.status as string) ?? "unknown";
-          ctx.ui.notify(`Dashboard: ${status} (v${version})`, "info");
+          ctx.ui.notify(`Dashboard: ${status}${version ? ` (v${version})` : ""}`, "info");
         } catch (error) {
           ctx.ui.notify(error instanceof Error ? error.message : "Dashboard status failed.", "error");
+        } finally {
+          ctx.ui.setStatus("agent-forum-dashboard", undefined);
         }
         return;
       }
@@ -90,7 +93,8 @@ export default function (pi: ExtensionAPI) {
       // uninstall
       if (subcommand === "uninstall") {
         try {
-          const result = await executeCli(["dashboard", "uninstall", "--json"], ctx.cwd);
+          ctx.ui.setStatus("agent-forum-dashboard", "Uninstalling Dashboard…");
+          const result = await executeCli(["dashboard", "uninstall"], ctx.cwd);
           if (!result.ok) {
             ctx.ui.notify(result.error?.message ?? "Dashboard uninstall failed.", "error");
             return;
@@ -98,6 +102,8 @@ export default function (pi: ExtensionAPI) {
           ctx.ui.notify("Dashboard uninstalled.", "info");
         } catch (error) {
           ctx.ui.notify(error instanceof Error ? error.message : "Dashboard uninstall failed.", "error");
+        } finally {
+          ctx.ui.setStatus("agent-forum-dashboard", undefined);
         }
         return;
       }
@@ -108,20 +114,11 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      // open（默认）：resolve context → 优先复用现有 Dashboard → 必要时获取 → 启动 heartbeat
+      // open（默认）：由 CLI 一次解析 context → 优先复用现有 Dashboard → 必要时获取 → 启动 heartbeat
       clientId ??= `pi-${randomUUID()}`;
       try {
-        const context = await executeCli(["context", "resolve", "--cwd", ctx.cwd], ctx.cwd);
-        if (!context.ok || !context.data?.forumAlias || !context.data?.roomId) {
-          ctx.ui.notify(context.error?.message ?? "No active Agent Forum context binding for this workspace.", "error");
-          return;
-        }
-        const forumAlias = context.data.forumAlias as string;
-        const roomId = context.data.roomId as string;
-        const roomSlug = context.data.roomSlug as string | undefined;
         const openArgs = [
-          "dashboard", "open", "--client-id", clientId, "--client-type", "pi",
-          "--forum", forumAlias, "--room", roomId,
+          "dashboard", "open", "--client-id", clientId, "--client-type", "pi", "--cwd", ctx.cwd,
         ];
         ctx.ui.setStatus("agent-forum-dashboard", "Opening Dashboard…");
         let result = await executeCli(openArgs, ctx.cwd);
@@ -174,11 +171,18 @@ export default function (pi: ExtensionAPI) {
           ctx.ui.notify(result.error?.message ?? "Unable to open Agent Forum Dashboard.", "error");
           return;
         }
+        const forumAlias = result.data?.forumAlias;
+        const roomId = result.data?.roomId;
+        const roomSlug = result.data?.roomSlug;
+        if (typeof forumAlias !== "string" || typeof roomId !== "string") {
+          ctx.ui.notify("Dashboard open returned an incomplete Context.", "error");
+          return;
+        }
         opened = true;
         if (heartbeat) clearInterval(heartbeat);
         const heartbeatArgs = ["dashboard", "heartbeat", "--client-id", clientId, "--client-type", "pi", "--forum", forumAlias, "--room", roomId];
         heartbeat = setInterval(() => { void executeCli(heartbeatArgs, ctx.cwd).catch(() => undefined); }, 30_000);
-        ctx.ui.notify(`Agent Forum Dashboard opened for ${roomSlug ?? roomId}.`, "info");
+        ctx.ui.notify(`Agent Forum Dashboard opened for ${typeof roomSlug === "string" ? roomSlug : roomId}.`, "info");
       } catch (error) {
         ctx.ui.notify(error instanceof Error ? error.message : "Unable to open Agent Forum Dashboard.", "error");
       } finally {

@@ -93,6 +93,58 @@ async function loadCursor(
   }
 }
 
+export interface InboxReadCursor {
+  memberId: string;
+  seenIds: string[];
+  updatedAt: string;
+}
+
+export async function getInboxReadCursor(
+  input: { forumAlias: string; identityId?: string },
+  paths: AgentForumPaths = createAgentForumPaths(),
+): Promise<InboxReadCursor> {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const cursor = await loadCursor(paths, registration.forumId, identity.memberId);
+  return { memberId: identity.memberId, seenIds: cursor.seenIds, updatedAt: cursor.updatedAt };
+}
+
+async function appendSeenIds(
+  forumId: string,
+  memberId: string,
+  ids: readonly string[],
+  paths: AgentForumPaths,
+): Promise<{ markedRead: number; alreadyRead: number }> {
+  if (ids.length === 0) return { markedRead: 0, alreadyRead: 0 };
+  const lock = await acquireForumLock({
+    lockPath: resolve(paths.locksDirectory, `${forumId}-${memberId}-cursor.lock`),
+    command: "inbox mark read",
+  });
+  try {
+    const latest = await loadCursor(paths, forumId, memberId);
+    const seen = new Set(latest.seenIds);
+    const additions = [...new Set(ids)].filter((id) => !seen.has(id));
+    if (additions.length > 0) {
+      await writeValidatedJsonAtomic(
+        cursorPath(paths, forumId, memberId),
+        "inbox-cursor",
+        {
+          formatVersion: 1,
+          forumId,
+          memberId,
+          seenIds: [...latest.seenIds, ...additions],
+          updatedAt: currentUtcTimestamp(),
+        },
+        { overwrite: true, mode: 0o600 },
+      );
+    }
+    return { markedRead: additions.length, alreadyRead: ids.length - additions.length };
+  } finally {
+    await lock.release();
+  }
+}
+
 async function readEvents(
   directory: string,
   roomId: string,
@@ -282,6 +334,26 @@ export async function getAllUnreadInboxEntries(
   };
 }
 
+export async function markInboxEntriesRead(
+  input: { forumAlias: string; identityId?: string; ids: string[]; sync?: boolean },
+  paths: AgentForumPaths = createAgentForumPaths(),
+): Promise<{ ids: string[]; markedRead: number; alreadyRead: number; warnings: ProtocolWarning[]; sync: ForumRefreshResult | null }> {
+  const ids = [...new Set(input.ids)];
+  if (ids.length === 0) throw new ServiceError("PROTOCOL_DATA_DAMAGED", "at least one Inbox entry ID is required");
+  const sync = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const publicProfile = await readJsonDocument(resolve(registration.path, "members", identity.memberId, "profile.json"), "member-profile");
+  if (publicProfile.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
+  const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
+  const eligible = new Set(collected.entries.filter((entry) => entry.actorId !== identity.memberId).map((entry) => entry.id));
+  const unknown = ids.filter((id) => !eligible.has(id));
+  if (unknown.length > 0) throw new ServiceError("MESSAGE_NOT_FOUND", `Inbox entries were not found or are outside active Room membership: ${unknown.join(", ")}`);
+  const result = await appendSeenIds(registration.forumId, identity.memberId, ids, paths);
+  return { ids, ...result, warnings: collected.warnings, sync };
+}
+
 function balancedPage(entries: InboxEntry[], limit: number): InboxEntry[] {
   const ordered = [...entries].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
   if (limit < 3) return ordered.slice(0, limit);
@@ -385,33 +457,7 @@ export async function getInbox(
     : input.markRead
       ? page.map((entry) => entry.id)
       : [];
-  if (idsToMark.length > 0) {
-    const lock = await acquireForumLock({
-      lockPath: resolve(
-        paths.locksDirectory,
-        `${registration.forumId}-${identity.memberId}-cursor.lock`,
-      ),
-      command: "inbox mark read",
-    });
-    try {
-      const latest = await loadCursor(paths, registration.forumId, identity.memberId);
-      const nextSeen = [...new Set([...latest.seenIds, ...idsToMark])];
-      await writeValidatedJsonAtomic(
-        cursorPath(paths, registration.forumId, identity.memberId),
-        "inbox-cursor",
-        {
-          formatVersion: 1,
-          forumId: registration.forumId,
-          memberId: identity.memberId,
-          seenIds: nextSeen,
-          updatedAt: currentUtcTimestamp(),
-        },
-        { overwrite: true, mode: 0o600 },
-      );
-    } finally {
-      await lock.release();
-    }
-  }
+  if (idsToMark.length > 0) await appendSeenIds(registration.forumId, identity.memberId, idsToMark, paths);
   const relevanceCounts = { direct: 0, watched: 0, priority: 0, discovery: 0 };
   for (const entry of unread) relevanceCounts[entry.relevance] += 1;
   const displayed = page.map((entry) => {
