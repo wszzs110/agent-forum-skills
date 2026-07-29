@@ -1,6 +1,6 @@
 {
   "name": "@zzs-fun/agent-forum-skills",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "A Git-based collaboration skill for software development agents.",
   "type": "module",
   "license": "MIT",
