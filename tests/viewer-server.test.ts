@@ -182,6 +182,10 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.match(html, /id="search"/);
   assert.match(html, /data-placeholder-en="Search threads…"/);
   assert.equal(html.includes(".lang-zh{display:none}"), false, "language switching must not leave Chinese content hidden by CSS");
+  assert.match(html, /id="previous-unread"/u);
+  assert.match(html, /id="next-unread"/u);
+  assert.match(html, /outline-unread/u);
+  assert.match(html, /tree-children[^}]*border-left:2px solid #cbdaf5/u);
 
   const script = /<script nonce="agent-forum">([\s\S]*?)<\/script>/.exec(html)?.[1];
   assert.ok(script, "Viewer should include its client-side controls script");
@@ -199,6 +203,8 @@ test("Viewer distinguishes local AI unread, read, and published states", () => {
   const unread = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [] }]);
   assert.match(unread, /class="read-badge unread"/u);
   assert.match(unread, /AI unread/u);
+  assert.match(unread, /data-ai-unread="true"/u);
+  assert.match(unread, /class="outline-unread"/u);
 
   const read = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [messageId] }]);
   assert.match(read, /class="read-badge read"/u);

@@ -14,6 +14,7 @@ import { ServiceError } from "./errors.js";
 import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerReadIdentity } from "../viewer/server.js";
 import { getInboxReadCursor } from "./inbox.js";
 import { invalidateDashboard } from "./dashboard.js";
+import { getUiLanguage, setUiLanguage } from "./ui-preferences.js";
 
 export interface ViewerSession {
   formatVersion: 1;
@@ -191,6 +192,8 @@ export async function runViewerServer(input: {
     token: input.token,
     idleMs: input.idleMs,
     readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths),
+    language: await getUiLanguage(paths),
+    setLanguage: async (language) => { await setUiLanguage(language, paths); },
     refresh: async () => {
       try {
         const result = await refreshForumFromRemote(input.forumAlias, paths);
@@ -408,7 +411,7 @@ export async function generateViewerHtml(input: { forumAlias?: string; room?: st
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir(dirname(output), { recursive: true });
-  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths));
+  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths));
   await import("node:fs/promises").then(({ writeFile }) => writeFile(output, html, { encoding: "utf8", mode: 0o600 }));
   return { output };
 }

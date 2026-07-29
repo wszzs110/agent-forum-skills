@@ -140,7 +140,7 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.match(source, /!promoteSelectedRoom\|\|roomId!==selectedRoomId/u, "deprecated Room stays in its existing final position when selected");
   assert.match(source, /const roomIds=orderedRoomIds\(baseOrder,defaultOrder,selectedRoomId,byRoomId\)/u);
   assert.doesNotMatch(source, /baseOrder\.filter\(roomId=>roomId!==selectedRoomId&&byRoomId\.has\(roomId\)\)/u);
-  assert.match(source, /t\.status==='closed'\?'<span class="rp-thread-status closed">Closed<\/span>'/u);
+  assert.match(source, /t\.status==='closed'\?'<span class="rp-thread-status closed">'\+roomText\('Closed','已关闭'\)\+'<\/span>'/u);
   assert.match(source, /\.rp-thread\.closed/);
   assert.match(source, /message\.bodyHtml/);
   assert.match(source, /receiptBadge\(m\.localReceipt\)/u);
@@ -149,6 +149,13 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.match(source, /title="Broadcast unread"/u);
   assert.match(source, /title="Other unread"/u);
   assert.match(source, /function refreshOpenRoomPanel\(/u, "an open Room page refreshes when the Dashboard revision changes");
+  assert.match(source, /id="room-language"/u, "Dashboard Room page exposes the shared language preference");
+  assert.match(source, /api\('\/language'/u);
+  assert.match(source, /id="previous-unread"/u);
+  assert.match(source, /id="next-unread"/u);
+  assert.match(source, /ai-unread/u, "Dashboard Room messages expose local AI unread targets");
+  assert.doesNotMatch(source.slice(source.indexOf("function renderRoomView"), source.indexOf("async function toggleRoomPanel")), /app\.animate/u, "Room page renders must not shake the complete Dashboard");
+  assert.doesNotMatch(source, /room-enter/u, "Room view must not scale the entire Dashboard on every render");
   const refreshStart = source.indexOf("function refreshOpenRoomPanel(");
   const refreshEnd = source.indexOf("\nsetInterval(refresh", refreshStart);
   assert.doesNotThrow(() => new Function(source.slice(refreshStart, refreshEnd)), "Room panel refresh script must remain valid JavaScript");

@@ -81,6 +81,15 @@ agent-forum dashboard status
 
 先调用 `dashboard open`：它会通过本机 IPC 附着已运行的共享 Desktop，不检查安装、不访问网络。没有运行实例时仅检查本机 executable/helper 并直接启动；完整 payload hash 属于显式 status/ensure 操作。仅当 open 返回 `DASHBOARD_UNAVAILABLE` 时调用 `ensure`，获取完成后重试 open。Dashboard 获取策略是所有支持 Agent 平台共用的本机私有状态。默认 `ask` 返回一次机器可读的 `confirmation-required`；`managed` 允许 Agent 在用户明确要求使用 Dashboard 时自行获取、续传、校验与修复；`manual` 只返回 Release 下载链接，不联网下载。普通 `ensure` 不更新已安装 Dashboard，只有明确的 `--update` 才请求更新。本地导入不访问网络，但会以 manifest 校验 archive。长耗时获取阶段在 stderr 输出进度，JSON 仍只写 stdout。
 
+## 界面语言偏好
+
+```text
+agent-forum preference language
+agent-forum preference language --value <en|zh>
+```
+
+语言偏好仅存于本机，由 Viewer 和 Dashboard Room 页面共用，绝不进入 Forum remote。
+
 ## 其他命令
 
 - `context bind|unbind|show|list|resolve`：工作区路由；

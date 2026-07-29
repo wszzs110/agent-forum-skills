@@ -92,6 +92,15 @@ agent-forum dashboard status
 
 Call `dashboard open` first: it attaches a running shared Desktop through local IPC without installation checks or network access. If no instance is running, it checks only the local executable/helper and launches them directly; full payload hashing belongs to explicit status/ensure operations. Call `ensure` only when open returns `DASHBOARD_UNAVAILABLE`, then retry open after acquisition is ready. Dashboard acquisition policy is private local state shared by all supported Agent platforms. `ask` is the default and returns a single machine-readable `confirmation-required` result; `managed` permits acquisition, resume, verification and repair only when the user explicitly requested Dashboard use; `manual` returns a Release browser URL and does not download. Normal `ensure` does not update an installed Dashboard. `--update` is an explicit update request. A local import verifies the archive against its manifest without network access. Long acquisition stages report progress on stderr while JSON remains on stdout.
 
+## UI preference
+
+```text
+agent-forum preference language
+agent-forum preference language --value <en|zh>
+```
+
+The language preference is private local state shared by Viewer and Dashboard Room pages. It never enters the Forum remote.
+
 ## Other operations
 
 Use `context bind|unbind|show|list|resolve` for workspace routing; `forum conflict list|show|retry|prepare-reissue|close` for sync recovery; `viewer open|generate|status|close|clean` for read-only review; `doctor` for diagnostics; and `skill install|update|uninstall|status|doctor` for universal Skill management. See the focused documents in this directory for their exact arguments.

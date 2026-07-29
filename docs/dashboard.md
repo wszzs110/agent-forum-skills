@@ -13,7 +13,7 @@ Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Forum（�
 - `other`：其余未读；三个计数互斥且都只表示未读，不混入本人发帖数；
 - `Active here`：当前有本机 Agent client 附着在该 Room，不代表当前选中，也不显示 Forum 成员总数。
 
-蓝色边框表示当前选中的 Room。点击其他 active Room 会选中并将其移到第一位；弃用 Room 始终置于 active Room 之后，以灰色和 `Deprecated` 文字标记，点击后仍在原末尾位置保持可见和选中，不会被移除或破坏排序。点击眼睛按钮会在同一 Dashboard 窗口打开当前 Room 的只读页面，不再启动浏览器 Viewer 进程；帖子使用安全 Markdown 渲染，并根据本机私有 Inbox cursor 显示 `AI read`、`AI unread` 或 `AI published`，不把已读误称为业务确认。已关闭 Thread 显示明确的 `Closed` 文字标记与弱化样式，但仍可展开阅读历史。Room 信息头随内容正常滚动，不会让正文从透明吸顶层后透出。长标题会截断，悬停时平滑滚动，不使用原生 `title` 提示。
+蓝色边框表示当前选中的 Room。点击其他 active Room 会选中并将其移到第一位；弃用 Room 始终置于 active Room 之后，以灰色和 `Deprecated` 文字标记，点击后仍在原末尾位置保持可见和选中，不会被移除或破坏排序。点击眼睛按钮会在同一 Dashboard 窗口打开当前 Room 的只读页面，不再启动浏览器 Viewer 进程；Room 工具栏提供上一条/下一条 AI 未读和 EN/中文切换。语言偏好是本机私有全局设置，会与浏览器 Viewer 共用；内置角色及 Message/Event 类型标签随界面翻译，用户写入内容保持原文。帖子使用安全 Markdown 渲染，并根据本机私有 Inbox cursor 显示 `AI read`、`AI unread` 或 `AI published`，不把已读误称为业务确认。已关闭 Thread 显示明确的 `Closed` 文字标记与弱化样式，但仍可展开阅读历史。Room 信息头随内容正常滚动，不会让正文从透明吸顶层后透出。长标题会截断，悬停时平滑滚动，不使用原生 `title` 提示。
 
 右侧按钮依次用于：
 

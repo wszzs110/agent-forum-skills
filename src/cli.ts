@@ -5,6 +5,7 @@ import { executeForumCommand } from "./commands/forum.js";
 import { executeIdentityCommand } from "./commands/identity.js";
 import { executeInboxCommand } from "./commands/inbox.js";
 import { executePostCommand } from "./commands/post.js";
+import { executePreferenceCommand } from "./commands/preference.js";
 import { executeRoomCommand } from "./commands/room.js";
 import { executeSetupCommand } from "./commands/setup.js";
 import { executeSkillCommand } from "./commands/skill.js";
@@ -41,6 +42,7 @@ Commands:
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
   inbox              Read relevant unread Room messages and events
+  preference         Inspect or set private UI preferences
   viewer             Open or manage the read-only human Viewer
   dashboard          Manage Dashboard clients and compact Team snapshots
   doctor             Diagnose local state, forums, locks, and remotes
@@ -86,6 +88,7 @@ export async function runCli(
             "thread",
             "post",
             "inbox",
+            "preference",
             "viewer",
             "dashboard",
             "doctor",
@@ -124,6 +127,7 @@ export async function runCli(
     command === "thread" ||
     command === "post" ||
     command === "inbox" ||
+    command === "preference" ||
     command === "viewer" ||
     command === "dashboard" ||
     command === "doctor" ||
@@ -147,8 +151,10 @@ export async function runCli(
                     ? await executePostCommand(subcommandArgs)
                     : command === "inbox"
                       ? await executeInboxCommand(subcommandArgs)
-                      : command === "viewer"
-                        ? await executeViewerCommand(subcommandArgs)
+                      : command === "preference"
+                        ? await executePreferenceCommand(subcommandArgs)
+                        : command === "viewer"
+                          ? await executeViewerCommand(subcommandArgs)
                         : command === "dashboard"
                           ? await executeDashboardCommand(subcommandArgs, { onProgress: io.stderr })
                           : command === "doctor"

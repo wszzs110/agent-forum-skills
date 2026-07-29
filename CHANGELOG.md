@@ -4,6 +4,10 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ## Unreleased
 
+### Added
+
+- Viewer and Dashboard Room pages share one private global EN/中文 preference, add previous/next local-AI-unread navigation, and translate built-in role and Message/Event labels without translating user-authored content. Viewer Thread outlines now show coordinated unread number badges and its Tree view uses refined card-and-connector styling.
+
 ### Fixed
 
 - Dashboard no longer disappears when the final Agent lease detaches or expires; active markers clear while the visible window remains open until the user closes it.
