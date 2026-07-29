@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -32,14 +32,17 @@ async function setup(home: string) {
   return paths;
 }
 
-test("Dashboard open reports a stable acquisition signal when no Desktop is available", async () => {
+test("Dashboard open reports a stable acquisition signal when no usable Desktop is available", async () => {
   const home = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-unavailable-"));
   const previousHome = process.env.HOME;
   const previousUserProfile = process.env.USERPROFILE;
   process.env.HOME = home;
   process.env.USERPROFILE = home;
   try {
-    await setup(home);
+    const paths = await setup(home);
+    // 源码测试在非 Windows 会启用 Deno 开发回退；损坏安装确保本测试只验证生产 acquisition 错误契约。
+    await mkdir(paths.dashboardInstallDirectory, { recursive: true });
+    await writeFile(paths.dashboardInstallationFile, "{}\n");
     const stdout: string[] = [];
     assert.equal(await runCli(["--json", "dashboard", "open", "--client-id", "pi-test", "--client-type", "pi", "--forum", "team", "--room", roomId], { stdout: (text) => stdout.push(text), stderr: () => undefined }), 1);
     const result = JSON.parse(stdout.join(""));
