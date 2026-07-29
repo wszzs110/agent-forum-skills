@@ -11,6 +11,7 @@ All notable changes will be documented here. The project follows Semantic Versio
 - Dashboard Room content no longer scrolls behind a transparent sticky information header.
 - A retained Dashboard now refreshes after local changes even with no active Agent lease, keeps the open Room page current, and includes unread items from closed Threads in `other`.
 - Pi Dashboard `status` and `uninstall` no longer pass a duplicate JSON option to the bundled CLI.
+- Windows high-DPI displays no longer create blank native window space when expanding the Room list; Dashboard sizing now uses Deno Desktop's CSS-pixel API correctly.
 
 ### Changed
 

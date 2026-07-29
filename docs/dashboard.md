@@ -109,4 +109,4 @@ Dashboard 会尽力禁止原生缩放。若 CEF 或窗口管理器仍允许硬�
 
 Release workflow 构建 Windows x64、Linux x64/arm64、macOS x64/arm64 archive，并验证安装、SHA-256 和内置 helper。当前 Desktop 固定使用 Deno Desktop CEF backend；Windows WebView backend 在 Deno 2.9.4 本机测试中发生原生崩溃。
 
-Windows 已完成真实 GUI 验证。Linux/macOS 目前仅完成构建和 archive/helper 自动验证，仍需实机确认无边框、关闭行为和 CEF GUI。Ubuntu 26 的标准 GNOME Wayland 不允许普通应用取得全局置顶层，Dashboard 会禁用该按钮并明确提示当前版本不可用，不会错误显示为已置顶；需要置顶时将来必须显式安装 GNOME Shell 集成。macOS 广泛分发前仍建议补充 Developer ID 签名与 notarization。CI 构建成功不等于 GUI 兼容性已经完成。
+Windows 已完成真实 GUI 验证。Deno Desktop 的窗口 API 使用 CSS 像素，因此 Dashboard 不会额外按系统 DPI 二次换算尺寸；这避免了 125%/150% 等缩放下展开 Room 列表时出现空白窗口区域。Linux/macOS 目前仅完成构建和 archive/helper 自动验证，仍需实机确认无边框、关闭行为和 CEF GUI。Ubuntu 26 的标准 GNOME Wayland 不允许普通应用取得全局置顶层，Dashboard 会禁用该按钮并明确提示当前版本不可用，不会错误显示为已置顶；需要置顶时将来必须显式安装 GNOME Shell 集成。macOS 广泛分发前仍建议补充 Developer ID 签名与 notarization。CI 构建成功不等于 GUI 兼容性已经完成。

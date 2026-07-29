@@ -82,6 +82,10 @@ test("Dashboard 最后一个 Agent 离开后等待用户手动关闭", async () 
   assert.doesNotMatch(lease, /clients\.size === 0/u);
   assert.match(lease, /runCli\(\["dashboard", "lease-status"\]\)/u, "lease checks must not run the expensive installation status command");
   assert.match(source, /await attachLease\(initialClient, true\)/u);
+  assert.match(source, /desktopWindow\?\.setSize\(670, barHeight \+ panel\)/u, "Deno BrowserWindow sizing uses CSS pixels and must not apply DPI twice");
+  assert.doesNotMatch(source, /desktopScale|devicePixelRatio:window\.devicePixelRatio/u, "DPI multiplication would create blank native window space");
+  assert.match(source, /\.team-tabs\{[^}]*padding-right:185px/u, "dense Team tabs reserve space for window controls");
+  assert.match(source, /\.right\{position:absolute;right:10px;top:9px/u, "window controls stay visible independently of Team tab width");
 });
 
 test("Dashboard 选择弃用 Room 时保留末尾顺序和可见性", async () => {
