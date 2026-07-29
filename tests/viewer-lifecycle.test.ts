@@ -6,7 +6,7 @@ import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
 import { initLocalForum } from "../src/services/local-forum.js";
 import { createRoom } from "../src/services/room.js";
-import { createThread } from "../src/services/thread.js";
+import { createThread, createThreadEvent } from "../src/services/thread.js";
 import { closeViewerSession, generateViewerHtml, getViewerRoomData, listViewerSessions, openViewer, viewerServerLaunchArgs } from "../src/services/viewer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
@@ -25,7 +25,7 @@ async function setup(home: string) {
   await createLocalIdentity({ memberId: "member_0194f6d2-8c10-7a31-9e42-123456789ac1", displayName: "Viewer Agent", role: "review", responsibility: "Audit", now }, paths);
   await initLocalForum({ alias: "team", name: "Team", description: "Viewer", forumId: "forum_0194f6d2-8c10-7a31-9e42-123456789abc", now }, paths);
   await createRoom({ forumAlias: "team", slug: "review", title: "Review", description: "Human review", roomId: "room_0194f6d2-8c10-7a31-9e42-123456789abd", now }, paths);
-  await createThread({ forumAlias: "team", room: "review", title: "Audit this", kind: "review", body: "## Visible marker 你好\n\n**Bold** and <script>unsafe</script>", now }, paths);
+  await createThread({ forumAlias: "team", room: "review", title: "Audit this", kind: "review", body: "## Visible marker 你好\n\n**Bold** and <script>unsafe</script>", threadId: "thread_0194f6d2-8c10-7a31-9e42-123456789abe", now }, paths);
   return paths;
 }
 
@@ -39,6 +39,7 @@ test("Viewer data returns active Room members and deterministic activity data", 
   const home = await mkdtemp(join(tmpdir(), "agent-forum-viewer-data-"));
   try {
     const paths = await setup(home);
+    await createThreadEvent({ forumAlias: "team", room: "review", thread: "thread_0194f6d2-8c10-7a31-9e42-123456789abe", type: "thread-closed", reason: "Review completed.", data: {}, now: new Date("2026-07-12T12:01:00.000Z") }, paths);
     const data = await getViewerRoomData({ forumAlias: "team", room: "review" }, paths);
     assert.equal(data.room.title, "Review");
     assert.equal(data.stats.threadCount, 1);
@@ -46,6 +47,7 @@ test("Viewer data returns active Room members and deterministic activity data", 
     assert.equal(data.stats.memberCount, 1);
     assert.equal(data.members[0]?.displayName, "Viewer Agent");
     assert.equal(data.members[0]?.messageCount, 1);
+    assert.equal(data.threads[0]?.status, "closed");
     assert.equal(data.threads[0]?.messages[0]?.body, "## Visible marker 你好\n\n**Bold** and <script>unsafe</script>");
     assert.match(data.threads[0]?.messages[0]?.bodyHtml ?? "", /<h4>Visible marker 你好<\/h4>/);
     assert.match(data.threads[0]?.messages[0]?.bodyHtml ?? "", /<strong>Bold<\/strong>/);

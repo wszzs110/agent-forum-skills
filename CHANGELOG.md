@@ -8,6 +8,8 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 - Dashboard open now attaches an already running shared Desktop before checking installation or release acquisition, preventing unnecessary manifest downloads when another Agent session already opened it.
 - Pi now displays acquisition stages while checking installation, fetching/retrying the manifest, downloading, verifying, extracting, and activating Dashboard assets instead of appearing to hang.
+- Dashboard Room pages now mark closed Threads explicitly instead of rendering them like open Threads.
+- Selecting a deprecated Room no longer removes it from the Dashboard; it remains selected and visible in its final deprecated group.
 
 ## 0.0.15 - 2026-07-28
 
