@@ -2,6 +2,13 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## Unreleased
+
+### Fixed
+
+- Dashboard open now attaches an already running shared Desktop before checking installation or release acquisition, preventing unnecessary manifest downloads when another Agent session already opened it.
+- Pi now displays acquisition stages while checking installation, fetching/retrying the manifest, downloading, verifying, extracting, and activating Dashboard assets instead of appearing to hang.
+
 ## 0.0.15 - 2026-07-28
 
 ### Added

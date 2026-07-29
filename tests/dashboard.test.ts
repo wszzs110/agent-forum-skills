@@ -32,6 +32,26 @@ async function setup(home: string) {
   return paths;
 }
 
+test("Dashboard open reports a stable acquisition signal when no Desktop is available", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-unavailable-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  try {
+    await setup(home);
+    const stdout: string[] = [];
+    assert.equal(await runCli(["--json", "dashboard", "open", "--client-id", "pi-test", "--client-type", "pi", "--forum", "team", "--room", roomId], { stdout: (text) => stdout.push(text), stderr: () => undefined }), 1);
+    const result = JSON.parse(stdout.join(""));
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "DASHBOARD_UNAVAILABLE");
+  } finally {
+    process.env.HOME = previousHome;
+    process.env.USERPROFILE = previousUserProfile;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("Dashboard reports only an independent Desktop update", () => {
   assert.equal(dashboardUpdateAvailable("0.0.10", "0.0.10"), false, "an npm-only upgrade must not download Dashboard assets");
   assert.equal(dashboardUpdateAvailable("0.0.10", "0.0.11"), true);

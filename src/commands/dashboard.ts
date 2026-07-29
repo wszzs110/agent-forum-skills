@@ -10,6 +10,7 @@ import { DASHBOARD_VERSION, VERSION } from "../version.js";
 import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashboardSnapshot, setDashboardForumPolling, setDashboardRoomPinned } from "../services/dashboard.js";
 import { getDashboardInstallationStatus, uninstallDashboard } from "../services/dashboard-installer.js";
 import { ensureDashboard } from "../services/dashboard-ensure.js";
+import { ServiceError } from "../services/errors.js";
 import { getDashboardAcquisitionPolicy, setDashboardAcquisitionPolicy, type DashboardAcquisitionPolicy } from "../services/dashboard-policy.js";
 import { attachExistingDashboardDesktop, closeExistingDashboardDesktop, detachExistingDashboardDesktop } from "../services/dashboard-desktop.js";
 import { resolveContext } from "../services/context.js";
@@ -56,6 +57,7 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       const update = subcommand === "update" || parsed.flags.has("--update");
       if (subcommand === "update" || (localImport && update)) await closeExistingDashboardDesktop().catch(() => false);
       let lastPercent = -1;
+      options.onProgress?.("Checking Dashboard installation…\n");
       const result = await ensureDashboard({
         ...(manifestUrl ? { manifestUrl } : {}),
         ...(manifestPath ? { manifestPath } : {}),
@@ -64,10 +66,13 @@ export async function executeDashboardCommand(args: readonly string[], options: 
         force: parsed.flags.has("--force"),
         // install/update --yes 是兼容入口；ensure 的 --approve-once 是跨 Agent 的原子当次授权。
         approveOnce: parsed.flags.has("--approve-once") || parsed.flags.has("--yes") || localImport,
-        ...(options.onProgress ? { onProgress: (received: number, total: number, attempt: number) => {
-          const percent = Math.floor(received * 100 / total);
-          if (percent !== lastPercent) { lastPercent = percent; options.onProgress!(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`); }
-        } } : {}),
+        ...(options.onProgress ? {
+          onStatus: (text: string) => options.onProgress!(`${text}\n`),
+          onProgress: (received: number, total: number, attempt: number) => {
+            const percent = Math.floor(received * 100 / total);
+            if (percent !== lastPercent) { lastPercent = percent; options.onProgress!(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`); }
+          },
+        } : {}),
       });
       if (result.status === "ready") options.onProgress?.("\n");
       const command = subcommand === "ensure" ? "dashboard.ensure" : `dashboard.${subcommand}`;
@@ -132,12 +137,12 @@ export async function executeDashboardCommand(args: readonly string[], options: 
         const modified = installed.status === "modified" && installed.modifiedFiles?.length
           ? ` (changed files: ${installed.modifiedFiles.slice(0, 5).join(", ")}${installed.modifiedFiles.length > 5 ? ", …" : ""})`
           : "";
-        return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard ensure --update`);
+        throw new ServiceError("DASHBOARD_UNAVAILABLE", installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard ensure --update`);
       }
       const executable = installed.status === "installed" ? installed.executable! : deno;
       const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve(dirname(entrypoint!), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint!];
       const dashboardCli = installed.status === "installed" ? resolve(dirname(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
-      if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard ensure --update");
+      if (installed.status === "installed" && !existsSync(dashboardCli)) throw new ServiceError("DASHBOARD_UNAVAILABLE", "Dashboard CLI helper is missing; run agent-forum dashboard ensure --update");
       // CEF 可能在工作目录写入诊断或缓存。固定使用私有 state 目录，绝不让运行时文件污染已校验的安装 payload。
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir(dashboardRuntimeDirectory, { recursive: true, mode: 0o700 });

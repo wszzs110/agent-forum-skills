@@ -13334,9 +13334,10 @@ function relativePath(root, path2) {
 function modifiedFilePaths(expected, actual) {
   return [.../* @__PURE__ */ new Set([...Object.keys(expected), ...Object.keys(actual)])].filter((path2) => expected[path2] !== actual[path2]).sort();
 }
-async function fetchJson(url, fetcher) {
+async function fetchJson(url, fetcher, onStatus) {
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
+    onStatus?.(attempt === 1 ? "Downloading Dashboard release manifest\u2026" : `Retrying Dashboard release manifest (attempt ${attempt}/3)\u2026`);
     try {
       const response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(3e4) });
       if (!response.ok) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", `Dashboard release manifest returned HTTP ${response.status}`);
@@ -13368,7 +13369,7 @@ async function inspectDashboardRelease(options = {}) {
     throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL is invalid");
   }
   if (parsedUrl.protocol !== "https:" && parsedUrl.hostname !== "127.0.0.1" && parsedUrl.hostname !== "localhost" || parsedUrl.username || parsedUrl.password) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL must use credential-free HTTPS");
-  const manifest = parseManifest(await fetchJson(manifestUrl, options.fetcher ?? fetch));
+  const manifest = parseManifest(await fetchJson(manifestUrl, options.fetcher ?? fetch, options.onStatus));
   if (!configuredManifestUrl && dashboardVersion !== "0.0.0-dev" && manifest.version !== dashboardVersion) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `Dashboard manifest version ${manifest.version} does not match the required Dashboard version ${dashboardVersion}`);
   const platform = options.platform ?? process.platform;
   const arch = options.arch ?? process.arch;
@@ -13603,6 +13604,7 @@ async function verifyArchive(asset, archive2) {
 }
 async function acquireArchive(release, options, paths) {
   if (options.archivePath) {
+    options.onStatus?.("Verifying local Dashboard archive\u2026");
     await verifyArchive(release.asset, options.archivePath);
     return options.archivePath;
   }
@@ -13614,6 +13616,7 @@ async function acquireArchive(release, options, paths) {
   });
   try {
     await mkdir3(paths.dashboardDownloadsDirectory, { recursive: true, mode: 448 });
+    options.onStatus?.("Preparing Dashboard archive download\u2026");
     await downloadAsset(release.asset, archive2, options.fetcher ?? fetch, options.onProgress, options.downloadTimeouts);
     return archive2;
   } finally {
@@ -13623,15 +13626,20 @@ async function acquireArchive(release, options, paths) {
 async function installDashboard(options = {}, paths = createAgentForumPaths()) {
   const release = await resolveDashboardRelease(options);
   const before = await getDashboardInstallationStatus(paths);
-  if (before.status === "installed" && before.installation?.version === release.version) return { action: "unchanged", installation: before.installation, executable: before.executable };
+  if (before.status === "installed" && before.installation?.version === release.version) {
+    options.onStatus?.("Dashboard installation is already current.");
+    return { action: "unchanged", installation: before.installation, executable: before.executable };
+  }
   if (before.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
   if ((before.status === "modified" || before.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
   const archive2 = await acquireArchive(release, options, paths);
+  options.onStatus?.("Extracting Dashboard archive\u2026");
   await mkdir3(dirname3(paths.dashboardInstallDirectory), { recursive: true });
   const staging = await mkdtemp(resolve16(dirname3(paths.dashboardInstallDirectory), ".dashboard-install-"));
   const payload = resolve16(staging, "payload");
   try {
     await extractArchive(archive2, payload);
+    options.onStatus?.("Verifying extracted Dashboard files\u2026");
     const stagedExecutable = safeExecutable(payload, release.asset.executable);
     await stat3(stagedExecutable);
     if (await sha256File(stagedExecutable) !== release.asset.executableSha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "extracted Dashboard executable failed SHA-256 verification");
@@ -13648,6 +13656,7 @@ async function installDashboard(options = {}, paths = createAgentForumPaths()) {
     const files = await collectInstalledFiles(payload);
     const installation = { formatVersion: 1, version: release.version, platform: release.asset.platform, arch: release.asset.arch, executable: release.asset.executable, executableSha256: release.asset.executableSha256, files, sourceUrl: release.asset.url, installedAt: (options.now ?? /* @__PURE__ */ new Date()).toISOString() };
     await writeJsonAtomic(resolve16(payload, "installation.json"), installation, { overwrite: true });
+    options.onStatus?.("Activating Dashboard installation\u2026");
     const lock = await acquireForumLock({ lockPath: resolve16(paths.locksDirectory, "dashboard-install.lock"), command: "dashboard activate" });
     try {
       const current = await getDashboardInstallationStatus(paths);
@@ -13777,6 +13786,9 @@ async function ensureDashboard(options = {}, paths = createAgentForumPaths()) {
   };
 }
 
+// src/commands/dashboard.ts
+init_errors2();
+
 // src/services/dashboard-desktop.ts
 init_paths();
 import { readFile as readFile15, rm as rm8 } from "node:fs/promises";
@@ -13861,6 +13873,7 @@ async function executeDashboardCommand(args2, options = {}) {
       const update = subcommand === "update" || parsed.flags.has("--update");
       if (subcommand === "update" || localImport && update) await closeExistingDashboardDesktop().catch(() => false);
       let lastPercent = -1;
+      options.onProgress?.("Checking Dashboard installation\u2026\n");
       const result = await ensureDashboard({
         ...manifestUrl ? { manifestUrl } : {},
         ...manifestPath ? { manifestPath } : {},
@@ -13869,13 +13882,17 @@ async function executeDashboardCommand(args2, options = {}) {
         force: parsed.flags.has("--force"),
         // install/update --yes 是兼容入口；ensure 的 --approve-once 是跨 Agent 的原子当次授权。
         approveOnce: parsed.flags.has("--approve-once") || parsed.flags.has("--yes") || localImport,
-        ...options.onProgress ? { onProgress: (received, total, attempt) => {
-          const percent = Math.floor(received * 100 / total);
-          if (percent !== lastPercent) {
-            lastPercent = percent;
-            options.onProgress(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`);
+        ...options.onProgress ? {
+          onStatus: (text) => options.onProgress(`${text}
+`),
+          onProgress: (received, total, attempt) => {
+            const percent = Math.floor(received * 100 / total);
+            if (percent !== lastPercent) {
+              lastPercent = percent;
+              options.onProgress(`Downloading Dashboard: ${percent}% (attempt ${attempt}/3)\r`);
+            }
           }
-        } } : {}
+        } : {}
       });
       if (result.status === "ready") options.onProgress?.("\n");
       const command = subcommand === "ensure" ? "dashboard.ensure" : `dashboard.${subcommand}`;
@@ -13947,12 +13964,12 @@ async function executeDashboardCommand(args2, options = {}) {
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && entrypoint && (process.platform !== "win32" || existsSync(deno));
       if (installed.status !== "installed" && !developmentFallback) {
         const modified = installed.status === "modified" && installed.modifiedFiles?.length ? ` (changed files: ${installed.modifiedFiles.slice(0, 5).join(", ")}${installed.modifiedFiles.length > 5 ? ", \u2026" : ""})` : "";
-        return invalidArgument(installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard ensure --update`);
+        throw new ServiceError("DASHBOARD_UNAVAILABLE", installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : `Dashboard installation is ${installed.status}${modified}; run agent-forum dashboard ensure --update`);
       }
       const executable = installed.status === "installed" ? installed.executable : deno;
       const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve18(dirname4(entrypoint), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint];
       const dashboardCli = installed.status === "installed" ? resolve18(dirname4(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli") : process.execPath;
-      if (installed.status === "installed" && !existsSync(dashboardCli)) return invalidArgument("Dashboard CLI helper is missing; run agent-forum dashboard ensure --update");
+      if (installed.status === "installed" && !existsSync(dashboardCli)) throw new ServiceError("DASHBOARD_UNAVAILABLE", "Dashboard CLI helper is missing; run agent-forum dashboard ensure --update");
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir4(dashboardRuntimeDirectory, { recursive: true, mode: 448 });
       const child = spawn2(executable, executableArgs, { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve18(dirname4(executable), "AppIcon.ico") : resolve18(dirname4(entrypoint), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });

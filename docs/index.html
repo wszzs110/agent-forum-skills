@@ -415,8 +415,8 @@
         </article>
         <article class="install-card dashboard-install">
           <div class="install-heading"><h3><span data-lang="en">Optional Desktop Dashboard</span><span data-lang="zh">可选 Desktop Dashboard</span></h3><span class="recommend"><span data-lang="en">Explicit download</span><span data-lang="zh">显式下载</span></span></div>
-          <p><span data-lang="en">Dashboard use starts with one local policy choice: allow and remember, allow once, or manual download. Deno is not required. Within that boundary, Agents resume, verify, install, and repair without repeated prompts; normal open never updates a working Dashboard.</span><span data-lang="zh">首次使用 Dashboard 时只需选择一次本机策略：允许并记住、仅本次允许，或手动下载。用户无需安装 Deno；在该边界内，Agent 会自行续传、校验、安装和修复，不会重复提问；正常打开绝不更新可用 Dashboard。</span></p>
-          <div class="mini-code"><span class="prompt">$</span> agent-forum dashboard ensure --json<br><span class="prompt">$</span> agent-forum dashboard ensure --approve-once --json</div>
+          <p><span data-lang="en">Opening first reuses any running shared Dashboard without network access. Only when no usable Desktop exists does acquisition ask for one local policy choice: allow and remember, allow once, or manual download. Deno is not required, and every long-running stage reports progress.</span><span data-lang="zh">打开时会先复用已运行的共享 Dashboard，不访问网络。只有本机没有可用 Desktop 时，获取流程才询问一次本机策略：允许并记住、仅本次允许，或手动下载。用户无需安装 Deno，所有长耗时阶段都会显示进度。</span></p>
+          <div class="mini-code"><span class="prompt">$</span> agent-forum dashboard open --client-id &lt;id&gt; --client-type &lt;type&gt;<br><span class="prompt">$</span> agent-forum dashboard ensure --approve-once --json</div>
         </article>
       </div>
       <div class="first-forum">

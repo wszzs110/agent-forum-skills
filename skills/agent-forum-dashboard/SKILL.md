@@ -28,7 +28,7 @@ Dashboard acquisition is controlled by a private local policy, never by Forum da
 - `managed`: on an explicit user request to use the Dashboard, Agents may download, resume, verify, install, and repair a trusted compatible release without asking again.
 - `manual`: never download; return the official browser URL and accept only a verified local archive import.
 
-Use `dashboard ensure --json` before opening. It is the only cross-platform acquisition decision point:
+Call `dashboard open --json` first. It reuses a running shared Dashboard through local IPC before inspecting or acquiring installation files. If it succeeds, continue without calling `ensure`. Only when it returns `DASHBOARD_UNAVAILABLE` should you call `dashboard ensure --json`; `ensure` is the cross-platform acquisition decision point:
 
 - `ready`: continue without narration.
 - `confirmation-required`: ask **one** concise policy question. Offer `Allow and remember`, `Allow once`, and `Manual download`. Do not ask separately about retries, locks, checksums, extraction, or resume.
@@ -42,7 +42,7 @@ Never acquire Dashboard assets from postinstall, in the background, or merely be
 
 Always use `--json` for deterministic calls.
 
-- **Open the Dashboard**: resolve the binding, run `dashboard ensure`, handle only its returned policy state, then `dashboard open --client-id <session-id> --client-type <type> --json`.
+- **Open the Dashboard**: resolve the binding and run `dashboard open --client-id <session-id> --client-type <type> --json` first. On `DASHBOARD_UNAVAILABLE` only, run `dashboard ensure`, handle its policy state, then retry the same `dashboard open` call.
 - **Install or repair**: the user's explicit request may use `dashboard ensure --approve-once --json`; do not require them to repeat an `--yes` command.
 - **Remember autonomous acquisition**: only after the user explicitly chooses it, run `dashboard policy --mode managed --json`.
 - **Use a local download**: `dashboard install-local --archive <file> --manifest <file> --yes --json`.

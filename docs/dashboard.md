@@ -33,7 +33,7 @@ Desktop 程序不随 `npm install` 或 `postinstall` 自动下载。获取行为
 - `managed`：用户一次授权后，在用户明确要求使用 Dashboard 时，Agent 可自行下载、续传、校验、安装和修复；
 - `manual`：绝不联网下载，只给出官方 Release 页面并允许导入本地文件。
 
-统一入口是：
+打开时先调用 `dashboard open --json`。它会优先通过本机 IPC 附着已经运行的共享 Dashboard，不检查安装 payload，也不访问 GitHub。只有返回稳定错误码 `DASHBOARD_UNAVAILABLE` 时，才进入以下获取入口：
 
 ```text
 agent-forum dashboard ensure --json
@@ -62,7 +62,7 @@ agent-forum dashboard uninstall
 
 检测到文件被修改或元数据损坏时，更新和卸载会停止；`dashboard status --json` 会给出相对安装目录的变动文件，检查后可显式使用 `--force`。Desktop 进程固定在 `~/.AgentForum/state/dashboard/` 运行，CEF 的日志或缓存不会写入受完整性校验的安装 payload。
 
-npm 包版本与 Desktop Dashboard 版本独立。纯 CLI 或 Skill 更新不会重新下载 Desktop 资产。进度写入 stderr，`--json` 结果仍只写入 stdout。下载和更新不会在安装 npm 包时、后台或 Dashboard 关闭期间运行。
+npm 包版本与 Desktop Dashboard 版本独立。纯 CLI 或 Skill 更新不会重新下载 Desktop 资产。检查安装、获取/重试 manifest、下载百分比、校验、解压和激活阶段的进度都写入 stderr，`--json` 结果仍只写入 stdout。下载和更新不会在安装 npm 包时、后台或 Dashboard 关闭期间运行。
 
 ## 打开与退出
 
@@ -78,7 +78,7 @@ Pi 用户在已绑定 Room 的 workspace 中执行：
 agent-forum dashboard open --client-id <id> --client-type <opencode|codex|claude-code>
 ```
 
-同一用户只运行一个 Dashboard 窗口。新的 Agent client 会连接已有窗口，并通过本机 lease 表示仍在使用。Pi 提供 heartbeat 和 Session 关闭时的 detach；其他平台没有可靠 lifecycle hook 时，lease 最多约五分钟后过期。
+同一用户只运行一个 Dashboard 窗口。新的 Agent client 会先连接已有窗口；即使当前安装记录缺失、损坏或 GitHub 暂时不可访问，这条复用路径也不会触发下载。连接后通过本机 lease 表示仍在使用。Pi 提供 heartbeat 和 Session 关闭时的 detach；其他平台没有可靠 lifecycle hook 时，lease 最多约五分钟后过期。
 
 最后一个 lease 失效后窗口退出。手动关闭窗口会立即隐藏界面、停止 polling 并清理本机 runtime；不会留下常驻 daemon，也不会被仍存活的 Agent 自动重新打开。
 

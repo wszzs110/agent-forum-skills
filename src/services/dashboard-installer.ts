@@ -150,9 +150,10 @@ function modifiedFilePaths(expected: Record<string, string>, actual: Record<stri
     .sort();
 }
 
-async function fetchJson(url: string, fetcher: typeof fetch): Promise<unknown> {
+async function fetchJson(url: string, fetcher: typeof fetch, onStatus?: (text: string) => void): Promise<unknown> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
+    onStatus?.(attempt === 1 ? "Downloading Dashboard release manifest…" : `Retrying Dashboard release manifest (attempt ${attempt}/3)…`);
     try {
       const response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
       if (!response.ok) throw new ServiceError("DASHBOARD_DOWNLOAD_FAILED", `Dashboard release manifest returned HTTP ${response.status}`);
@@ -171,7 +172,7 @@ export function dashboardReleasePageUrl(dashboardVersion = DASHBOARD_VERSION): s
   return `https://github.com/${repository}/releases/tag/v${dashboardVersion}`;
 }
 
-export async function inspectDashboardRelease(options: { manifestUrl?: string; platform?: NodeJS.Platform; arch?: string; fetcher?: typeof fetch; dashboardVersion?: string; packageVersion?: string } = {}): Promise<{ manifestUrl: string; version: string; asset: DashboardReleaseAsset }> {
+export async function inspectDashboardRelease(options: { manifestUrl?: string; platform?: NodeJS.Platform; arch?: string; fetcher?: typeof fetch; dashboardVersion?: string; packageVersion?: string; onStatus?: (text: string) => void } = {}): Promise<{ manifestUrl: string; version: string; asset: DashboardReleaseAsset }> {
   // packageVersion is retained as a test-only backward-compatible alias for dashboardVersion.
   const dashboardVersion = options.dashboardVersion ?? options.packageVersion ?? DASHBOARD_VERSION;
   const configuredManifestUrl = options.manifestUrl ?? process.env.AGENT_FORUM_DASHBOARD_MANIFEST_URL;
@@ -179,7 +180,7 @@ export async function inspectDashboardRelease(options: { manifestUrl?: string; p
   let parsedUrl: URL;
   try { parsedUrl = new URL(manifestUrl); } catch { throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL is invalid"); }
   if ((parsedUrl.protocol !== "https:" && parsedUrl.hostname !== "127.0.0.1" && parsedUrl.hostname !== "localhost") || parsedUrl.username || parsedUrl.password) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "Dashboard manifest URL must use credential-free HTTPS");
-  const manifest = parseManifest(await fetchJson(manifestUrl, options.fetcher ?? fetch));
+  const manifest = parseManifest(await fetchJson(manifestUrl, options.fetcher ?? fetch, options.onStatus));
   if (!configuredManifestUrl && dashboardVersion !== "0.0.0-dev" && manifest.version !== dashboardVersion) throw new ServiceError("DASHBOARD_MANIFEST_INVALID", `Dashboard manifest version ${manifest.version} does not match the required Dashboard version ${dashboardVersion}`);
   const platform = options.platform ?? process.platform;
   const arch = options.arch ?? process.arch;
@@ -409,6 +410,7 @@ export interface InstallDashboardOptions {
   platform?: NodeJS.Platform;
   arch?: string;
   onProgress?: (received: number, total: number, attempt: number) => void;
+  onStatus?: (text: string) => void;
   downloadTimeouts?: DashboardDownloadTimeouts;
 }
 
@@ -430,6 +432,7 @@ async function verifyArchive(asset: DashboardReleaseAsset, archive: string): Pro
 
 async function acquireArchive(release: { version: string; asset: DashboardReleaseAsset }, options: InstallDashboardOptions, paths: AgentForumPaths): Promise<string> {
   if (options.archivePath) {
+    options.onStatus?.("Verifying local Dashboard archive…");
     await verifyArchive(release.asset, options.archivePath);
     return options.archivePath;
   }
@@ -441,6 +444,7 @@ async function acquireArchive(release: { version: string; asset: DashboardReleas
   });
   try {
     await mkdir(paths.dashboardDownloadsDirectory, { recursive: true, mode: 0o700 });
+    options.onStatus?.("Preparing Dashboard archive download…");
     await downloadAsset(release.asset, archive, options.fetcher ?? fetch, options.onProgress, options.downloadTimeouts);
     return archive;
   } finally {
@@ -452,15 +456,20 @@ async function acquireArchive(release: { version: string; asset: DashboardReleas
 export async function installDashboard(options: InstallDashboardOptions = {}, paths = createAgentForumPaths()): Promise<{ action: "installed" | "updated" | "unchanged"; installation: DashboardInstallation; executable: string }> {
   const release = await resolveDashboardRelease(options);
   const before = await getDashboardInstallationStatus(paths);
-  if (before.status === "installed" && before.installation?.version === release.version) return { action: "unchanged", installation: before.installation, executable: before.executable! };
+  if (before.status === "installed" && before.installation?.version === release.version) {
+    options.onStatus?.("Dashboard installation is already current.");
+    return { action: "unchanged", installation: before.installation, executable: before.executable! };
+  }
   if (before.status !== "not-installed" && !options.update) throw new ServiceError("DASHBOARD_ALREADY_INSTALLED", "Dashboard is already installed; use dashboard update");
   if ((before.status === "modified" || before.status === "damaged") && !options.force) throw new ServiceError("DASHBOARD_INSTALLATION_MODIFIED", "Dashboard installation is modified or damaged; inspect it and repeat update with --force");
   const archive = await acquireArchive(release, options, paths);
+  options.onStatus?.("Extracting Dashboard archive…");
   await mkdir(dirname(paths.dashboardInstallDirectory), { recursive: true });
   const staging = await mkdtemp(resolve(dirname(paths.dashboardInstallDirectory), ".dashboard-install-"));
   const payload = resolve(staging, "payload");
   try {
     await extractArchive(archive, payload);
+    options.onStatus?.("Verifying extracted Dashboard files…");
     const stagedExecutable = safeExecutable(payload, release.asset.executable);
     await stat(stagedExecutable);
     if (await sha256File(stagedExecutable) !== release.asset.executableSha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "extracted Dashboard executable failed SHA-256 verification");
@@ -471,6 +480,7 @@ export async function installDashboard(options: InstallDashboardOptions = {}, pa
     const files = await collectInstalledFiles(payload);
     const installation: DashboardInstallation = { formatVersion: 1, version: release.version, platform: release.asset.platform, arch: release.asset.arch, executable: release.asset.executable, executableSha256: release.asset.executableSha256, files, sourceUrl: release.asset.url, installedAt: (options.now ?? new Date()).toISOString() };
     await writeJsonAtomic(resolve(payload, "installation.json"), installation, { overwrite: true });
+    options.onStatus?.("Activating Dashboard installation…");
     const lock = await acquireForumLock({ lockPath: resolve(paths.locksDirectory, "dashboard-install.lock"), command: "dashboard activate" });
     try {
       const current = await getDashboardInstallationStatus(paths);

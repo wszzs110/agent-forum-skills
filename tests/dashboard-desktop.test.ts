@@ -48,6 +48,19 @@ test("Desktop bridge removes stale runtime state", async () => {
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
+test("Pi Dashboard 先复用运行实例，仅在明确不可用时获取安装", async () => {
+  const source = await readFile(join(process.cwd(), "adapters", "pi-dashboard.ts"), "utf8");
+  const start = source.indexOf("// open（默认）");
+  const end = source.indexOf('pi.on("session_shutdown"', start);
+  assert.ok(start >= 0 && end > start);
+  const openHandler = source.slice(start, end);
+  const firstOpen = openHandler.indexOf("let result = await executeCli(openArgs");
+  const firstEnsure = openHandler.indexOf('["dashboard", "ensure"]');
+  assert.ok(firstOpen >= 0 && firstEnsure > firstOpen, "running Desktop IPC attach must precede acquisition");
+  assert.match(openHandler, /result\.error\?\.code === "DASHBOARD_UNAVAILABLE"/u);
+  assert.match(openHandler, /finally \{\s*ctx\.ui\.setStatus\("agent-forum-dashboard", undefined\)/u);
+});
+
 test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", async () => {
   const source = await readFile(join(process.cwd(), "dashboard", "main.ts"), "utf8");
   assert.match(source, /function showNotice\(message\)/);

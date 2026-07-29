@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-interface CliEnvelope { ok: boolean; data?: Record<string, unknown>; error?: { code?: string; message?: string } }
+interface CliEnvelope { ok: boolean; data?: Record<string, unknown>; error?: { code?: string; message?: string; details?: unknown } }
 
 function bundledCli(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "..", "skills", "agent-forum", "scripts", "agent-forum.mjs");
@@ -108,7 +108,7 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      // open（默认）：resolve context → 打开 Dashboard → 启动 heartbeat
+      // open（默认）：resolve context → 优先复用现有 Dashboard → 必要时获取 → 启动 heartbeat
       clientId ??= `pi-${randomUUID()}`;
       try {
         const context = await executeCli(["context", "resolve", "--cwd", ctx.cwd], ctx.cwd);
@@ -119,43 +119,57 @@ export default function (pi: ExtensionAPI) {
         const forumAlias = context.data.forumAlias as string;
         const roomId = context.data.roomId as string;
         const roomSlug = context.data.roomSlug as string | undefined;
-        let ensured = await executeCli(["dashboard", "ensure"], ctx.cwd);
-        if (!ensured.ok) {
-          ctx.ui.notify(ensured.error?.message ?? "Unable to check Dashboard installation.", "error");
-          return;
-        }
-        if (ensured.data?.status === "confirmation-required") {
-          const acquisition = ensured.data.acquisition as Record<string, unknown> | undefined;
-          const choice = await ctx.ui.select(
-            `Install Dashboard ${acquisition?.version ?? ""}?`,
-            ["Allow and remember", "Allow once", "Use manual download"],
-          );
-          if (!choice) return;
-          if (choice === "Use manual download") {
-            await executeCli(["dashboard", "policy", "--mode", "manual"], ctx.cwd);
-            ctx.ui.notify(`Dashboard manual download: ${acquisition?.browserUrl ?? "GitHub Releases"}`, "info");
-            return;
-          }
-          if (choice === "Allow and remember") {
-            const policy = await executeCli(["dashboard", "policy", "--mode", "managed"], ctx.cwd);
-            if (!policy.ok) {
-              ctx.ui.notify(policy.error?.message ?? "Unable to save Dashboard policy.", "error");
-              return;
-            }
-          }
-          ctx.ui.setStatus("agent-forum-dashboard", "Downloading Dashboard…");
-          ensured = await executeCli(["dashboard", "ensure", ...(choice === "Allow once" ? ["--approve-once"] : [])], ctx.cwd, (text) => ctx.ui.setStatus("agent-forum-dashboard", text.trim() || "Downloading Dashboard…"));
-          ctx.ui.setStatus("agent-forum-dashboard", undefined);
-        }
-        if (!ensured.ok || ensured.data?.status !== "ready") {
-          const acquisition = ensured.data?.acquisition as Record<string, unknown> | undefined;
-          ctx.ui.notify(ensured.error?.message ?? `Dashboard requires manual installation: ${acquisition?.browserUrl ?? "GitHub Releases"}`, "error");
-          return;
-        }
-        const result = await executeCli([
+        const openArgs = [
           "dashboard", "open", "--client-id", clientId, "--client-type", "pi",
           "--forum", forumAlias, "--room", roomId,
-        ], ctx.cwd);
+        ];
+        ctx.ui.setStatus("agent-forum-dashboard", "Opening Dashboard…");
+        let result = await executeCli(openArgs, ctx.cwd);
+
+        // open 会先通过 IPC attach 已运行实例。只有它明确报告本机 Dashboard 不可用时才进入 acquisition。
+        if (!result.ok && result.error?.code === "DASHBOARD_UNAVAILABLE") {
+          let ensured = await executeCli(
+            ["dashboard", "ensure"],
+            ctx.cwd,
+            (text) => ctx.ui.setStatus("agent-forum-dashboard", text.trim() || "Preparing Dashboard…"),
+          );
+          if (!ensured.ok) {
+            ctx.ui.notify(ensured.error?.message ?? "Unable to check Dashboard installation.", "error");
+            return;
+          }
+          if (ensured.data?.status === "confirmation-required") {
+            const acquisition = ensured.data.acquisition as Record<string, unknown> | undefined;
+            const choice = await ctx.ui.select(
+              `Install Dashboard ${acquisition?.version ?? ""}?`,
+              ["Allow and remember", "Allow once", "Use manual download"],
+            );
+            if (!choice) return;
+            if (choice === "Use manual download") {
+              await executeCli(["dashboard", "policy", "--mode", "manual"], ctx.cwd);
+              ctx.ui.notify(`Dashboard manual download: ${acquisition?.browserUrl ?? "GitHub Releases"}`, "info");
+              return;
+            }
+            if (choice === "Allow and remember") {
+              const policy = await executeCli(["dashboard", "policy", "--mode", "managed"], ctx.cwd);
+              if (!policy.ok) {
+                ctx.ui.notify(policy.error?.message ?? "Unable to save Dashboard policy.", "error");
+                return;
+              }
+            }
+            ensured = await executeCli(
+              ["dashboard", "ensure", ...(choice === "Allow once" ? ["--approve-once"] : [])],
+              ctx.cwd,
+              (text) => ctx.ui.setStatus("agent-forum-dashboard", text.trim() || "Preparing Dashboard…"),
+            );
+          }
+          if (!ensured.ok || ensured.data?.status !== "ready") {
+            const acquisition = ensured.data?.acquisition as Record<string, unknown> | undefined;
+            ctx.ui.notify(ensured.error?.message ?? `Dashboard requires manual installation: ${acquisition?.browserUrl ?? "GitHub Releases"}`, "error");
+            return;
+          }
+          ctx.ui.setStatus("agent-forum-dashboard", "Opening Dashboard…");
+          result = await executeCli(openArgs, ctx.cwd);
+        }
         if (!result.ok) {
           ctx.ui.notify(result.error?.message ?? "Unable to open Agent Forum Dashboard.", "error");
           return;
@@ -167,6 +181,8 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`Agent Forum Dashboard opened for ${roomSlug ?? roomId}.`, "info");
       } catch (error) {
         ctx.ui.notify(error instanceof Error ? error.message : "Unable to open Agent Forum Dashboard.", "error");
+      } finally {
+        ctx.ui.setStatus("agent-forum-dashboard", undefined);
       }
     },
   });

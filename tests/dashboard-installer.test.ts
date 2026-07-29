@@ -48,8 +48,16 @@ test("Dashboard installer previews, verifies, installs, detects modification, an
     const preview = await inspectDashboardRelease({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: item.fetcher });
     assert.equal(preview.version, "1.2.3");
     assert.equal((await getDashboardInstallationStatus(paths)).status, "not-installed");
-    const installed = await installDashboard({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: item.fetcher, now: new Date("2026-07-24T00:00:00.000Z") }, paths);
+    const statuses: string[] = [];
+    const installed = await installDashboard({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: item.fetcher, now: new Date("2026-07-24T00:00:00.000Z"), onStatus: (text) => statuses.push(text) }, paths);
     assert.equal(installed.action, "installed");
+    assert.deepEqual(statuses, [
+      "Downloading Dashboard release manifest…",
+      "Preparing Dashboard archive download…",
+      "Extracting Dashboard archive…",
+      "Verifying extracted Dashboard files…",
+      "Activating Dashboard installation…",
+    ]);
     assert.equal((await getDashboardInstallationStatus(paths)).status, "installed");
     assert.equal((await installDashboard({ manifestUrl: "http://127.0.0.1/manifest.json", platform: "win32", arch: "x64", fetcher: item.fetcher }, paths)).action, "unchanged");
     item.manifest.version = "1.2.4";

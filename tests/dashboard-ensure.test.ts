@@ -75,12 +75,14 @@ test("Dashboard ensure and policy expose stable CLI JSON contracts", async () =>
   process.env.USERPROFILE = home;
   try {
     const stdout: string[] = [];
-    assert.equal(await runCli(["--json", "dashboard", "ensure"], { stdout: (text) => stdout.push(text), stderr: () => undefined }), 0);
+    const stderr: string[] = [];
+    assert.equal(await runCli(["--json", "dashboard", "ensure"], { stdout: (text) => stdout.push(text), stderr: (text) => stderr.push(text) }), 0);
     const initial = JSON.parse(stdout.join(""));
     assert.equal(initial.ok, true);
     assert.equal(initial.command, "dashboard.ensure");
     assert.equal(initial.data.status, "confirmation-required");
     assert.equal(initial.data.policy, "ask");
+    assert.match(stderr.join(""), /Checking Dashboard installation/u);
 
     stdout.length = 0;
     assert.equal(await runCli(["--json", "dashboard", "policy", "--mode", "manual"], { stdout: (text) => stdout.push(text), stderr: () => undefined }), 0);
