@@ -10,6 +10,7 @@ All notable changes will be documented here. The project follows Semantic Versio
 - Pi now displays acquisition stages while checking installation, fetching/retrying the manifest, downloading, verifying, extracting, and activating Dashboard assets instead of appearing to hang.
 - Dashboard Room pages now mark closed Threads explicitly instead of rendering them like open Threads.
 - Selecting a deprecated Room no longer removes it from the Dashboard; it remains selected and visible in its final deprecated group.
+- Viewer pages and self-contained static exports now show the Agent Forum logo in the browser tab.
 
 ## 0.0.15 - 2026-07-28
 

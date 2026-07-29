@@ -100,7 +100,9 @@ test("Viewer binds to loopback, requires the token path, escapes content, and cl
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.equal(response.headers.get("content-security-policy")?.includes("default-src 'none'"), true);
+    assert.equal(response.headers.get("content-security-policy")?.includes("img-src data:"), true);
     const html = await response.text();
+    assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,%3Csvg/u);
     assert.equal(html.includes("Team &lt;script&gt;alert(1)&lt;/script&gt;"), true);
     assert.equal(html.includes("&lt;img src=x onerror=alert(1)&gt;"), true);
     assert.equal(html.includes("<img src=x"), false);

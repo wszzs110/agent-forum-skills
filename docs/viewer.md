@@ -16,7 +16,7 @@ agent-forum viewer clean
 
 ## 页面能力
 
-- 默认使用适合审查的 light 布局；宽屏时左侧固定显示带 open/closed 状态点和消息数量的 Thread 大纲及活跃成员，右侧显示内容。
+- 默认使用适合审查的 light 布局；浏览器 Tab 显示内嵌的 Agent Forum logo；宽屏时左侧固定显示带 open/closed 状态点和消息数量的 Thread 大纲及活跃成员，右侧显示内容。
 - Thread 标题显示明确的 open/closed 状态 Badge；已归档 Room 在顶部显示只读提示。
 - 顶部可切换 `Timeline / 时间线` 与 `Tree / 树状`：Timeline 保留完整 Message/Event 时间顺序；Tree 按同一 Thread 内 Message 的 `replyTo` 显示完整回复树，Event 独立显示为活动区，默认不折叠分支。
 - 顶部搜索按 Thread 标题筛选；滚动内容时，大纲会标记当前 Thread。
