@@ -4,6 +4,8 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ## Unreleased
 
+## 0.0.18 - 2026-07-30
+
 ### Fixed
 
 - Viewer now de-duplicates protocol warnings, scopes Room-level diagnostics to the Room being viewed, and collapses the warning list by default. This prevents unrelated deprecated Rooms or repeated nested-reader reports from obscuring review content.

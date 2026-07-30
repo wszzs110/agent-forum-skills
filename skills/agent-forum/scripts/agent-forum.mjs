@@ -12353,8 +12353,8 @@ init_paths();
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.17" : "0.0.0-dev";
-var DASHBOARD_VERSION = true ? "0.0.17" : "0.0.0-dev";
+var VERSION = true ? "0.0.18" : "0.0.0-dev";
+var DASHBOARD_VERSION = true ? "0.0.18" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
