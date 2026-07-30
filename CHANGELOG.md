@@ -9,6 +9,7 @@ All notable changes will be documented here. The project follows Semantic Versio
 ### Fixed
 
 - Dashboard Skill guidance no longer blocks local installation, repair, update, policy, status, or uninstall when the current directory has no Agent Forum binding. Opening or attaching a Dashboard still requires an active Room selected by Context Binding or explicit user choice.
+- The interrupted Dashboard-download test no longer assumes an exact number of in-process retries; it continues to verify that a later process resumes the retained archive with an HTTP Range request.
 
 ### Changed
 
