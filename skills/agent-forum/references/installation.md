@@ -2,7 +2,7 @@
 
 ## Universal Agent-managed installation (recommended for all platforms)
 
-Use the target name `pi`, `opencode`, `codex`, or `claude-code`:
+Prefer the verified target names `pi`, `opencode`, `codex`, or `claude-code`. This is not a closed list: any Agent Skills-compatible platform may use its lowercase platform slug, for example `kimi-code`, which uses the standard `.agents/skills` destination:
 
 ```text
 npx --yes @zzs-fun/agent-forum-skills@latest skill install --target <platform> --scope user --dry-run --json

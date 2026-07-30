@@ -45,6 +45,7 @@ test("skill help exposes the self-management interface", async () => {
   assert.equal(result.ok, true);
   assert.equal(result.command, "skill.help");
   assert.match(result.data.usage, /install\|update\|uninstall\|status\|doctor/u);
+  assert.match(result.data.usage, /platform-or-standard-slug/u, "unlisted Skill Agents should have a standard installation path");
 });
 
 test("viewer help exposes the short-lived read-only workflow", async () => {
@@ -60,7 +61,7 @@ test("viewer help exposes the short-lived read-only workflow", async () => {
 test("invalid skill targets return a structured usage error", async () => {
   const output = captureIo();
   const exitCode = await runCli(
-    ["skill", "status", "--target", "unknown", "--json"],
+    ["skill", "status", "--target", "Kimi-Code", "--json"],
     output.io,
   );
   const result = JSON.parse(output.stdout.join(""));

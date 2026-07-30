@@ -15,7 +15,13 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { VERSION } from "../version.js";
 
-export type SkillTarget = "pi" | "opencode" | "codex" | "claude-code";
+export type PreferredSkillTarget = "pi" | "opencode" | "codex" | "claude-code";
+// 未列入优先适配矩阵的平台走 Agent Skills 标准目录，不将生态扩展误判为不支持。
+export type SkillTarget = PreferredSkillTarget | "generic" | (string & {});
+
+export function isSkillTarget(value: string): value is SkillTarget {
+  return /^(?:[a-z][a-z0-9-]{0,63}|generic)$/u.test(value);
+}
 export type InstallationStatus =
   | "not-installed"
   | "unmanaged"
@@ -107,8 +113,6 @@ export class SkillInstallationError extends Error {
   }
 }
 
-const commonTargets = new Set<SkillTarget>(["pi", "opencode", "codex"]);
-
 function emptyState(): InstallationState {
   return { formatVersion: 1, installations: [] };
 }
@@ -122,13 +126,11 @@ function namedSkillDestination(
   skillName: "agent-forum" | "agent-forum-viewer" | "agent-forum-dashboard",
   homeDirectory = homedir(),
 ): string {
-  if (commonTargets.has(target)) {
-    return resolve(homeDirectory, ".agents", "skills", skillName);
-  }
+  // Claude Code 是唯一已知使用专用用户目录的平台；其他 Skill Agent 共享标准目录。
   if (target === "claude-code") {
     return resolve(homeDirectory, ".claude", "skills", skillName);
   }
-  throw new SkillInstallationError("INVALID_TARGET", `unsupported target: ${target}`);
+  return resolve(homeDirectory, ".agents", "skills", skillName);
 }
 
 export function skillDestination(target: SkillTarget, homeDirectory = homedir()): string {

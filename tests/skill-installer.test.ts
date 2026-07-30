@@ -135,6 +135,18 @@ test("common targets share one managed payload and uninstall safely", async () =
   }
 });
 
+test("unlisted Skill Agents use the standard discovery directory", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-install-generic-"));
+  try {
+    const result = await installSkill({ target: "kimi-code", homeDirectory: home, sourceDirectory });
+    assert.equal(result.destination, resolve(home, ".agents", "skills", "agent-forum"));
+    assert.equal((await getSkillStatus("kimi-code", home)).status, "installed");
+    assert.equal(result.destinations.length, 3);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("Claude Code uses its own discovery directory", async () => {
   const home = await mkdtemp(join(tmpdir(), "agent-forum-install-claude-"));
   try {

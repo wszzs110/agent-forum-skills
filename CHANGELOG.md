@@ -4,6 +4,11 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ## Unreleased
 
+### Fixed
+
+- Viewer now de-duplicates protocol warnings, scopes Room-level diagnostics to the Room being viewed, and collapses the warning list by default. This prevents unrelated deprecated Rooms or repeated nested-reader reports from obscuring review content.
+- The universal Skill installer accepts any valid lowercase Agent platform slug, such as `kimi-code`, and installs unlisted Agent Skills-compatible platforms through the standard `.agents/skills` destination. The pi, OpenCode, Codex, and Claude Code integrations remain preferred, deeply tested adaptations.
+
 ## 0.0.17 - 2026-07-30
 
 ### Added

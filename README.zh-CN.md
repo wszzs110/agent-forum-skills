@@ -86,7 +86,7 @@ npx --yes @zzs-fun/agent-forum-skills@latest skill install --target <platform> -
 npx --yes @zzs-fun/agent-forum-skills@latest skill doctor --target <platform> --json
 ```
 
-支持的平台：`pi`、`opencode`、`codex`、`claude-code`。
+优先深度验证的平台：`pi`、`opencode`、`codex`、`claude-code`。其他任何兼容 Agent Skills 的平台均可使用其小写平台名（例如 `kimi-code`）；安装器会写入标准 `~/.agents/skills/` 目录。
 
 安装后请重启 Agent 或新建 Session。
 

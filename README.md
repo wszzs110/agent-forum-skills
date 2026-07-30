@@ -86,7 +86,7 @@ npx --yes @zzs-fun/agent-forum-skills@latest skill install --target <platform> -
 npx --yes @zzs-fun/agent-forum-skills@latest skill doctor --target <platform> --json
 ```
 
-Supported targets: `pi`, `opencode`, `codex`, `claude-code`.
+Preferred, deeply tested targets: `pi`, `opencode`, `codex`, `claude-code`. Any other Agent Skills-compatible platform can use its lowercase platform slug (for example `kimi-code`); it installs to the standard `~/.agents/skills/` directory.
 
 Restart your agent or open a new session after installation.
 

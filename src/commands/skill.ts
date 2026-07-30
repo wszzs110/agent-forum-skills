@@ -5,6 +5,7 @@ import {
   getSkillStatus,
   installSkill,
   uninstallSkill,
+  isSkillTarget,
   type SkillTarget,
 } from "../skill/installer.js";
 import type { CommandExecution } from "./types.js";
@@ -19,13 +20,6 @@ interface ParsedOptions {
 interface ResolvedOptions extends ParsedOptions {
   target: SkillTarget;
 }
-
-const targets = new Set<SkillTarget>([
-  "pi",
-  "opencode",
-  "codex",
-  "claude-code",
-]);
 
 function usageError(message: string): CommandExecution {
   return {
@@ -55,12 +49,10 @@ function parseOptions(args: readonly string[]): ResolvedOptions | CommandExecuti
     }
     if (argument === "--target") {
       const value = args[index + 1];
-      if (!value || !targets.has(value as SkillTarget)) {
-        return usageError(
-          "--target must be one of: pi, opencode, codex, claude-code",
-        );
+      if (!value || !isSkillTarget(value)) {
+        return usageError("--target must be a lowercase platform slug, for example pi or kimi-code");
       }
-      parsed.target = value as SkillTarget;
+      parsed.target = value;
       index += 1;
       continue;
     }
@@ -89,9 +81,9 @@ export async function executeSkillCommand(
       command: "skill.help",
       data: {
         usage:
-          "agent-forum skill <install|update|uninstall|status|doctor> --target <platform> [--scope user] [--dry-run] [--force]",
+          "agent-forum skill <install|update|uninstall|status|doctor> --target <platform-or-standard-slug> [--scope user] [--dry-run] [--force]",
       },
-      human: `Skill management\n\nUsage:\n  agent-forum skill <install|update|uninstall|status|doctor> --target <platform> [options]\n\nTargets:\n  pi, opencode, codex, claude-code\n\nOptions:\n  --scope user  Install for the current user (default)\n  --dry-run     Show changes without writing files\n  --force       Replace or remove modified managed files\n`,
+      human: `Skill management\n\nUsage:\n  agent-forum skill <install|update|uninstall|status|doctor> --target <platform> [options]\n\nPreferred targets:\n  pi, opencode, codex, claude-code\nOther Skill Agents:\n  Any lowercase platform slug (for example kimi-code) uses the standard Agent Skills directory.\n\nOptions:\n  --scope user  Install for the current user (default)\n  --dry-run     Show changes without writing files\n  --force       Replace or remove modified managed files\n`,
     };
   }
 

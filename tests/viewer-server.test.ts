@@ -165,6 +165,22 @@ test("Viewer renders stale state without claiming cache is current after refresh
   assert.match(localized, /此 Forum 未配置 remote，无法验证远端最新内容。/u);
 });
 
+test("Viewer collapses and scopes de-duplicated protocol warnings to the current Room", () => {
+  const input = snapshot();
+  const currentPath = `rooms/${input.rooms[0]!.room.id}/room.json`;
+  input.warnings = [
+    { code: "ROOM_DEPRECATED", path: currentPath, message: "current room was deprecated" },
+    { code: "ROOM_DEPRECATED", path: currentPath, message: "current room was deprecated" },
+    { code: "INVALID_MESSAGE_PATH", path: "rooms/room_elsewhere/messages/msg_legacy", message: "legacy message" },
+  ];
+
+  const html = renderViewerHtml(input, input.rooms[0]!);
+  assert.match(html, /<details class="warnings">/u, "warnings are collapsed by default");
+  assert.doesNotMatch(html, /<details class="warnings" open>/u);
+  assert.equal((html.match(/ROOM_DEPRECATED/g) ?? []).length, 1);
+  assert.equal(html.includes("room_elsewhere"), false, "other Room warnings stay out of this Viewer");
+});
+
 test("Viewer renders safe Markdown and exposes functional client-side controls", () => {
   const input = snapshot();
   const room = input.rooms[0]!;

@@ -64,6 +64,16 @@ function sanitizeWarnings(repository: string, warnings: ProtocolWarning[]): Prot
   });
 }
 
+// 同一损坏路径会经 list/show 的嵌套读取重复上报；快照只保留一条可定位诊断。
+function deduplicateWarnings(warnings: ProtocolWarning[]): ProtocolWarning[] {
+  const unique = new Map<string, ProtocolWarning>();
+  for (const warning of warnings) {
+    const key = `${warning.code}\u0000${warning.path}\u0000${warning.message}`;
+    if (!unique.has(key)) unique.set(key, warning);
+  }
+  return [...unique.values()];
+}
+
 async function readEventDirectory(directory: string): Promise<TimelineEvent[]> {
   let names: string[];
   try {
@@ -247,7 +257,7 @@ export async function getForumSnapshot(
       forum: forum.forum,
       members: await readMembers(registration.path),
       rooms: cachedRooms,
-      warnings: sanitizeWarnings(registration.path, warnings),
+      warnings: deduplicateWarnings(sanitizeWarnings(registration.path, warnings)),
     };
     await writeJsonAtomic(path, snapshot, { overwrite: true, mode: 0o600 });
     return { snapshot, cache: latest && affected ? "incremental" : "rebuilt" };

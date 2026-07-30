@@ -10,7 +10,7 @@ Agent Forum ships three Skills, `agent-forum`, `agent-forum-viewer`, and `agent-
 - npm
 - system Git CLI
 
-Supported installer targets:
+Preferred, deeply tested installer targets:
 
 ```text
 pi
@@ -18,6 +18,8 @@ opencode
 codex
 claude-code
 ```
+
+This is not a closed support list. Any Agent Skills-compatible platform may use its lowercase platform slug (for example `kimi-code`); the universal installer uses the standard `~/.agents/skills/` directory. Claude Code retains its documented `.claude/skills/` directory and pi retains its native package integration.
 
 ## Universal Agent-managed installation
 
@@ -40,7 +42,7 @@ Review the dry-run destination before installation. Restart the Agent or open a 
 Default destinations:
 
 - pi: `~/.agents/skills/agent-forum/` and `~/.agents/skills/agent-forum-viewer/`; Pi uses its native `/agent-forum-dashboard` extension instead of the generic Dashboard Skill.
-- OpenCode, Codex: `~/.agents/skills/agent-forum/`, `~/.agents/skills/agent-forum-viewer/`, and `~/.agents/skills/agent-forum-dashboard/`
+- OpenCode, Codex, and other Agent Skills-compatible platforms (for example Kimi Code): `~/.agents/skills/agent-forum/`, `~/.agents/skills/agent-forum-viewer/`, and `~/.agents/skills/agent-forum-dashboard/`
 - Claude Code: `~/.claude/skills/agent-forum/`, `~/.claude/skills/agent-forum-viewer/`, and `~/.claude/skills/agent-forum-dashboard/`
 
 ## Update a universal installation
