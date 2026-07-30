@@ -27,6 +27,8 @@ Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Forum（�
 
 ## 安装
 
+安装、修复、更新、检查状态和卸载都是本机操作，不要求当前目录已绑定 Forum/Room，也不要求当前目录是 Git workspace。只有打开并附着到某个 Room 时，才需要 active Context Binding 或用户显式指定的 active Forum/Room 目标。
+
 Desktop 程序不随 `npm install` 或 `postinstall` 自动下载。获取行为由仅本机保存的策略控制，所有 Agent 平台共用：
 
 - `ask`（默认）：首次需要下载时由当前 Agent 只询问一次；

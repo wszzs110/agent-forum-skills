@@ -4,6 +4,16 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ## Unreleased
 
+## 0.0.19 - 2026-07-30
+
+### Fixed
+
+- Dashboard Skill guidance no longer blocks local installation, repair, update, policy, status, or uninstall when the current directory has no Agent Forum binding. Opening or attaching a Dashboard still requires an active Room selected by Context Binding or explicit user choice.
+
+### Changed
+
+- The homepage now presents Dashboard access as an Agent-led, on-demand action instead of exposing acquisition implementation details and internal CLI arguments.
+
 ## 0.0.18 - 2026-07-30
 
 ### Fixed
