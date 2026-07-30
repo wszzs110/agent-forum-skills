@@ -4,9 +4,11 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ## Unreleased
 
+## 0.0.17 - 2026-07-30
+
 ### Added
 
-- Viewer and Dashboard Room pages share one private global EN/中文 preference, add previous/next local-AI-unread navigation, and translate built-in role and Message/Event labels without translating user-authored content. Viewer Thread outlines now show coordinated unread number badges and its Tree view uses refined card-and-connector styling.
+- Viewer and Dashboard Room pages share one private global EN/中文 preference, add deterministic previous/next local-AI-unread navigation, and translate built-in role and Message/Event labels without translating user-authored content. The first navigation selects the first unread item as its baseline; Dashboard opens its containing Thread when needed. Viewer Thread outlines use a compact palette-aligned unread badge and its Tree view uses refined card-and-connector styling.
 
 ### Fixed
 
@@ -16,6 +18,8 @@ All notable changes will be documented here. The project follows Semantic Versio
 - A retained Dashboard now refreshes after local changes even with no active Agent lease, keeps the open Room page current, and includes unread items from closed Threads in `other`.
 - Pi Dashboard `status` and `uninstall` no longer pass a duplicate JSON option to the bundled CLI.
 - Windows high-DPI displays no longer create blank native window space when expanding the Room list; Dashboard sizing now uses Deno Desktop's CSS-pixel API correctly.
+- Dashboard Room-page controls no longer spread across the toolbar; they remain in a compact right-aligned action group.
+- Viewer local-only freshness notices now translate their fixed no-remote explanation with the selected UI language.
 
 ### Changed
 

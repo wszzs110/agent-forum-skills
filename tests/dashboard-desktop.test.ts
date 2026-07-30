@@ -153,6 +153,9 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.match(source, /api\('\/language'/u);
   assert.match(source, /id="previous-unread"/u);
   assert.match(source, /id="next-unread"/u);
+  assert.match(source, /roomUnreadId=null/u);
+  assert.match(source, /current<0\?0:\(current\+direction\+entries\.length\)%entries\.length/u, "Dashboard first navigation selects the first unread item as the baseline");
+  assert.match(source, /class="rv-actions"/u, "Dashboard Room controls stay in a compact action group");
   assert.match(source, /ai-unread/u, "Dashboard Room messages expose local AI unread targets");
   assert.doesNotMatch(source.slice(source.indexOf("function renderRoomView"), source.indexOf("async function toggleRoomPanel")), /app\.animate/u, "Room page renders must not shake the complete Dashboard");
   assert.doesNotMatch(source, /room-enter/u, "Room view must not scale the entire Dashboard on every render");

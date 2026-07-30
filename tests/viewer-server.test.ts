@@ -158,6 +158,11 @@ test("Viewer renders stale state without claiming cache is current after refresh
   } finally {
     await viewer.close();
   }
+  const localized = renderViewerHtml(snapshot(), snapshot().rooms[0]!, {
+    state: "stale",
+    message: "No remote is configured for this Team; latest remote content cannot be verified.",
+  });
+  assert.match(localized, /此 Forum 未配置 remote，无法验证远端最新内容。/u);
 });
 
 test("Viewer renders safe Markdown and exposes functional client-side controls", () => {
@@ -184,7 +189,11 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.equal(html.includes(".lang-zh{display:none}"), false, "language switching must not leave Chinese content hidden by CSS");
   assert.match(html, /id="previous-unread"/u);
   assert.match(html, /id="next-unread"/u);
+  assert.match(html, /let unreadSelection=null/u);
+  assert.match(html, /current<0\?0:\(current\+direction\+items\.length\)%items\.length/u, "first navigation selects the first unread item as the baseline");
+  assert.match(html, /unread-selected/u);
   assert.match(html, /outline-unread/u);
+  assert.match(html, /outline-unread[^}]*background:#eff6ff/u, "unread badge should share the Viewer blue palette");
   assert.match(html, /tree-children[^}]*border-left:2px solid #cbdaf5/u);
 
   const script = /<script nonce="agent-forum">([\s\S]*?)<\/script>/.exec(html)?.[1];
@@ -205,6 +214,7 @@ test("Viewer distinguishes local AI unread, read, and published states", () => {
   assert.match(unread, /AI unread/u);
   assert.match(unread, /data-ai-unread="true"/u);
   assert.match(unread, /class="outline-unread"/u);
+  assert.doesNotMatch(unread, /outline-count/u, "Thread outline shows only the AI unread count");
 
   const read = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [messageId] }]);
   assert.match(read, /class="read-badge read"/u);

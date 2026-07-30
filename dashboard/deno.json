@@ -1,6 +1,6 @@
 {
   "name": "agent-forum-dashboard",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "exports": "./main.ts",
   "desktop": {
     "app": {
