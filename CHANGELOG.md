@@ -4,6 +4,10 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ## Unreleased
 
+### Fixed
+
+- Concurrent Dashboard snapshot and Room-page reads now wait for the active local cache rebuild and reuse its completed snapshot instead of immediately failing with `LOCAL_LOCKED`.
+
 ## 0.0.19 - 2026-07-30
 
 ### Fixed

@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
 import { initLocalForum } from "../src/services/local-forum.js";
 import { createRoom } from "../src/services/room.js";
 import { createPost, createThread, createThreadEvent } from "../src/services/thread.js";
 import { getForumSnapshot } from "../src/services/timeline-cache.js";
+import { acquireForumLock } from "../src/storage/lock.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
 const memberId = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
@@ -104,6 +105,35 @@ test("snapshot cache hits by HEAD and incrementally rebuilds affected Rooms", as
     assert.equal(alpha.threads[0]!.timeline.length, 2);
     assert.equal(incremental.snapshot.warnings.every((warning) => !warning.path.includes(home)), true);
   } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("concurrent snapshot reads wait for an active cache rebuild instead of failing", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-cache-lock-"));
+  const paths = await setup(home);
+  const lock = await acquireForumLock({
+    lockPath: resolve(paths.locksDirectory, `${forumId}-cache.lock`),
+    command: "test cache rebuild",
+  });
+  let released = false;
+  try {
+    let firstSettled = false;
+    let secondSettled = false;
+    const first = getForumSnapshot("team", paths).finally(() => { firstSettled = true; });
+    const second = getForumSnapshot("team", paths).finally(() => { secondSettled = true; });
+    void first.catch(() => undefined);
+    void second.catch(() => undefined);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    assert.equal(firstSettled, false, "first read should wait for the active cache rebuild");
+    assert.equal(secondSettled, false, "second read should wait for the active cache rebuild");
+    await lock.release();
+    released = true;
+    const results = await Promise.all([first, second]);
+    assert.deepEqual(results.map((result) => result.cache).sort(), ["hit", "rebuilt"]);
+    assert.equal(results.every((result) => result.snapshot.forumId === forumId && result.snapshot.rooms.length === 2), true);
+  } finally {
+    if (!released) await lock.release();
     await rm(home, { recursive: true, force: true });
   }
 });

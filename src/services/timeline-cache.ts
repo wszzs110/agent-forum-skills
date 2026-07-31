@@ -3,7 +3,8 @@ import { relative, resolve } from "node:path";
 import { findForum, loadLocalConfig } from "../config/local-config.js";
 import { requireGit, runGit } from "../git/runner.js";
 import { writeJsonAtomic } from "../storage/atomic.js";
-import { acquireForumLock } from "../storage/lock.js";
+import { acquireForumLock, type ForumLockHandle } from "../storage/lock.js";
+import { StorageError } from "../storage/errors.js";
 import { createAgentForumPaths, forumStatePath, type AgentForumPaths } from "../storage/paths.js";
 import { showForum, type ForumView } from "./forum-lifecycle.js";
 import { listRooms, readJsonDocument, type ProtocolWarning, type RoomView } from "./room.js";
@@ -49,6 +50,13 @@ export interface ForumSnapshot {
   rooms: CachedRoom[];
   warnings: ProtocolWarning[];
 }
+
+const cacheRebuildWaitMs = 10_000;
+const cacheRebuildRetryMs = 50;
+
+type CacheRebuildLockResult =
+  | { kind: "locked"; lock: ForumLockHandle }
+  | { kind: "cached"; snapshot: ForumSnapshot };
 
 function cachePath(paths: AgentForumPaths, forumId: string): string {
   return resolve(forumStatePath(paths, forumId), "cache", "snapshot.json");
@@ -202,6 +210,42 @@ async function loadCache(path: string): Promise<ForumSnapshot | undefined> {
   }
 }
 
+/**
+ * 判断失败是否仅表示另一进程正在重建同一 Forum 的本机缓存。
+ */
+function isCacheRebuildLocked(error: unknown): error is StorageError {
+  return error instanceof StorageError && error.code === "LOCAL_LOCKED";
+}
+
+/**
+ * 对并发只读请求短暂合并：优先复用另一进程写入的同 HEAD 缓存，锁释放但未写入时再自行重建。
+ */
+async function acquireCacheRebuildLock(
+  lockPath: string,
+  snapshotPath: string,
+  head: string,
+): Promise<CacheRebuildLockResult> {
+  const deadline = Date.now() + cacheRebuildWaitMs;
+  let lastLockError: StorageError | undefined;
+  while (true) {
+    const existing = await loadCache(snapshotPath);
+    if (existing?.sourceHead === head) return { kind: "cached", snapshot: existing };
+    try {
+      return {
+        kind: "locked",
+        lock: await acquireForumLock({ lockPath, command: "cache rebuild" }),
+      };
+    } catch (error) {
+      if (!isCacheRebuildLocked(error)) throw error;
+      lastLockError = error;
+      const refreshed = await loadCache(snapshotPath);
+      if (refreshed?.sourceHead === head) return { kind: "cached", snapshot: refreshed };
+      if (Date.now() >= deadline) throw lastLockError;
+      await new Promise((resolveWait) => setTimeout(resolveWait, cacheRebuildRetryMs));
+    }
+  }
+}
+
 function affectedRooms(repository: string, oldHead: string, newHead: string): Set<string> | undefined {
   const diff = runGit(repository, ["diff", "--name-only", `${oldHead}..${newHead}`]);
   if (diff.status !== 0) return undefined;
@@ -223,10 +267,12 @@ export async function getForumSnapshot(
   const path = cachePath(paths, registration.forumId);
   const existing = await loadCache(path);
   if (existing?.sourceHead === head) return { snapshot: existing, cache: "hit" };
-  const lock = await acquireForumLock({
-    lockPath: resolve(paths.locksDirectory, `${registration.forumId}-cache.lock`),
-    command: "cache rebuild",
-  });
+  const acquisition = await acquireCacheRebuildLock(
+    resolve(paths.locksDirectory, `${registration.forumId}-cache.lock`),
+    path,
+    head,
+  );
+  if (acquisition.kind === "cached") return { snapshot: acquisition.snapshot, cache: "hit" };
   try {
     const latest = await loadCache(path);
     if (latest?.sourceHead === head) return { snapshot: latest, cache: "hit" };
@@ -262,6 +308,6 @@ export async function getForumSnapshot(
     await writeJsonAtomic(path, snapshot, { overwrite: true, mode: 0o600 });
     return { snapshot, cache: latest && affected ? "incremental" : "rebuilt" };
   } finally {
-    await lock.release();
+    await acquisition.lock.release();
   }
 }

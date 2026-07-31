@@ -12592,12 +12592,15 @@ init_local_config();
 init_runner();
 init_atomic();
 init_lock();
+init_errors();
 init_paths();
 init_forum_lifecycle();
 init_room();
 init_thread();
 import { readFile as readFile10, readdir as readdir6 } from "node:fs/promises";
 import { relative as relative2, resolve as resolve13 } from "node:path";
+var cacheRebuildWaitMs = 1e4;
+var cacheRebuildRetryMs = 50;
 function cachePath(paths, forumId) {
   return resolve13(forumStatePath(paths, forumId), "cache", "snapshot.json");
 }
@@ -12729,6 +12732,30 @@ async function loadCache(path2) {
     return void 0;
   }
 }
+function isCacheRebuildLocked(error) {
+  return error instanceof StorageError && error.code === "LOCAL_LOCKED";
+}
+async function acquireCacheRebuildLock(lockPath, snapshotPath, head) {
+  const deadline = Date.now() + cacheRebuildWaitMs;
+  let lastLockError;
+  while (true) {
+    const existing = await loadCache(snapshotPath);
+    if (existing?.sourceHead === head) return { kind: "cached", snapshot: existing };
+    try {
+      return {
+        kind: "locked",
+        lock: await acquireForumLock({ lockPath, command: "cache rebuild" })
+      };
+    } catch (error) {
+      if (!isCacheRebuildLocked(error)) throw error;
+      lastLockError = error;
+      const refreshed = await loadCache(snapshotPath);
+      if (refreshed?.sourceHead === head) return { kind: "cached", snapshot: refreshed };
+      if (Date.now() >= deadline) throw lastLockError;
+      await new Promise((resolveWait) => setTimeout(resolveWait, cacheRebuildRetryMs));
+    }
+  }
+}
 function affectedRooms(repository2, oldHead, newHead) {
   const diff = runGit(repository2, ["diff", "--name-only", `${oldHead}..${newHead}`]);
   if (diff.status !== 0) return void 0;
@@ -12746,10 +12773,12 @@ async function getForumSnapshot(forumAlias, paths = createAgentForumPaths()) {
   const path2 = cachePath(paths, registration.forumId);
   const existing = await loadCache(path2);
   if (existing?.sourceHead === head) return { snapshot: existing, cache: "hit" };
-  const lock = await acquireForumLock({
-    lockPath: resolve13(paths.locksDirectory, `${registration.forumId}-cache.lock`),
-    command: "cache rebuild"
-  });
+  const acquisition = await acquireCacheRebuildLock(
+    resolve13(paths.locksDirectory, `${registration.forumId}-cache.lock`),
+    path2,
+    head
+  );
+  if (acquisition.kind === "cached") return { snapshot: acquisition.snapshot, cache: "hit" };
   try {
     const latest = await loadCache(path2);
     if (latest?.sourceHead === head) return { snapshot: latest, cache: "hit" };
@@ -12785,7 +12814,7 @@ async function getForumSnapshot(forumAlias, paths = createAgentForumPaths()) {
     await writeJsonAtomic(path2, snapshot, { overwrite: true, mode: 384 });
     return { snapshot, cache: latest && affected ? "incremental" : "rebuilt" };
   } finally {
-    await lock.release();
+    await acquisition.lock.release();
   }
 }
 
