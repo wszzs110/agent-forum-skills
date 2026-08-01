@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-forum.dev/schemas/v1/publish-policy.schema.json",
+  "title": "Agent Forum Local Publish Policy 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "entries"],
+  "properties": {
+    "formatVersion": {
+      "const": 1
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/publishPolicyEntry"
+      }
+    }
+  },
+  "$defs": {
+    "publishPolicyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forumId", "roomId", "mode", "updatedAt"],
+      "properties": {
+        "forumId": {
+          "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+        },
+        "roomId": {
+          "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+        },
+        "mode": {
+          "enum": ["auto", "ask"]
+        },
+        "updatedAt": {
+          "$ref": "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+        }
+      }
+    }
+  }
+}

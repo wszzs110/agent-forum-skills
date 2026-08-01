@@ -421,7 +421,8 @@ function createAgentForumPaths(homeDirectory = homedir()) {
     dashboardInstallDirectory: resolve2(root, "dashboard"),
     dashboardInstallationFile: resolve2(root, "dashboard", "installation.json"),
     installationsFile: resolve2(stateDirectory, "installations.json"),
-    bindingsFile: resolve2(stateDirectory, "context-bindings.json")
+    bindingsFile: resolve2(stateDirectory, "context-bindings.json"),
+    publishPolicyFile: resolve2(stateDirectory, "publish-policy.json")
   };
 }
 function assertLocalAlias(alias) {
@@ -8216,6 +8217,53 @@ var init_protocol_schema = __esm({
   }
 });
 
+// schemas/v1/publish-policy.schema.json
+var publish_policy_schema_default;
+var init_publish_policy_schema = __esm({
+  "schemas/v1/publish-policy.schema.json"() {
+    publish_policy_schema_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://agent-forum.dev/schemas/v1/publish-policy.schema.json",
+      title: "Agent Forum Local Publish Policy 1.0",
+      type: "object",
+      additionalProperties: false,
+      required: ["formatVersion", "entries"],
+      properties: {
+        formatVersion: {
+          const: 1
+        },
+        entries: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/publishPolicyEntry"
+          }
+        }
+      },
+      $defs: {
+        publishPolicyEntry: {
+          type: "object",
+          additionalProperties: false,
+          required: ["forumId", "roomId", "mode", "updatedAt"],
+          properties: {
+            forumId: {
+              $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/forumId"
+            },
+            roomId: {
+              $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/roomId"
+            },
+            mode: {
+              enum: ["auto", "ask"]
+            },
+            updatedAt: {
+              $ref: "https://agent-forum.dev/schemas/v1/common.schema.json#/$defs/timestamp"
+            }
+          }
+        }
+      }
+    };
+  }
+});
+
 // schemas/v1/room-member.schema.json
 var room_member_schema_default;
 var init_room_member_schema = __esm({
@@ -8414,6 +8462,7 @@ var init_validator = __esm({
     init_member_profile_schema();
     init_message_schema();
     init_protocol_schema();
+    init_publish_policy_schema();
     init_room_member_schema();
     init_room_schema();
     init_thread_schema();
@@ -8422,6 +8471,7 @@ var init_validator = __esm({
     schemaDocuments = {
       protocol: protocol_schema_default,
       "context-bindings": context_bindings_schema_default,
+      "publish-policy": publish_policy_schema_default,
       forum: forum_schema_default,
       "inbox-cursor": inbox_cursor_schema_default,
       "identity-attention": identity_attention_schema_default,
@@ -9486,8 +9536,128 @@ var init_thread_kinds = __esm({
   }
 });
 
+// src/services/publish-policy.ts
+import { readFile as readFile6 } from "node:fs/promises";
+function emptyPublishPolicy() {
+  return { formatVersion: 1, entries: [] };
+}
+function entryKey(entry) {
+  return `${entry.forumId}\0${entry.roomId}`;
+}
+function validatePolicySemantics(state2) {
+  const keys = /* @__PURE__ */ new Set();
+  for (const entry of state2.entries) {
+    const key = entryKey(entry);
+    if (keys.has(key)) {
+      throw new StorageError(
+        "SCHEMA_VALIDATION_FAILED",
+        `publish policy contains duplicate room entry: ${key}`
+      );
+    }
+    keys.add(key);
+  }
+}
+async function loadPublishPolicy(paths) {
+  let text;
+  try {
+    text = await readFile6(paths.publishPolicyFile, "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return emptyPublishPolicy();
+    }
+    throw error;
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch (error) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `publish policy contains invalid JSON: ${paths.publishPolicyFile}`,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+  const validation = validateProtocolDocument("publish-policy", value, {
+    mode: "write"
+  });
+  if (!validation.ok) {
+    throw new StorageError(
+      "SCHEMA_VALIDATION_FAILED",
+      `publish policy is invalid: ${paths.publishPolicyFile}`,
+      validation.issues
+    );
+  }
+  const state2 = value;
+  validatePolicySemantics(state2);
+  return state2;
+}
+async function getRoomPublishMode(paths, forumId, roomId) {
+  const state2 = await loadPublishPolicy(paths);
+  const entry = state2.entries.find(
+    (candidate) => candidate.forumId === forumId && candidate.roomId === roomId
+  );
+  return entry?.mode ?? "auto";
+}
+async function setRoomPublishMode(paths, input) {
+  const state2 = await loadPublishPolicy(paths);
+  const entry = {
+    forumId: input.forumId,
+    roomId: input.roomId,
+    mode: input.mode,
+    updatedAt: currentUtcTimestamp(input.now)
+  };
+  const next = {
+    formatVersion: 1,
+    entries: [
+      ...state2.entries.filter((candidate) => entryKey(candidate) !== entryKey(entry)),
+      entry
+    ]
+  };
+  validatePolicySemantics(next);
+  await writeValidatedJsonAtomic(
+    paths.publishPolicyFile,
+    "publish-policy",
+    next,
+    { overwrite: true, mode: 384 }
+  );
+  return { entry, state: next };
+}
+async function assertRoomPublishAllowed(forumAlias, room, paths) {
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, forumAlias);
+  const roomView = await showRoom(forumAlias, room, paths);
+  const mode = await getRoomPublishMode(
+    paths,
+    registration.forumId,
+    roomView.room.id
+  );
+  if (mode === "ask") {
+    throw new ServiceError(
+      "SEND_AUTHORIZATION_REQUIRED",
+      `room ${roomView.room.slug} requires user authorization before publishing`,
+      {
+        forumId: registration.forumId,
+        roomId: roomView.room.id,
+        roomSlug: roomView.room.slug
+      }
+    );
+  }
+}
+var init_publish_policy = __esm({
+  "src/services/publish-policy.ts"() {
+    "use strict";
+    init_local_config();
+    init_timestamps();
+    init_validator();
+    init_atomic();
+    init_errors();
+    init_errors2();
+    init_room();
+  }
+});
+
 // src/services/thread.ts
-import { readFile as readFile6, readdir as readdir4, rm as rm5 } from "node:fs/promises";
+import { readFile as readFile7, readdir as readdir4, rm as rm5 } from "node:fs/promises";
 import { basename as basename2, resolve as resolve8 } from "node:path";
 function structuralWarning(code, path2, message) {
   return { code, path: path2, message };
@@ -9571,7 +9741,7 @@ async function readMessageDirectory(directory, threadId) {
         `message threadId does not match its parent thread: ${metadataPath}`
       );
     }
-    const body = await readFile6(resolve8(directory, "body.md"), "utf8");
+    const body = await readFile7(resolve8(directory, "body.md"), "utf8");
     if (body.trim().length === 0 || body.includes("\0")) {
       throw new StorageError(
         "INVALID_MESSAGE_BODY",
@@ -9913,6 +10083,7 @@ async function createThread(input, paths = createAgentForumPaths()) {
     );
   }
   const kind = input.kind;
+  await assertRoomPublishAllowed(input.forumAlias, input.room, paths);
   return withForumWrite(
     input.forumAlias,
     input.identityId,
@@ -10033,6 +10204,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
     );
   }
   const type = input.type;
+  await assertRoomPublishAllowed(input.forumAlias, input.room, paths);
   return withForumWrite(
     input.forumAlias,
     input.identityId,
@@ -10139,6 +10311,7 @@ async function createPost(input, paths = createAgentForumPaths()) {
   );
 }
 async function createThreadEvent(input, paths = createAgentForumPaths()) {
+  await assertRoomPublishAllowed(input.forumAlias, input.room, paths);
   return withForumWrite(
     input.forumAlias,
     input.identityId,
@@ -10238,6 +10411,7 @@ var init_thread = __esm({
     init_paths();
     init_protocol_store();
     init_errors2();
+    init_publish_policy();
     init_room();
   }
 });
@@ -10820,7 +10994,7 @@ __export(room_exports, {
   withForumWrite: () => withForumWrite
 });
 import {
-  readFile as readFile7,
+  readFile as readFile8,
   readdir as readdir5,
   rm as rm6
 } from "node:fs/promises";
@@ -10834,7 +11008,7 @@ function withWriteSynchronization(value, synchronization) {
 async function readJsonDocument(path2, schema) {
   let value;
   try {
-    value = JSON.parse(await readFile7(path2, "utf8"));
+    value = JSON.parse(await readFile8(path2, "utf8"));
   } catch (error) {
     throw new StorageError(
       "SCHEMA_VALIDATION_FAILED",
@@ -11207,7 +11381,7 @@ async function readRoomMember(path2) {
 async function commitMutableDocument(repository2, path2, schema, value, commitMessage) {
   let previous;
   try {
-    previous = await readFile7(path2, "utf8");
+    previous = await readFile8(path2, "utf8");
   } catch (error) {
     if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
       throw error;
@@ -12361,7 +12535,7 @@ init_timestamps();
 init_atomic();
 init_lock();
 init_paths();
-import { readFile as readFile12 } from "node:fs/promises";
+import { readFile as readFile13 } from "node:fs/promises";
 import { resolve as resolve15 } from "node:path";
 init_errors2();
 
@@ -12375,7 +12549,7 @@ init_lock();
 init_paths();
 init_errors2();
 init_forum_sync();
-import { readFile as readFile11, readdir as readdir7 } from "node:fs/promises";
+import { readFile as readFile12, readdir as readdir7 } from "node:fs/promises";
 import { resolve as resolve14 } from "node:path";
 
 // src/services/identity-attention.ts
@@ -12388,7 +12562,7 @@ init_lock();
 init_paths();
 init_room();
 init_errors2();
-import { readFile as readFile8 } from "node:fs/promises";
+import { readFile as readFile9 } from "node:fs/promises";
 import { resolve as resolve11 } from "node:path";
 function attentionPath(paths, forumId, ownerMemberId) {
   return resolve11(forumStatePath(paths, forumId), "attention", `${ownerMemberId}.json`);
@@ -12399,7 +12573,7 @@ function isActiveLink(link2, now) {
 async function loadState(forumId, ownerMemberId, paths) {
   const path2 = attentionPath(paths, forumId, ownerMemberId);
   try {
-    const value = JSON.parse(await readFile8(path2, "utf8"));
+    const value = JSON.parse(await readFile9(path2, "utf8"));
     const validation = validateProtocolDocument("identity-attention", value);
     if (!validation.ok || value.forumId !== forumId || value.ownerMemberId !== ownerMemberId) {
       throw new StorageError("SCHEMA_VALIDATION_FAILED", `identity attention state is invalid: ${path2}`);
@@ -12545,14 +12719,14 @@ init_atomic();
 init_errors();
 init_lock();
 init_paths();
-import { readFile as readFile9 } from "node:fs/promises";
+import { readFile as readFile10 } from "node:fs/promises";
 import { resolve as resolve12 } from "node:path";
 function path(paths, forumId, memberId) {
   return resolve12(forumStatePath(paths, forumId), "watches", `${memberId}.json`);
 }
 async function state(paths, forumId, memberId) {
   try {
-    const value = JSON.parse(await readFile9(path(paths, forumId, memberId), "utf8"));
+    const value = JSON.parse(await readFile10(path(paths, forumId, memberId), "utf8"));
     const valid = validateProtocolDocument("thread-watch", value);
     if (!valid.ok || value.forumId !== forumId || value.memberId !== memberId) throw new StorageError("SCHEMA_VALIDATION_FAILED", "thread watch state is invalid");
     return value;
@@ -12596,7 +12770,7 @@ init_paths();
 init_forum_lifecycle();
 init_room();
 init_thread();
-import { readFile as readFile10, readdir as readdir6 } from "node:fs/promises";
+import { readFile as readFile11, readdir as readdir6 } from "node:fs/promises";
 import { relative as relative2, resolve as resolve13 } from "node:path";
 var cacheRebuildWaitMs = 1e4;
 var cacheRebuildRetryMs = 50;
@@ -12724,7 +12898,7 @@ async function readMembers(repository2) {
 }
 async function loadCache(path2) {
   try {
-    const value = JSON.parse(await readFile10(path2, "utf8"));
+    const value = JSON.parse(await readFile11(path2, "utf8"));
     const compatible = value.formatVersion === 1 && typeof value.sourceHead === "string" && Array.isArray(value.rooms) && value.rooms.every((room) => room && typeof room === "object" && "members" in room && Object.values(room.members).every((member) => member && typeof member.updatedAt === "string")) && value.members && Object.values(value.members).every((member) => member && typeof member.responsibility === "string");
     return compatible ? value : void 0;
   } catch {
@@ -12826,7 +13000,7 @@ function cursorPath(paths, forumId, memberId) {
 async function loadCursor(paths, forumId, memberId) {
   const path2 = cursorPath(paths, forumId, memberId);
   try {
-    const value = JSON.parse(await readFile11(path2, "utf8"));
+    const value = JSON.parse(await readFile12(path2, "utf8"));
     const validation = validateProtocolDocument("inbox-cursor", value);
     if (!validation.ok || value.forumId !== forumId || value.memberId !== memberId) {
       throw new StorageError(
@@ -13161,6 +13335,7 @@ async function getInbox(input, paths = createAgentForumPaths()) {
 }
 
 // src/services/dashboard.ts
+init_publish_policy();
 var clientIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 var clientTypes = /* @__PURE__ */ new Set(["pi", "opencode", "codex", "claude-code"]);
 function emptyRuntime() {
@@ -13178,7 +13353,7 @@ function validClient(value) {
 }
 async function loadRuntime(paths) {
   try {
-    const value = JSON.parse(await readFile12(paths.dashboardRuntimeFile, "utf8"));
+    const value = JSON.parse(await readFile13(paths.dashboardRuntimeFile, "utf8"));
     if (value.formatVersion !== 1 || !Array.isArray(value.clients) || !value.clients.every(validClient) || value.viewTargets !== void 0 && (!Array.isArray(value.viewTargets) || !value.viewTargets.every(validViewTarget)) || !Array.isArray(value.pollingForumIds) || !value.pollingForumIds.every((id) => typeof id === "string") || !Array.isArray(value.pinnedRoomIds) || !value.pinnedRoomIds.every((id) => typeof id === "string")) {
       throw new ServiceError("PROTOCOL_DATA_DAMAGED", "Dashboard runtime state is invalid");
     }
@@ -13266,6 +13441,11 @@ async function setDashboardRoomPinned(roomId, pinned, paths = createAgentForumPa
 async function getDashboardSnapshot(paths = createAgentForumPaths()) {
   const runtime = await dashboardStatus(paths);
   const bindingState = await loadContextBindingState(paths);
+  const publishPolicy = await loadPublishPolicy(paths);
+  const sendModeByRoom = /* @__PURE__ */ new Map();
+  for (const entry of publishPolicy.entries) {
+    sendModeByRoom.set(`${entry.forumId}\0${entry.roomId}`, entry.mode);
+  }
   const bindingsByRoom = /* @__PURE__ */ new Map();
   for (const binding of bindingState.bindings) {
     const key = `${binding.forumId}\0${binding.roomId}`;
@@ -13283,7 +13463,7 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
     const alias = targets[0].forumAlias;
     const clients = runtime.clients.filter((client) => client.forumId === forumId);
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation), bindings: bindingsByRoom.get(`${forumId}\0${room.room.id}`) ?? [] }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation), bindings: bindingsByRoom.get(`${forumId}\0${room.room.id}`) ?? [], sendMode: sendModeByRoom.get(`${forumId}\0${room.room.id}`) ?? "auto" }]));
     const closedThreadIds = new Set(snapshot.rooms.flatMap((room) => room.threads.filter((thread) => thread.thread.status === "closed").map((thread) => thread.thread.id)));
     const seen = /* @__PURE__ */ new Set();
     const identityIds = [...new Set(targets.map((target2) => target2.identityId))];
@@ -13315,7 +13495,7 @@ init_paths();
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { chmod, mkdir as mkdir3, mkdtemp, open as open2, readFile as readFile13, readdir as readdir8, readlink, realpath as realpath3, rename as rename3, rm as rm7, stat as stat3 } from "node:fs/promises";
+import { chmod, mkdir as mkdir3, mkdtemp, open as open2, readFile as readFile14, readdir as readdir8, readlink, realpath as realpath3, rename as rename3, rm as rm7, stat as stat3 } from "node:fs/promises";
 import { dirname as dirname3, isAbsolute as isAbsolute2, posix as posix2, resolve as resolve16, sep as sep2 } from "node:path";
 init_errors2();
 var repository = "wszzs110/agent-forum-skills";
@@ -13454,7 +13634,7 @@ async function inspectDashboardRelease(options = {}) {
 async function inspectDashboardReleaseFile(manifestPath, options = {}) {
   let value;
   try {
-    value = JSON.parse(await readFile13(manifestPath, "utf8"));
+    value = JSON.parse(await readFile14(manifestPath, "utf8"));
   } catch (error) {
     throw new ServiceError("DASHBOARD_MANIFEST_INVALID", "could not read Dashboard release manifest file", { cause: error instanceof Error ? error.message : String(error) });
   }
@@ -13637,7 +13817,7 @@ async function extractArchive(archive2, destination) {
 async function getDashboardLaunchStatus(paths = createAgentForumPaths()) {
   let installation;
   try {
-    installation = JSON.parse(await readFile13(paths.dashboardInstallationFile, "utf8"));
+    installation = JSON.parse(await readFile14(paths.dashboardInstallationFile, "utf8"));
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { status: "not-installed" };
     return { status: "damaged" };
@@ -13655,7 +13835,7 @@ async function getDashboardLaunchStatus(paths = createAgentForumPaths()) {
 async function getDashboardInstallationStatus(paths = createAgentForumPaths()) {
   let installation;
   try {
-    installation = JSON.parse(await readFile13(paths.dashboardInstallationFile, "utf8"));
+    installation = JSON.parse(await readFile14(paths.dashboardInstallationFile, "utf8"));
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { status: "not-installed" };
     return { status: "damaged" };
@@ -13788,7 +13968,7 @@ init_atomic();
 init_lock();
 init_paths();
 init_errors2();
-import { readFile as readFile14 } from "node:fs/promises";
+import { readFile as readFile15 } from "node:fs/promises";
 import { resolve as resolve17 } from "node:path";
 var policyValues = /* @__PURE__ */ new Set(["managed", "ask", "manual"]);
 function defaultState() {
@@ -13804,7 +13984,7 @@ function parseState(value) {
 }
 async function getDashboardAcquisitionPolicy(paths = createAgentForumPaths()) {
   try {
-    return parseState(JSON.parse(await readFile14(paths.dashboardPolicyFile, "utf8")));
+    return parseState(JSON.parse(await readFile15(paths.dashboardPolicyFile, "utf8")));
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return defaultState();
     throw error;
@@ -13874,10 +14054,10 @@ init_errors2();
 
 // src/services/dashboard-desktop.ts
 init_paths();
-import { readFile as readFile15, rm as rm8 } from "node:fs/promises";
+import { readFile as readFile16, rm as rm8 } from "node:fs/promises";
 async function readDesktop(paths) {
   try {
-    const value = JSON.parse(await readFile15(paths.dashboardDesktopFile, "utf8"));
+    const value = JSON.parse(await readFile16(paths.dashboardDesktopFile, "utf8"));
     return value.formatVersion === 1 && Number.isSafeInteger(value.pid) && value.pid > 0 && Number.isSafeInteger(value.port) && value.port > 0 && value.port <= 65535 && typeof value.token === "string" && /^[a-f0-9-]{36}$/u.test(value.token) ? value : void 0;
   } catch {
     return void 0;
@@ -14737,7 +14917,7 @@ init_errors2();
 init_forum_sync();
 import {
   mkdir as mkdir6,
-  readFile as readFile16,
+  readFile as readFile17,
   rename as rename5,
   rm as rm10,
   stat as stat4
@@ -14925,7 +15105,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
       );
     }
     const protocol = JSON.parse(
-      await readFile16(
+      await readFile17(
         resolve21(registration.path, ".forum", "protocol.json"),
         "utf8"
       )
@@ -14943,7 +15123,7 @@ async function publishIdentity(alias, identityId, paths = createAgentForumPaths(
     let previous;
     let existing;
     try {
-      previous = await readFile16(profilePath, "utf8");
+      previous = await readFile17(profilePath, "utf8");
       existing = JSON.parse(previous);
       const validation = validateProtocolDocument("member-profile", existing, {
         mode: "read"
@@ -15822,7 +16002,7 @@ init_atomic();
 init_lock();
 init_paths();
 init_errors2();
-import { readFile as readFile17 } from "node:fs/promises";
+import { readFile as readFile18 } from "node:fs/promises";
 function systemLanguage() {
   return Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
@@ -15833,7 +16013,7 @@ function validPreferences(value) {
 }
 async function getUiLanguage(paths = createAgentForumPaths()) {
   try {
-    const value = JSON.parse(await readFile17(paths.uiPreferencesFile, "utf8"));
+    const value = JSON.parse(await readFile18(paths.uiPreferencesFile, "utf8"));
     if (!validPreferences(value)) throw new ServiceError("PROTOCOL_DATA_DAMAGED", "UI preferences are invalid");
     return value.language;
   } catch (error) {
@@ -15874,6 +16054,109 @@ async function executePreferenceCommand(args2) {
 ` };
   } catch (error) {
     const handled = commandError("preference.language", error);
+    if (handled) return handled;
+    throw error;
+  }
+}
+
+// src/commands/publish.ts
+init_local_config();
+init_publish_policy();
+init_room();
+init_paths();
+function publishHelp() {
+  return {
+    exitCode: ExitCode.Success,
+    command: "publish.help",
+    data: {
+      commands: ["policy"],
+      modes: ["auto", "ask"]
+    },
+    human: `Publish policy
+
+Usage:
+  agent-forum publish policy --mode <auto|ask> --forum <alias> --room <id-or-slug>
+  agent-forum publish policy [--forum <alias>] [--room <id-or-slug>]
+
+'auto' sends autonomously (default). 'ask' requires the user to authorize each post or reply before it is written and pushed.
+`
+  };
+}
+async function executePublishCommand(args2) {
+  const subcommand = args2[0];
+  if (!subcommand || subcommand === "help" || subcommand === "--help") {
+    return publishHelp();
+  }
+  if (subcommand !== "policy") {
+    return invalidArgument(`unknown publish subcommand: ${subcommand}`);
+  }
+  try {
+    const parsed = parseCommandOptions(args2.slice(1), {
+      values: ["--mode", "--forum", "--room"]
+    });
+    if ("error" in parsed) return invalidArgument(parsed.error);
+    const mode = parsed.values.get("--mode");
+    const forumAlias = parsed.values.get("--forum");
+    const room = parsed.values.get("--room");
+    const paths = createAgentForumPaths();
+    if (mode !== void 0) {
+      if (mode !== "auto" && mode !== "ask") {
+        return invalidArgument(`unsupported publish mode: ${mode}`);
+      }
+      if (!forumAlias || !room) {
+        return invalidArgument("--mode requires --forum and --room");
+      }
+      const config = await loadLocalConfig(paths);
+      const registration = findForum(config, forumAlias);
+      const roomView = await showRoom(forumAlias, room, paths);
+      const result = await setRoomPublishMode(paths, {
+        forumId: registration.forumId,
+        roomId: roomView.room.id,
+        mode
+      });
+      return {
+        exitCode: ExitCode.Success,
+        command: "publish.policy",
+        data: {
+          forumId: registration.forumId,
+          roomId: roomView.room.id,
+          roomSlug: roomView.room.slug,
+          mode: result.entry.mode,
+          updatedAt: result.entry.updatedAt
+        },
+        human: `${roomView.room.slug}: publishing now ${result.entry.mode === "ask" ? "requires user authorization" : "runs autonomously (no authorization needed)"}
+`
+      };
+    }
+    const state2 = await loadPublishPolicy(paths);
+    let entries = state2.entries;
+    if (forumAlias) {
+      const config = await loadLocalConfig(paths);
+      const registration = findForum(config, forumAlias);
+      const slugByRoomId = /* @__PURE__ */ new Map();
+      const listed = await listRooms(forumAlias, paths);
+      for (const candidate of listed.rooms) {
+        slugByRoomId.set(candidate.id, candidate.slug);
+      }
+      entries = entries.filter((entry) => entry.forumId === registration.forumId).map((entry) => ({
+        ...entry,
+        roomSlug: slugByRoomId.get(entry.roomId) ?? null
+      }));
+      if (room) {
+        const roomView = await showRoom(forumAlias, room, paths);
+        entries = entries.filter((entry) => entry.roomId === roomView.room.id);
+      }
+    }
+    return {
+      exitCode: ExitCode.Success,
+      command: "publish.policy",
+      data: { entries },
+      human: entries.length === 0 ? "All rooms use autonomous publishing (auto).\n" : entries.map(
+        (entry) => `${entry.roomSlug ?? entry.roomId}	${entry.mode}	${entry.updatedAt}`
+      ).join("\n") + "\n"
+    };
+  } catch (error) {
+    const handled = commandError(`publish.${subcommand}`, error);
     if (handled) return handled;
     throw error;
   }
@@ -16388,7 +16671,7 @@ import { createHash as createHash2, randomUUID as randomUUID6 } from "node:crypt
 import {
   cp,
   mkdir as mkdir7,
-  readFile as readFile18,
+  readFile as readFile19,
   readdir as readdir10,
   rename as rename6,
   rm as rm11,
@@ -16451,7 +16734,7 @@ async function pathExists4(path2) {
 }
 async function loadState2(homeDirectory) {
   try {
-    const parsed = JSON.parse(await readFile18(stateFile(homeDirectory), "utf8"));
+    const parsed = JSON.parse(await readFile19(stateFile(homeDirectory), "utf8"));
     if (parsed.formatVersion !== 1 || !Array.isArray(parsed.installations)) {
       throw new SkillInstallationError(
         "INVALID_INSTALLATION_STATE",
@@ -16508,7 +16791,7 @@ async function collectFiles(root, current = root, allowSymbolicLinks = false) {
     }
     if (!entry.isFile()) continue;
     const relativePath2 = relative3(root, absolute).split(sep3).join("/");
-    files[relativePath2] = createHash2("sha256").update(await readFile18(absolute)).digest("hex");
+    files[relativePath2] = createHash2("sha256").update(await readFile19(absolute)).digest("hex");
   }
   return files;
 }
@@ -17038,7 +17321,7 @@ init_lock();
 init_paths();
 import { randomBytes as randomBytes2, randomUUID as randomUUID7 } from "node:crypto";
 import { spawn as spawn3 } from "node:child_process";
-import { mkdir as mkdir8, readFile as readFile19, readdir as readdir11, rm as rm12 } from "node:fs/promises";
+import { mkdir as mkdir8, readFile as readFile20, readdir as readdir11, rm as rm12 } from "node:fs/promises";
 import { dirname as dirname6, resolve as resolve23 } from "node:path";
 init_local_config();
 init_forum_sync();
@@ -17321,7 +17604,7 @@ function renderThread({ thread, timeline }, snapshot, room, identities) {
   const items = timeline.map((item, index) => renderItem(item, timeline, snapshot, room, identities, index, item.kind === "message" ? tree.issues.get(item.id) : void 0, trackUnread)).join("");
   return `<section class="thread" id="thread-${threadId}" data-title="${title.toLowerCase()}" data-thread-status="${escapeHtml(thread.status)}"><div class="thread-head"><div class="thread-icon status-${escapeHtml(thread.status.toLowerCase())}"></div><div class="thread-meta"><h2>${title}${statusBadge(thread.status, "thread")}</h2><div class="meta">${biHtml(metaEn, metaZh)}</div></div><div class="thread-actions"><button class="copy btn-sm" data-copy="${threadId}" data-copy-en="${threadId}" data-copy-zh="${threadId}" data-en="Copy thread ID" data-zh="\u590D\u5236 Thread ID">Copy thread ID</button></div></div><div class="thread-body">${items}</div></section>`;
 }
-function renderViewerHtml(snapshot, room, freshness = { state: "fresh" }, readIdentities = [], language = "en", binding) {
+function renderViewerHtml(snapshot, room, freshness = { state: "fresh" }, readIdentities = [], language = "en", binding, sendMode = "auto") {
   const activeMembers = Object.entries(room.members ?? {}).filter(([, membership]) => membership.status === "active").map(([id, membership]) => {
     const profile = snapshot.members[id];
     return `<li><span class="member-name">${escapeHtml(profile?.displayName ?? id)}</span><span class="role">${localizedLabel(membership.role, "role")}</span><span class="responsibility">${escapeHtml(membership.responsibility)}</span></li>`;
@@ -17351,7 +17634,8 @@ function renderViewerHtml(snapshot, room, freshness = { state: "fresh" }, readId
   const staleMessageZh = staleMessage === "No remote is configured for this Team; latest remote content cannot be verified." ? "\u6B64 Forum \u672A\u914D\u7F6E remote\uFF0C\u65E0\u6CD5\u9A8C\u8BC1\u8FDC\u7AEF\u6700\u65B0\u5185\u5BB9\u3002" : staleMessage === "Remote sync did not complete." ? "\u8FDC\u7AEF\u540C\u6B65\u672A\u5B8C\u6210\u3002" : staleMessage;
   const freshnessNotice = freshness.state === "stale" ? `<aside class="sync-state stale"><strong>${biText("Stale", "\u53EF\u80FD\u8FC7\u671F")}</strong><span>${biText(staleMessage, staleMessageZh)}</span><button type="button" onclick="location.reload()">${biText("Retry", "\u91CD\u8BD5")}</button></aside>` : `<aside class="sync-state fresh"><strong>${biText("Synced", "\u5DF2\u540C\u6B65")}</strong><span>${biText("This page was generated after the latest successful pull-only sync.", "\u672C\u9875\u9762\u5728\u6700\u8FD1\u4E00\u6B21\u6210\u529F\u7684\u53EA\u62C9\u53D6\u540C\u6B65\u540E\u751F\u6210\u3002")}</span></aside>`;
   const bindingInfo = binding ? `<div class="binding-context"><span>${biText("Path", "\u76EE\u5F55")}</span><code class="binding-path" title="${escapeHtml(binding.workspaceRoot)}">${escapeHtml(binding.workspaceRoot)}</code><span>${biText("Branch", "\u5206\u652F")}</span><code>${binding.branch === null ? biText("Detached", "\u6E38\u79BB") : escapeHtml(binding.branch)}</code></div>` : "";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><link rel="icon" type="image/svg+xml" href="${viewerFavicon}"><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}.appbar-main{min-width:0;flex:1}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.binding-context{display:flex;align-items:center;gap:5px;max-width:100%;margin-top:4px;color:var(--text-3);font-size:11px}.binding-context code{background:var(--surface-2);padding:1px 5px;border-radius:4px;color:var(--text-2);font-size:11px}.binding-path{max-width:min(58vw,680px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 12px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.markdown .md-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-sm)}.markdown .md-table{width:100%;border-collapse:collapse;font-size:13px}.markdown .md-table th,.markdown .md-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;white-space:nowrap}.markdown .md-table th{background:var(--surface-2);font-weight:600;text-align:left}.markdown .md-table tbody tr:last-child td{border-bottom:0}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);margin:0 0 20px}.warnings summary{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:pointer;list-style:none;color:var(--warning);font-size:13px;font-weight:700}.warnings summary::-webkit-details-marker{display:none}.warnings summary::before{content:"\u25B8";font-size:11px;transition:transform .12s}.warnings[open] summary::before{transform:rotate(90deg)}.warnings-title{display:inline-flex}.warnings-count{display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:1px;border-radius:999px;background:#fef3c7;color:#a16207;font-size:10px;font-variant-numeric:tabular-nums}.warning-list{max-height:min(32vh,360px);overflow:auto;padding:0 12px 10px;border-top:1px solid #fde68a}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:5px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.read-badge{display:inline-flex;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700}.read-badge.read{background:var(--success-bg);color:var(--success)}.read-badge.unread{background:var(--warning-bg);color:var(--warning)}.read-badge.published{background:var(--accent-soft);color:var(--accent-2)}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}.view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}.view-toggle button{border:0;border-radius:0;padding:6px 10px}.view-toggle button+button{border-left:1px solid var(--border)}.view-toggle button.active{background:var(--accent);color:#fff}.status-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}.room-status{margin-left:0}.status-open,.status-active{background:var(--accent-soft);color:var(--accent-2)}.status-closed,.status-archived{background:var(--neutral-bg);color:var(--neutral)}.status-unknown{background:var(--warning-bg);color:var(--warning)}.thread-icon.status-open,.thread-icon.status-active{background:var(--accent)}.thread-icon.status-closed{background:var(--neutral)}.thread-icon.status-archived{background:var(--neutral)}.outline-item{display:flex;align-items:center;gap:8px}.outline-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}.outline-status.status-open,.outline-status.status-active{background:var(--accent)}.outline-status.status-closed,.outline-status.status-archived{background:var(--neutral)}.outline-status.status-unknown{background:var(--warning)}.outline-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.outline-unread{display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:var(--accent-2);font-size:10px;font-weight:750;font-variant-numeric:tabular-nums;box-shadow:none}.unread-nav{display:flex;gap:4px}.unread-nav button{padding:6px 9px;font-size:12px}.item.unread-selected{background:#fffbeb;box-shadow:inset 3px 0 #f59e0b;border-radius:var(--radius-sm)}.unread-focus{animation:unread-focus .9s ease-out}@keyframes unread-focus{0%,100%{box-shadow:none}35%{box-shadow:0 0 0 4px #fde68a;border-radius:var(--radius-sm)}}.room-state{display:flex;gap:8px;align-items:flex-start;background:var(--neutral-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--text-2)}.room-state strong{color:var(--neutral);white-space:nowrap}.tree-issue{display:none;margin:8px 0;padding:6px 9px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--warning);font-size:12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}body[data-view="tree"] .tree-issue{display:block}body[data-view="tree"] .thread-body{padding:14px 18px 18px;background:linear-gradient(180deg,#fbfcfe,#f5f8fc)}.tree-node{position:relative}.tree-children{margin:2px 0 4px 24px;padding:4px 0 4px 18px;border-left:2px solid #cbdaf5}.tree-children>.tree-node{position:relative}.tree-children>.tree-node::before{content:"";position:absolute;top:38px;left:-20px;width:18px;border-top:2px solid #cbdaf5;border-radius:2px}.tree-node>.item{margin:7px 0;padding:12px;border:1px solid #e0e8f4;border-radius:10px;background:#fff;box-shadow:0 2px 7px rgba(28,57,94,.06)}.tree-node>.item:last-child{border-bottom:1px solid #e0e8f4}.tree-node>.item .item-line{width:3px;background:linear-gradient(#93c5fd,#c4b5fd);border-radius:99px}.tree-children .tree-node>.item .item-line{background:linear-gradient(#a7f3d0,#93c5fd)}.tree-activity{margin:16px 0 2px;padding:12px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}.tree-activity h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.tree-activity-note{margin:0 0 8px;font-size:12px;color:var(--text-3)}.tree-activity .item{padding:10px 0}.tree-activity .item:last-child{border-bottom:0}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}.tree-children{margin-left:16px;padding-left:10px}.tree-children>.tree-node::before{left:-12px;width:10px}}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-main"><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${statusBadge(room.room.status, "room")} \xB7 ${biHtml("snapshot", "\u5FEB\u7167")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code></div>${bindingInfo}</div><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search" data-placeholder-zh="\u641C\u7D22" placeholder="Search" autocomplete="off"></div><div class="toolbar"><div class="view-toggle" role="group" aria-label="Viewer mode"><button id="view-timeline" class="active" aria-pressed="true" data-en="Timeline" data-zh="\u65F6\u95F4\u7EBF">Timeline</button><button id="view-tree" aria-pressed="false" data-en="Tree" data-zh="\u6811\u72B6">Tree</button></div><div class="unread-nav" role="group" aria-label="Unread navigation"><button id="previous-unread" aria-label="Previous unread" data-en="Prev" data-zh="\u4E0A\u4E00\u6761">Prev</button><button id="next-unread" aria-label="Next unread" data-en="Next" data-zh="\u4E0B\u4E00\u6761">Next</button></div><button id="lang-toggle" data-en="\u4E2D\u6587" data-zh="EN">\u4E2D\u6587</button><button id="close" data-en="Close" data-zh="\u5173\u95ED">Close</button></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="\u4E3B\u9898">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Events", "\u4E8B\u4EF6")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="\u6210\u5458">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "\u53EA\u8BFB\u89C6\u56FE\u3002\u5982\u9700\u7EA0\u6B63\uFF0C\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u63D0\u51FA\uFF1B\u6B64\u5904\u4E0D\u4F1A\u4FEE\u6539\u5386\u53F2\u3002")}</p>${roomArchived}${freshnessNotice}${warnings}${roomEvents}${threads || noThreads}<div class="search-empty" id="search-empty">${biText("No threads match your search.", "\u6CA1\u6709\u5339\u914D\u7684\u4E3B\u9898\u3002")}</div></main></div><script nonce="agent-forum">const revision="${escapeHtml(revision)}";let lang=${JSON.stringify(language)};function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();document.getElementById('lang-toggle').addEventListener('click',async()=>{lang=lang==='en'?'zh':'en';applyLang();try{await fetch(location.pathname+'preferences',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({language:lang})})}catch{}});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));let unreadSelection=null;function moveUnread(direction){const items=Array.from(document.querySelectorAll('.item[data-ai-unread="true"]')).filter(item=>!item.closest('.thread')?.classList.contains('hidden')&&item.closest('.thread')?.dataset.threadStatus!=='closed');if(!items.length)return;const current=items.indexOf(unreadSelection);const next=items[current<0?0:(current+direction+items.length)%items.length];unreadSelection=next;items.forEach(item=>item.classList.toggle('unread-selected',item===next));next.scrollIntoView({behavior:'smooth',block:'center'});next.classList.add('unread-focus');setTimeout(()=>next.classList.remove('unread-focus'),900)}document.getElementById('previous-unread').addEventListener('click',()=>moveUnread(-1));document.getElementById('next-unread').addEventListener('click',()=>moveUnread(1));function restoreTimeline(thread){const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]')).sort((a,b)=>Number(a.dataset.timelineIndex)-Number(b.dataset.timelineIndex));body.replaceChildren(...items);}function replyRelations(messages){const byId=new Map(messages.map(item=>[item.dataset.messageId,item]));const parents=new Map();messages.forEach(item=>{const id=item.dataset.messageId;const parent=item.dataset.replyTo;if(id&&parent&&parent!==id&&byId.has(parent))parents.set(id,parent);});const cut=new Set();messages.forEach(item=>{const visited=new Map();let current=item.dataset.messageId;while(current&&parents.has(current)){if(visited.has(current)){Array.from(visited.keys()).slice(visited.get(current)).forEach(id=>cut.add(id));break;}visited.set(current,visited.size);current=parents.get(current);}});const children=new Map(messages.map(item=>[item.dataset.messageId,[]]));const roots=[];messages.forEach(item=>{const id=item.dataset.messageId;const parent=id?parents.get(id):undefined;if(id&&parent&&!cut.has(id))children.get(parent).push(id);else roots.push(id);});return{byId,children,roots};}function renderTree(thread){restoreTimeline(thread);const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]'));const messages=items.filter(item=>item.classList.contains('message'));const events=items.filter(item=>item.classList.contains('event'));const relation=replyRelations(messages);body.replaceChildren();const appendNode=id=>{const item=relation.byId.get(id);if(!item)return;const node=document.createElement('div');node.className='tree-node';node.append(item);const children=relation.children.get(id)||[];if(children.length){const branch=document.createElement('div');branch.className='tree-children';children.forEach(childId=>branch.append(appendNode(childId)));node.append(branch);}return node;};relation.roots.forEach(id=>{const node=appendNode(id);if(node)body.append(node);});if(events.length){const activity=document.createElement('section');activity.className='tree-activity';const heading=document.createElement('h3');heading.dataset.en='Activity';heading.dataset.zh='\u6D3B\u52A8\u4E8B\u4EF6';heading.textContent=lang==='zh'?heading.dataset.zh:heading.dataset.en;const note=document.createElement('p');note.className='tree-activity-note';note.dataset.en='Lifecycle events are shown separately because they are not replies.';note.dataset.zh='\u751F\u547D\u5468\u671F\u4E8B\u4EF6\u72EC\u7ACB\u663E\u793A\uFF0C\u56E0\u4E3A\u5B83\u4EEC\u4E0D\u662F\u56DE\u590D\u3002';note.textContent=lang==='zh'?note.dataset.zh:note.dataset.en;activity.append(heading,note,...events);body.append(activity);}}const viewTimeline=document.getElementById('view-timeline');const viewTree=document.getElementById('view-tree');function setView(mode){document.body.dataset.view=mode;viewTimeline.classList.toggle('active',mode==='timeline');viewTree.classList.toggle('active',mode==='tree');viewTimeline.setAttribute('aria-pressed',String(mode==='timeline'));viewTree.setAttribute('aria-pressed',String(mode==='tree'));document.querySelectorAll('.thread').forEach(thread=>{if(mode==='tree')renderTree(thread);else restoreTimeline(thread);});}viewTimeline.addEventListener('click',()=>setView('timeline'));viewTree.addEventListener('click',()=>setView('tree'));const search=document.getElementById('search');const outlineItems=document.querySelectorAll('.outline-item');const threads=document.querySelectorAll('.thread');const searchEmpty=document.getElementById('search-empty');function runSearch(){const q=(search.value||'').trim().toLowerCase();let visibleCount=0;outlineItems.forEach(item=>{const title=item.dataset.title||'';const match=!q||title.includes(q);item.classList.toggle('hidden',!match);if(match)visibleCount++;});threads.forEach(t=>{const title=t.dataset.title||'';const match=!q||title.includes(q);t.classList.toggle('hidden',!match);});searchEmpty.style.display=visibleCount===0&&q?'block':'none';}if(search)search.addEventListener('input',runSearch);const observer=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const id=e.target.id;outlineItems.forEach(i=>i.classList.toggle('active',i.getAttribute('href')==='#'+id));}});},{rootMargin:'-72px 0px -70% 0px'});threads.forEach(t=>observer.observe(t));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<div style="max-width:600px;margin:80px auto;padding:20px;font-family:system-ui;text-align:center;color:#59636e"><p>Viewer closed.</p></div>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></body></html>`;
+  const sendModeInfo = sendMode === "ask" ? `<span class="send-mode ask" title="${escapeHtml(biText("Ask before sending", "\u5148\u95EE\u518D\u53D1"))}">\u2709\uFE0E\u26D4 ${biText("Ask before sending", "\u5148\u95EE\u518D\u53D1")}</span>` : `<span class="send-mode auto" title="${escapeHtml(biText("Auto-send", "\u81EA\u52A8\u53D1\u9001"))}">\u2709 ${biText("Auto-send", "\u81EA\u52A8\u53D1\u9001")}</span>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} \u2014 Agent Forum</title><link rel="icon" type="image/svg+xml" href="${viewerFavicon}"><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}.appbar-main{min-width:0;flex:1}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.binding-context{display:flex;align-items:center;gap:5px;max-width:100%;margin-top:4px;color:var(--text-3);font-size:11px}.binding-context code{background:var(--surface-2);padding:1px 5px;border-radius:4px;color:var(--text-2);font-size:11px}.binding-path{max-width:min(58vw,680px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.send-mode{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:650;line-height:1.5}.send-mode.auto{background:var(--success-bg);color:var(--success)}.send-mode.ask{background:var(--warning-bg);color:var(--warning)}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 12px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.markdown .md-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-sm)}.markdown .md-table{width:100%;border-collapse:collapse;font-size:13px}.markdown .md-table th,.markdown .md-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;white-space:nowrap}.markdown .md-table th{background:var(--surface-2);font-weight:600;text-align:left}.markdown .md-table tbody tr:last-child td{border-bottom:0}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);margin:0 0 20px}.warnings summary{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:pointer;list-style:none;color:var(--warning);font-size:13px;font-weight:700}.warnings summary::-webkit-details-marker{display:none}.warnings summary::before{content:"\u25B8";font-size:11px;transition:transform .12s}.warnings[open] summary::before{transform:rotate(90deg)}.warnings-title{display:inline-flex}.warnings-count{display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:1px;border-radius:999px;background:#fef3c7;color:#a16207;font-size:10px;font-variant-numeric:tabular-nums}.warning-list{max-height:min(32vh,360px);overflow:auto;padding:0 12px 10px;border-top:1px solid #fde68a}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:5px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.read-badge{display:inline-flex;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700}.read-badge.read{background:var(--success-bg);color:var(--success)}.read-badge.unread{background:var(--warning-bg);color:var(--warning)}.read-badge.published{background:var(--accent-soft);color:var(--accent-2)}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}.view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}.view-toggle button{border:0;border-radius:0;padding:6px 10px}.view-toggle button+button{border-left:1px solid var(--border)}.view-toggle button.active{background:var(--accent);color:#fff}.status-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}.room-status{margin-left:0}.status-open,.status-active{background:var(--accent-soft);color:var(--accent-2)}.status-closed,.status-archived{background:var(--neutral-bg);color:var(--neutral)}.status-unknown{background:var(--warning-bg);color:var(--warning)}.thread-icon.status-open,.thread-icon.status-active{background:var(--accent)}.thread-icon.status-closed{background:var(--neutral)}.thread-icon.status-archived{background:var(--neutral)}.outline-item{display:flex;align-items:center;gap:8px}.outline-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}.outline-status.status-open,.outline-status.status-active{background:var(--accent)}.outline-status.status-closed,.outline-status.status-archived{background:var(--neutral)}.outline-status.status-unknown{background:var(--warning)}.outline-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.outline-unread{display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:var(--accent-2);font-size:10px;font-weight:750;font-variant-numeric:tabular-nums;box-shadow:none}.unread-nav{display:flex;gap:4px}.unread-nav button{padding:6px 9px;font-size:12px}.item.unread-selected{background:#fffbeb;box-shadow:inset 3px 0 #f59e0b;border-radius:var(--radius-sm)}.unread-focus{animation:unread-focus .9s ease-out}@keyframes unread-focus{0%,100%{box-shadow:none}35%{box-shadow:0 0 0 4px #fde68a;border-radius:var(--radius-sm)}}.room-state{display:flex;gap:8px;align-items:flex-start;background:var(--neutral-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--text-2)}.room-state strong{color:var(--neutral);white-space:nowrap}.tree-issue{display:none;margin:8px 0;padding:6px 9px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--warning);font-size:12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}body[data-view="tree"] .tree-issue{display:block}body[data-view="tree"] .thread-body{padding:14px 18px 18px;background:linear-gradient(180deg,#fbfcfe,#f5f8fc)}.tree-node{position:relative}.tree-children{margin:2px 0 4px 24px;padding:4px 0 4px 18px;border-left:2px solid #cbdaf5}.tree-children>.tree-node{position:relative}.tree-children>.tree-node::before{content:"";position:absolute;top:38px;left:-20px;width:18px;border-top:2px solid #cbdaf5;border-radius:2px}.tree-node>.item{margin:7px 0;padding:12px;border:1px solid #e0e8f4;border-radius:10px;background:#fff;box-shadow:0 2px 7px rgba(28,57,94,.06)}.tree-node>.item:last-child{border-bottom:1px solid #e0e8f4}.tree-node>.item .item-line{width:3px;background:linear-gradient(#93c5fd,#c4b5fd);border-radius:99px}.tree-children .tree-node>.item .item-line{background:linear-gradient(#a7f3d0,#93c5fd)}.tree-activity{margin:16px 0 2px;padding:12px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}.tree-activity h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.tree-activity-note{margin:0 0 8px;font-size:12px;color:var(--text-3)}.tree-activity .item{padding:10px 0}.tree-activity .item:last-child{border-bottom:0}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}.tree-children{margin-left:16px;padding-left:10px}.tree-children>.tree-node::before{left:-12px;width:10px}}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-main"><h1>${escapeHtml(room.room.title)}</h1><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} \xB7 ${statusBadge(room.room.status, "room")} \xB7 ${biHtml("snapshot", "\u5FEB\u7167")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code>${sendModeInfo}</div>${bindingInfo}</div><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search" data-placeholder-zh="\u641C\u7D22" placeholder="Search" autocomplete="off"></div><div class="toolbar"><div class="view-toggle" role="group" aria-label="Viewer mode"><button id="view-timeline" class="active" aria-pressed="true" data-en="Timeline" data-zh="\u65F6\u95F4\u7EBF">Timeline</button><button id="view-tree" aria-pressed="false" data-en="Tree" data-zh="\u6811\u72B6">Tree</button></div><div class="unread-nav" role="group" aria-label="Unread navigation"><button id="previous-unread" aria-label="Previous unread" data-en="Prev" data-zh="\u4E0A\u4E00\u6761">Prev</button><button id="next-unread" aria-label="Next unread" data-en="Next" data-zh="\u4E0B\u4E00\u6761">Next</button></div><button id="lang-toggle" data-en="\u4E2D\u6587" data-zh="EN">\u4E2D\u6587</button><button id="close" data-en="Close" data-zh="\u5173\u95ED">Close</button></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="\u4E3B\u9898">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Events", "\u4E8B\u4EF6")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="\u6210\u5458">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "\u53EA\u8BFB\u89C6\u56FE\u3002\u5982\u9700\u7EA0\u6B63\uFF0C\u8BF7\u56DE\u5230 Agent \u4F1A\u8BDD\u63D0\u51FA\uFF1B\u6B64\u5904\u4E0D\u4F1A\u4FEE\u6539\u5386\u53F2\u3002")}</p>${roomArchived}${freshnessNotice}${warnings}${roomEvents}${threads || noThreads}<div class="search-empty" id="search-empty">${biText("No threads match your search.", "\u6CA1\u6709\u5339\u914D\u7684\u4E3B\u9898\u3002")}</div></main></div><script nonce="agent-forum">const revision="${escapeHtml(revision)}";let lang=${JSON.stringify(language)};function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();document.getElementById('lang-toggle').addEventListener('click',async()=>{lang=lang==='en'?'zh':'en';applyLang();try{await fetch(location.pathname+'preferences',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({language:lang})})}catch{}});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));let unreadSelection=null;function moveUnread(direction){const items=Array.from(document.querySelectorAll('.item[data-ai-unread="true"]')).filter(item=>!item.closest('.thread')?.classList.contains('hidden')&&item.closest('.thread')?.dataset.threadStatus!=='closed');if(!items.length)return;const current=items.indexOf(unreadSelection);const next=items[current<0?0:(current+direction+items.length)%items.length];unreadSelection=next;items.forEach(item=>item.classList.toggle('unread-selected',item===next));next.scrollIntoView({behavior:'smooth',block:'center'});next.classList.add('unread-focus');setTimeout(()=>next.classList.remove('unread-focus'),900)}document.getElementById('previous-unread').addEventListener('click',()=>moveUnread(-1));document.getElementById('next-unread').addEventListener('click',()=>moveUnread(1));function restoreTimeline(thread){const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]')).sort((a,b)=>Number(a.dataset.timelineIndex)-Number(b.dataset.timelineIndex));body.replaceChildren(...items);}function replyRelations(messages){const byId=new Map(messages.map(item=>[item.dataset.messageId,item]));const parents=new Map();messages.forEach(item=>{const id=item.dataset.messageId;const parent=item.dataset.replyTo;if(id&&parent&&parent!==id&&byId.has(parent))parents.set(id,parent);});const cut=new Set();messages.forEach(item=>{const visited=new Map();let current=item.dataset.messageId;while(current&&parents.has(current)){if(visited.has(current)){Array.from(visited.keys()).slice(visited.get(current)).forEach(id=>cut.add(id));break;}visited.set(current,visited.size);current=parents.get(current);}});const children=new Map(messages.map(item=>[item.dataset.messageId,[]]));const roots=[];messages.forEach(item=>{const id=item.dataset.messageId;const parent=id?parents.get(id):undefined;if(id&&parent&&!cut.has(id))children.get(parent).push(id);else roots.push(id);});return{byId,children,roots};}function renderTree(thread){restoreTimeline(thread);const body=thread.querySelector('.thread-body');if(!body)return;const items=Array.from(body.querySelectorAll('.item[data-timeline-index]'));const messages=items.filter(item=>item.classList.contains('message'));const events=items.filter(item=>item.classList.contains('event'));const relation=replyRelations(messages);body.replaceChildren();const appendNode=id=>{const item=relation.byId.get(id);if(!item)return;const node=document.createElement('div');node.className='tree-node';node.append(item);const children=relation.children.get(id)||[];if(children.length){const branch=document.createElement('div');branch.className='tree-children';children.forEach(childId=>branch.append(appendNode(childId)));node.append(branch);}return node;};relation.roots.forEach(id=>{const node=appendNode(id);if(node)body.append(node);});if(events.length){const activity=document.createElement('section');activity.className='tree-activity';const heading=document.createElement('h3');heading.dataset.en='Activity';heading.dataset.zh='\u6D3B\u52A8\u4E8B\u4EF6';heading.textContent=lang==='zh'?heading.dataset.zh:heading.dataset.en;const note=document.createElement('p');note.className='tree-activity-note';note.dataset.en='Lifecycle events are shown separately because they are not replies.';note.dataset.zh='\u751F\u547D\u5468\u671F\u4E8B\u4EF6\u72EC\u7ACB\u663E\u793A\uFF0C\u56E0\u4E3A\u5B83\u4EEC\u4E0D\u662F\u56DE\u590D\u3002';note.textContent=lang==='zh'?note.dataset.zh:note.dataset.en;activity.append(heading,note,...events);body.append(activity);}}const viewTimeline=document.getElementById('view-timeline');const viewTree=document.getElementById('view-tree');function setView(mode){document.body.dataset.view=mode;viewTimeline.classList.toggle('active',mode==='timeline');viewTree.classList.toggle('active',mode==='tree');viewTimeline.setAttribute('aria-pressed',String(mode==='timeline'));viewTree.setAttribute('aria-pressed',String(mode==='tree'));document.querySelectorAll('.thread').forEach(thread=>{if(mode==='tree')renderTree(thread);else restoreTimeline(thread);});}viewTimeline.addEventListener('click',()=>setView('timeline'));viewTree.addEventListener('click',()=>setView('tree'));const search=document.getElementById('search');const outlineItems=document.querySelectorAll('.outline-item');const threads=document.querySelectorAll('.thread');const searchEmpty=document.getElementById('search-empty');function runSearch(){const q=(search.value||'').trim().toLowerCase();let visibleCount=0;outlineItems.forEach(item=>{const title=item.dataset.title||'';const match=!q||title.includes(q);item.classList.toggle('hidden',!match);if(match)visibleCount++;});threads.forEach(t=>{const title=t.dataset.title||'';const match=!q||title.includes(q);t.classList.toggle('hidden',!match);});searchEmpty.style.display=visibleCount===0&&q?'block':'none';}if(search)search.addEventListener('input',runSearch);const observer=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const id=e.target.id;outlineItems.forEach(i=>i.classList.toggle('active',i.getAttribute('href')==='#'+id));}});},{rootMargin:'-72px 0px -70% 0px'});threads.forEach(t=>observer.observe(t));document.getElementById('close').addEventListener('click',async()=>{try{await fetch(location.pathname+'close',{method:'POST'});document.body.innerHTML='<div style="max-width:600px;margin:80px auto;padding:20px;font-family:system-ui;text-align:center;color:#59636e"><p>Viewer closed.</p></div>'}catch{}});if(location.protocol==='http:')setInterval(async()=>{try{const next=await(await fetch(location.pathname+'revision')).json();if(next.revision!==revision)location.reload()}catch{}},2000)</script></body></html>`;
 }
 async function startViewerServer(input) {
   const room = input.snapshot.rooms.find(
@@ -17365,7 +17649,7 @@ async function startViewerServer(input) {
   let freshness = input.refresh ? { state: "stale", message: "Waiting for remote sync." } : { state: "fresh" };
   let readIdentities = input.readIdentities ?? [];
   let language = input.language ?? "en";
-  let html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding);
+  let html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding, input.sendMode ?? "auto");
   let revision = currentSnapshot.sourceHead;
   let refreshInFlight;
   const refresh = async () => {
@@ -17382,10 +17666,10 @@ async function startViewerServer(input) {
             revision = result.snapshot.sourceHead;
           }
         }
-        html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding);
+        html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding, input.sendMode ?? "auto");
       }).catch(() => {
         freshness = { state: "stale", message: "Remote sync failed unexpectedly." };
-        html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding);
+        html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding, input.sendMode ?? "auto");
       }).finally(() => {
         refreshInFlight = void 0;
       });
@@ -17495,13 +17779,14 @@ async function startViewerServer(input) {
       currentRoom = nextRoom;
       freshness = nextFreshness;
       revision = snapshot.sourceHead;
-      html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding);
+      html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding, input.sendMode ?? "auto");
     },
     close
   };
 }
 
 // src/services/viewer.ts
+init_publish_policy();
 function sessionPath(paths, id) {
   if (!/^[0-9a-f-]{36}$/u.test(id)) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", "invalid Viewer session ID");
   return resolve23(paths.viewerDirectory, `${id}.json`);
@@ -17525,7 +17810,7 @@ async function waitForProcessExit(pid, timeoutMs = 5e3) {
 }
 async function readSession(path2) {
   try {
-    const value = JSON.parse(await readFile19(path2, "utf8"));
+    const value = JSON.parse(await readFile20(path2, "utf8"));
     const url = new URL(value.url);
     const validUrl = url.protocol === "http:" && url.hostname === "127.0.0.1" && /^\/session\/[0-9a-f]{32}\/$/u.test(url.pathname);
     return value.formatVersion === 1 && /^[0-9a-f-]{36}$/u.test(value.sessionId) && Number.isSafeInteger(value.pid) && value.pid > 0 && validUrl ? value : void 0;
@@ -17642,6 +17927,7 @@ async function runViewerServer(input, paths = createAgentForumPaths()) {
     idleMs: input.idleMs,
     readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths),
     language: await getUiLanguage(paths),
+    sendMode: await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), input.forumAlias).forumId, room.room.id),
     ...input.binding ? { binding: input.binding } : {},
     setLanguage: async (language) => {
       await setUiLanguage(language, paths);
@@ -17825,7 +18111,7 @@ async function getViewerRoomData(input, paths = createAgentForumPaths()) {
   members.sort((a, b) => b.messageCount - a.messageCount || (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
   return {
     freshness,
-    room: { id: room.room.id, slug: room.room.slug, title: room.room.title, description: room.room.description, status: room.room.status },
+    room: { id: room.room.id, slug: room.room.slug, title: room.room.title, description: room.room.description, status: room.room.status, sendMode: await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), snapshot.forumAlias).forumId, room.room.id) },
     forum: { alias: snapshot.forumAlias, name: snapshot.forum.name, dataBranch: findForum(await loadLocalConfig(paths), snapshot.forumAlias).dataBranch },
     syncedAt: snapshot.generatedAt,
     stats: { threadCount: threads.length, messageCount: totalMessages, memberCount: members.length },
@@ -17843,7 +18129,7 @@ async function generateViewerHtml(input, paths = createAgentForumPaths()) {
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir8(dirname6(output2), { recursive: true });
-  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths));
+  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths), void 0, await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), context.forumAlias).forumId, room.room.id));
   await import("node:fs/promises").then(({ writeFile: writeFile3 }) => writeFile3(output2, html, { encoding: "utf8", mode: 384 }));
   return { output: output2 };
 }
@@ -17988,6 +18274,7 @@ Commands:
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
+  publish            Inspect or set per-room publish policy
   inbox              Read relevant unread Room messages and events
   preference         Inspect or set private UI preferences
   viewer             Open or manage the read-only human Viewer
@@ -18024,6 +18311,7 @@ async function runCli(args2, io = defaultIo) {
             "room",
             "thread",
             "post",
+            "publish",
             "inbox",
             "preference",
             "viewer",
@@ -18055,14 +18343,14 @@ async function runCli(args2, io = defaultIo) {
     }
     return ExitCode.Success;
   }
-  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "inbox" || command === "preference" || command === "viewer" || command === "dashboard" || command === "doctor" || command === "skill" || command === "setup") {
+  if (command === "forum" || command === "identity" || command === "context" || command === "room" || command === "thread" || command === "post" || command === "publish" || command === "inbox" || command === "preference" || command === "viewer" || command === "dashboard" || command === "doctor" || command === "skill" || command === "setup") {
     try {
       const subcommandArgs = positional2.slice(1);
-      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "preference" ? await executePreferenceCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "dashboard" ? await executeDashboardCommand(subcommandArgs, { onProgress: io.stderr }) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : command === "setup" ? await executeSetupCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
+      const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "publish" ? await executePublishCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "preference" ? await executePreferenceCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "dashboard" ? await executeDashboardCommand(subcommandArgs, { onProgress: io.stderr }) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : command === "setup" ? await executeSetupCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
       if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox", "setup"].includes(command)) {
         await invalidateDashboard().catch(() => void 0);
       }
-      if (!execution.error && ["context.bind", "context.unbind"].includes(execution.command)) {
+      if (!execution.error && ["context.bind", "context.unbind", "publish.policy"].includes(execution.command)) {
         await invalidateDashboard().catch(() => void 0);
       }
       if (json) {

@@ -32,6 +32,7 @@ import {
   createImmutableMessage,
 } from "../storage/protocol-store.js";
 import { ServiceError } from "./errors.js";
+import { assertRoomPublishAllowed } from "./publish-policy.js";
 import {
   openForum,
   protocolWarning,
@@ -604,6 +605,7 @@ export async function createThread(
     );
   }
   const kind = input.kind;
+  await assertRoomPublishAllowed(input.forumAlias, input.room, paths);
   return withForumWrite(
     input.forumAlias,
     input.identityId,
@@ -737,6 +739,7 @@ export async function createPost(
     );
   }
   const type = input.type;
+  await assertRoomPublishAllowed(input.forumAlias, input.room, paths);
   return withForumWrite(
     input.forumAlias,
     input.identityId,
@@ -854,6 +857,7 @@ export async function createThreadEvent(
   input: ThreadEventInput,
   paths: AgentForumPaths = createAgentForumPaths(),
 ): Promise<{ eventId: string; thread: ThreadView; commit: string }> {
+  await assertRoomPublishAllowed(input.forumAlias, input.room, paths);
   return withForumWrite(
     input.forumAlias,
     input.identityId,

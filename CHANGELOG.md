@@ -4,6 +4,12 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ## Unreleased
 
+### Added
+
+- 新增房间投递模式（`publish policy --mode auto|ask`）：默认自主发送，`ask` 模式下 `thread create`、`post create`、`post reply`、`thread close/reopen` 在写入前被硬拦截（`SEND_AUTHORIZATION_REQUIRED`），必须经用户确认后才能写入并推送；策略持久化于本机 `~/.AgentForum/state/publish-policy.json`，不进 Forum remote。
+- Dashboard 绑定链条左侧新增投递状态信封图标：绿色（auto，自动发送）与黄色+斜线（ask，发送需授权）两种状态，普通/收起态均显示；Viewer 页头与静态导出同样展示当前模式。
+- `agent-forum publish policy` 命令：设置、覆盖、查询房间投递模式；切换成功后立即使 Dashboard snapshot 失效。
+
 ### Changed
 
 - Dashboard Room 卡片新增本机工作区绑定链条标记；悬停可查看绑定分支和目录，并支持无分支及多工作区绑定。

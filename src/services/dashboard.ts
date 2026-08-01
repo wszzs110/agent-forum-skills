@@ -8,6 +8,7 @@ import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js
 import { loadContextBindingState } from "../context/bindings.js";
 import { ServiceError } from "./errors.js";
 import { getAllUnreadInboxEntries } from "./inbox.js";
+import { loadPublishPolicy } from "./publish-policy.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 
 const clientIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -35,6 +36,8 @@ export interface DashboardRoomBinding {
   workspaceRoot: string;
   branch: string | null;
 }
+
+export type DashboardSendMode = "auto" | "ask";
 
 interface DashboardRuntime {
   formatVersion: 1;
@@ -166,9 +169,14 @@ export async function setDashboardRoomPinned(roomId: string, pinned: boolean, pa
   });
 }
 
-export async function getDashboardSnapshot(paths = createAgentForumPaths()): Promise<{ revision: number; teams: Array<{ forumId: string; forumAlias: string; polling: boolean; identityIds: string[]; counts: { related: number; broadcast: number; other: number }; rooms: Array<{ roomId: string; title: string; counts: { related: number; broadcast: number; other: number }; activeLocalAgents: number; pinned: boolean; deprecated: boolean; bindings: DashboardRoomBinding[] }> }>; activeClients: number }> {
+export async function getDashboardSnapshot(paths = createAgentForumPaths()): Promise<{ revision: number; teams: Array<{ forumId: string; forumAlias: string; polling: boolean; identityIds: string[]; counts: { related: number; broadcast: number; other: number }; rooms: Array<{ roomId: string; title: string; counts: { related: number; broadcast: number; other: number }; activeLocalAgents: number; pinned: boolean; deprecated: boolean; bindings: DashboardRoomBinding[]; sendMode: DashboardSendMode }> }>; activeClients: number }> {
   const runtime = await dashboardStatus(paths);
   const bindingState = await loadContextBindingState(paths);
+  const publishPolicy = await loadPublishPolicy(paths);
+  const sendModeByRoom = new Map<string, DashboardSendMode>();
+  for (const entry of publishPolicy.entries) {
+    sendModeByRoom.set(`${entry.forumId}\0${entry.roomId}`, entry.mode);
+  }
   const bindingsByRoom = new Map<string, DashboardRoomBinding[]>();
   for (const binding of bindingState.bindings) {
     const key = `${binding.forumId}\0${binding.roomId}`;
@@ -186,7 +194,7 @@ export async function getDashboardSnapshot(paths = createAgentForumPaths()): Pro
     const alias = targets[0]!.forumAlias;
     const clients = runtime.clients.filter((client) => client.forumId === forumId);
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation), bindings: bindingsByRoom.get(`${forumId}\0${room.room.id}`) ?? [] }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation), bindings: bindingsByRoom.get(`${forumId}\0${room.room.id}`) ?? [], sendMode: sendModeByRoom.get(`${forumId}\0${room.room.id}`) ?? "auto" }]));
     // Closed Thread 仍可在历史页面阅读，但不再触发 Dashboard 的未读提醒或排序权重。
     const closedThreadIds = new Set(snapshot.rooms.flatMap((room) => room.threads.filter((thread) => thread.thread.status === "closed").map((thread) => thread.thread.id)));
     const seen = new Set<string>();

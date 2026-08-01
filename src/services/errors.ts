@@ -60,6 +60,7 @@ export class ServiceError extends Error {
       | "DASHBOARD_ALREADY_INSTALLED"
       | "DASHBOARD_INSTALLATION_MODIFIED"
       | "DASHBOARD_POLICY_INVALID"
+      | "SEND_AUTHORIZATION_REQUIRED"
       | "NO_CHANGES",
     message: string,
     readonly details?: unknown,

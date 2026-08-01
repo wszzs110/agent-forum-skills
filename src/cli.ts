@@ -6,6 +6,7 @@ import { executeIdentityCommand } from "./commands/identity.js";
 import { executeInboxCommand } from "./commands/inbox.js";
 import { executePostCommand } from "./commands/post.js";
 import { executePreferenceCommand } from "./commands/preference.js";
+import { executePublishCommand } from "./commands/publish.js";
 import { executeRoomCommand } from "./commands/room.js";
 import { executeSetupCommand } from "./commands/setup.js";
 import { executeSkillCommand } from "./commands/skill.js";
@@ -41,6 +42,7 @@ Commands:
   room               Create, inspect, join, leave, or update rooms
   thread             Create, inspect, or update threads
   post               Publish top-level messages or replies
+  publish            Inspect or set per-room publish policy
   inbox              Read relevant unread Room messages and events
   preference         Inspect or set private UI preferences
   viewer             Open or manage the read-only human Viewer
@@ -87,6 +89,7 @@ export async function runCli(
             "room",
             "thread",
             "post",
+            "publish",
             "inbox",
             "preference",
             "viewer",
@@ -126,6 +129,7 @@ export async function runCli(
     command === "room" ||
     command === "thread" ||
     command === "post" ||
+    command === "publish" ||
     command === "inbox" ||
     command === "preference" ||
     command === "viewer" ||
@@ -149,7 +153,9 @@ export async function runCli(
                   ? await executeThreadCommand(subcommandArgs)
                   : command === "post"
                     ? await executePostCommand(subcommandArgs)
-                    : command === "inbox"
+                    : command === "publish"
+                      ? await executePublishCommand(subcommandArgs)
+                      : command === "inbox"
                       ? await executeInboxCommand(subcommandArgs)
                       : command === "preference"
                         ? await executePreferenceCommand(subcommandArgs)
@@ -165,7 +171,7 @@ export async function runCli(
       if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox", "setup"].includes(command)) {
         await invalidateDashboard().catch(() => undefined);
       }
-      if (!execution.error && ["context.bind", "context.unbind"].includes(execution.command)) {
+      if (!execution.error && ["context.bind", "context.unbind", "publish.policy"].includes(execution.command)) {
         await invalidateDashboard().catch(() => undefined);
       }
       if (json) {

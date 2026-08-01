@@ -8,6 +8,7 @@ import { initLocalForum, publishIdentity } from "../src/services/local-forum.js"
 import { getInbox } from "../src/services/inbox.js";
 import { createRoom, joinRoom } from "../src/services/room.js";
 import { createThread, createThreadEvent } from "../src/services/thread.js";
+import { setRoomPublishMode } from "../src/services/publish-policy.js";
 import { closeViewerSession, generateViewerHtml, getViewerRoomData, listViewerSessions, openViewer, viewerServerLaunchArgs } from "../src/services/viewer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 import { requireGit } from "../src/git/runner.js";
@@ -49,6 +50,7 @@ test("Viewer data returns active Room members and deterministic activity data", 
     await createThreadEvent({ forumAlias: "team", room: "review", thread: "thread_0194f6d2-8c10-7a31-9e42-123456789abe", type: "thread-closed", reason: "Review completed.", data: {}, now: new Date("2026-07-12T12:01:00.000Z") }, paths);
     const data = await getViewerRoomData({ forumAlias: "team", room: "review" }, paths);
     assert.equal(data.room.title, "Review");
+    assert.equal(data.room.sendMode, "auto");
     assert.equal(data.stats.threadCount, 1);
     assert.equal(data.stats.messageCount, 1);
     assert.equal(data.stats.memberCount, 2);
@@ -62,6 +64,24 @@ test("Viewer data returns active Room members and deterministic activity data", 
     assert.equal(data.threads[0]?.messages[0]?.localReceipt.publishedBy[0]?.displayName, "Viewer Agent");
     assert.equal(data.threads[0]?.messages[0]?.localReceipt.readBy.length, 0);
     assert.equal(data.threads[0]?.messages[0]?.localReceipt.unreadBy.length, 0);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Viewer data exposes the Room send mode from the local publish policy", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-viewer-sendmode-"));
+  try {
+    const paths = await setup(home);
+    const roomId = "room_0194f6d2-8c10-7a31-9e42-123456789abd";
+    await setRoomPublishMode(paths, { forumId: "forum_0194f6d2-8c10-7a31-9e42-123456789abc", roomId, mode: "ask", now: new Date("2026-07-12T12:02:00.000Z") });
+    const asked = await getViewerRoomData({ forumAlias: "team", room: "review" }, paths);
+    assert.equal(asked.room.sendMode, "ask");
+    const output = resolve(paths.viewerDirectory, "sendmode-export.html");
+    const result = await generateViewerHtml({ forumAlias: "team", room: "review", output }, paths);
+    const html = await readFile(result.output, "utf8");
+    assert.match(html, /class="send-mode ask"/u, "static Viewer export marks the Room as approval-required");
+    assert.match(html, /先问再发/u, "static Viewer export carries the Chinese ask-before-sending label");
   } finally {
     await rm(home, { recursive: true, force: true });
   }

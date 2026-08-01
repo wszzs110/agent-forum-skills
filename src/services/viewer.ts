@@ -13,6 +13,7 @@ import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
 import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerBindingContext, type ViewerReadIdentity } from "../viewer/server.js";
 import { getInboxReadCursor } from "./inbox.js";
+import { getRoomPublishMode } from "./publish-policy.js";
 import { invalidateDashboard } from "./dashboard.js";
 import { getUiLanguage, setUiLanguage } from "./ui-preferences.js";
 
@@ -194,6 +195,7 @@ export async function runViewerServer(input: {
     idleMs: input.idleMs,
     readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths),
     language: await getUiLanguage(paths),
+    sendMode: await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), input.forumAlias).forumId, room.room.id),
     ...(input.binding ? { binding: input.binding } : {}),
     setLanguage: async (language) => { await setUiLanguage(language, paths); },
     refresh: async () => {
@@ -321,7 +323,7 @@ export interface ViewerLocalReceipt {
 
 export interface ViewerRoomData {
   freshness: ReadFreshness;
-  room: { id: string; slug: string; title: string; description: string; status: string };
+  room: { id: string; slug: string; title: string; description: string; status: string; sendMode: "auto" | "ask" };
   forum: { alias: string; name: string; dataBranch: string };
   syncedAt: string;
   stats: { threadCount: number; messageCount: number; memberCount: number };
@@ -397,7 +399,7 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
   members.sort((a, b) => b.messageCount - a.messageCount || (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
   return {
     freshness,
-    room: { id: room.room.id, slug: room.room.slug, title: room.room.title, description: room.room.description, status: room.room.status },
+    room: { id: room.room.id, slug: room.room.slug, title: room.room.title, description: room.room.description, status: room.room.status, sendMode: await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), snapshot.forumAlias).forumId, room.room.id) },
     forum: { alias: snapshot.forumAlias, name: snapshot.forum.name, dataBranch: findForum(await loadLocalConfig(paths), snapshot.forumAlias).dataBranch },
     syncedAt: snapshot.generatedAt,
     stats: { threadCount: threads.length, messageCount: totalMessages, memberCount: members.length },
@@ -415,7 +417,7 @@ export async function generateViewerHtml(input: { forumAlias?: string; room?: st
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir(dirname(output), { recursive: true });
-  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths));
+  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths), undefined, await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), context.forumAlias).forumId, room.room.id));
   await import("node:fs/promises").then(({ writeFile }) => writeFile(output, html, { encoding: "utf8", mode: 0o600 }));
   return { output };
 }

@@ -13,6 +13,7 @@ import localConfigSchema from "../../schemas/v1/local-config.schema.json" with {
 import memberProfileSchema from "../../schemas/v1/member-profile.schema.json" with { type: "json" };
 import messageSchema from "../../schemas/v1/message.schema.json" with { type: "json" };
 import protocolSchema from "../../schemas/v1/protocol.schema.json" with { type: "json" };
+import publishPolicySchema from "../../schemas/v1/publish-policy.schema.json" with { type: "json" };
 import roomMemberSchema from "../../schemas/v1/room-member.schema.json" with { type: "json" };
 import roomSchema from "../../schemas/v1/room.schema.json" with { type: "json" };
 import threadSchema from "../../schemas/v1/thread.schema.json" with { type: "json" };
@@ -22,6 +23,7 @@ import { isCanonicalUtcTimestamp } from "../domain/timestamps.js";
 export type ProtocolSchemaName =
   | "protocol"
   | "context-bindings"
+  | "publish-policy"
   | "forum"
   | "inbox-cursor"
   | "identity-attention"
@@ -47,6 +49,7 @@ export type ValidationResult =
 const schemaDocuments = {
   protocol: protocolSchema,
   "context-bindings": contextBindingsSchema,
+  "publish-policy": publishPolicySchema,
   forum: forumSchema,
   "inbox-cursor": inboxCursorSchema,
   "identity-attention": identityAttentionSchema,

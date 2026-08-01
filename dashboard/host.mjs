@@ -380,7 +380,7 @@ await writeDesktopRuntime(address.port);
 /** 监听原子替换产生的状态文件事件，确保绑定变化立即刷新本机 Dashboard snapshot。 */
 function refreshOnStateChange(_event, fileName) {
   const normalized = String(fileName ?? "").replaceAll("\\", "/");
-  if (!shuttingDown && (normalized.endsWith("runtime.json") || normalized.endsWith("context-bindings.json"))) void refreshSnapshot().catch(() => undefined);
+  if (!shuttingDown && (normalized.endsWith("runtime.json") || normalized.endsWith("context-bindings.json") || normalized.endsWith("publish-policy.json"))) void refreshSnapshot().catch(() => undefined);
 }
 stateWatcher = watch(stateDirectory, { persistent: false });
 stateWatcher.on("change", refreshOnStateChange);

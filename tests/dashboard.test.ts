@@ -10,6 +10,7 @@ import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashb
 import { publishIdentity, initLocalForum } from "../src/services/local-forum.js";
 import { createRoom, createRoomEvent, joinRoom } from "../src/services/room.js";
 import { createPost, createThread, createThreadEvent } from "../src/services/thread.js";
+import { setRoomPublishMode } from "../src/services/publish-policy.js";
 import { requireGit } from "../src/git/runner.js";
 import { bindContext } from "../src/services/context.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
@@ -127,7 +128,37 @@ test("Dashboard snapshots expose matching local workspace bindings", async () =>
       { workspaceRoot: workspace, branch: null },
       { workspaceRoot: workspace, branch: "feature/dashboard-binding" },
     ]);
+    assert.equal(room?.sendMode, "auto");
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Dashboard snapshots expose per-room send mode and refresh on publish policy changes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-sendmode-"));
+  const home = resolve(root, "home");
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    const paths = await setup(home);
+    await attachDashboardClient({ clientId: "pi-sendmode", clientType: "pi", forumAlias: "team", roomId, identityId: reader, leaseMs: 30_000 }, paths);
+
+    const before = await dashboardStatus(paths);
+    const setAsk: string[] = [];
+    assert.equal(await runCli(["--json", "publish", "policy", "--mode", "ask", "--forum", "team", "--room", roomId], { stdout: (value) => setAsk.push(value), stderr: () => undefined }), 0);
+    assert.equal(JSON.parse(setAsk.join("")).ok, true);
+    const asked = await getDashboardSnapshot(paths);
+    assert.ok(asked.revision > before.revision, "publish policy change must invalidate the visible Dashboard");
+    assert.equal(asked.teams[0]?.rooms.find((item) => item.roomId === roomId)?.sendMode, "ask");
+
+    // 服务层直接设置其他房间不影响该房间；未设置房间保持默认 auto。
+    await setRoomPublishMode(paths, { forumId, roomId: "room_0194f6d2-8c10-7a31-9e42-123456789b20", mode: "ask", now: new Date("2026-07-12T10:05:00.000Z") });
+    assert.equal((await getDashboardSnapshot(paths)).teams[0]?.rooms.find((item) => item.roomId === roomId)?.sendMode, "ask");
+  } finally {
+    process.env.HOME = previousHome;
+    process.env.USERPROFILE = previousUserProfile;
     await rm(root, { recursive: true, force: true });
   }
 });

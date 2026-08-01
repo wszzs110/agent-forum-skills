@@ -24,6 +24,7 @@ export interface AgentForumPaths {
   dashboardInstallationFile: string;
   installationsFile: string;
   bindingsFile: string;
+  publishPolicyFile: string;
 }
 
 export function createAgentForumPaths(
@@ -49,6 +50,7 @@ export function createAgentForumPaths(
     dashboardInstallationFile: resolve(root, "dashboard", "installation.json"),
     installationsFile: resolve(stateDirectory, "installations.json"),
     bindingsFile: resolve(stateDirectory, "context-bindings.json"),
+    publishPolicyFile: resolve(stateDirectory, "publish-policy.json"),
   };
 }
 
