@@ -5,6 +5,7 @@ import { currentUtcTimestamp } from "../domain/timestamps.js";
 import { writeJsonAtomic } from "../storage/atomic.js";
 import { acquireForumLock } from "../storage/lock.js";
 import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js";
+import { loadContextBindingState } from "../context/bindings.js";
 import { ServiceError } from "./errors.js";
 import { getAllUnreadInboxEntries } from "./inbox.js";
 import { getForumSnapshot } from "./timeline-cache.js";
@@ -28,6 +29,11 @@ export interface DashboardViewTarget {
   forumId: string;
   roomId: string;
   identityId: string;
+}
+
+export interface DashboardRoomBinding {
+  workspaceRoot: string;
+  branch: string | null;
 }
 
 interface DashboardRuntime {
@@ -160,8 +166,19 @@ export async function setDashboardRoomPinned(roomId: string, pinned: boolean, pa
   });
 }
 
-export async function getDashboardSnapshot(paths = createAgentForumPaths()): Promise<{ revision: number; teams: Array<{ forumId: string; forumAlias: string; polling: boolean; identityIds: string[]; counts: { related: number; broadcast: number; other: number }; rooms: Array<{ roomId: string; title: string; counts: { related: number; broadcast: number; other: number }; activeLocalAgents: number; pinned: boolean; deprecated: boolean }> }>; activeClients: number }> {
+export async function getDashboardSnapshot(paths = createAgentForumPaths()): Promise<{ revision: number; teams: Array<{ forumId: string; forumAlias: string; polling: boolean; identityIds: string[]; counts: { related: number; broadcast: number; other: number }; rooms: Array<{ roomId: string; title: string; counts: { related: number; broadcast: number; other: number }; activeLocalAgents: number; pinned: boolean; deprecated: boolean; bindings: DashboardRoomBinding[] }> }>; activeClients: number }> {
   const runtime = await dashboardStatus(paths);
+  const bindingState = await loadContextBindingState(paths);
+  const bindingsByRoom = new Map<string, DashboardRoomBinding[]>();
+  for (const binding of bindingState.bindings) {
+    const key = `${binding.forumId}\0${binding.roomId}`;
+    const current = bindingsByRoom.get(key) ?? [];
+    current.push({ workspaceRoot: binding.workspaceRoot, branch: binding.scope === "branch" ? binding.branch : null });
+    bindingsByRoom.set(key, current);
+  }
+  for (const bindings of bindingsByRoom.values()) {
+    bindings.sort((left, right) => left.workspaceRoot.localeCompare(right.workspaceRoot) || (left.branch ?? "").localeCompare(right.branch ?? ""));
+  }
   const teams = new Map<string, DashboardViewTarget[]>();
   for (const target of runtime.viewTargets) teams.set(target.forumId, [...(teams.get(target.forumId) ?? []), target]);
   const result = [];
@@ -169,7 +186,7 @@ export async function getDashboardSnapshot(paths = createAgentForumPaths()): Pro
     const alias = targets[0]!.forumAlias;
     const clients = runtime.clients.filter((client) => client.forumId === forumId);
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation) }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation), bindings: bindingsByRoom.get(`${forumId}\0${room.room.id}`) ?? [] }]));
     // Closed Thread 仍可在历史页面阅读，但不再触发 Dashboard 的未读提醒或排序权重。
     const closedThreadIds = new Set(snapshot.rooms.flatMap((room) => room.threads.filter((thread) => thread.thread.status === "closed").map((thread) => thread.thread.id)));
     const seen = new Set<string>();

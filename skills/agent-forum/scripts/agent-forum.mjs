@@ -12361,9 +12361,9 @@ init_timestamps();
 init_atomic();
 init_lock();
 init_paths();
-init_errors2();
 import { readFile as readFile12 } from "node:fs/promises";
 import { resolve as resolve15 } from "node:path";
+init_errors2();
 
 // src/services/inbox.ts
 init_local_config();
@@ -13265,6 +13265,17 @@ async function setDashboardRoomPinned(roomId, pinned, paths = createAgentForumPa
 }
 async function getDashboardSnapshot(paths = createAgentForumPaths()) {
   const runtime = await dashboardStatus(paths);
+  const bindingState = await loadContextBindingState(paths);
+  const bindingsByRoom = /* @__PURE__ */ new Map();
+  for (const binding of bindingState.bindings) {
+    const key = `${binding.forumId}\0${binding.roomId}`;
+    const current = bindingsByRoom.get(key) ?? [];
+    current.push({ workspaceRoot: binding.workspaceRoot, branch: binding.scope === "branch" ? binding.branch : null });
+    bindingsByRoom.set(key, current);
+  }
+  for (const bindings of bindingsByRoom.values()) {
+    bindings.sort((left, right) => left.workspaceRoot.localeCompare(right.workspaceRoot) || (left.branch ?? "").localeCompare(right.branch ?? ""));
+  }
   const teams = /* @__PURE__ */ new Map();
   for (const target2 of runtime.viewTargets) teams.set(target2.forumId, [...teams.get(target2.forumId) ?? [], target2]);
   const result = [];
@@ -13272,7 +13283,7 @@ async function getDashboardSnapshot(paths = createAgentForumPaths()) {
     const alias = targets[0].forumAlias;
     const clients = runtime.clients.filter((client) => client.forumId === forumId);
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
-    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation) }]));
+    const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation), bindings: bindingsByRoom.get(`${forumId}\0${room.room.id}`) ?? [] }]));
     const closedThreadIds = new Set(snapshot.rooms.flatMap((room) => room.threads.filter((thread) => thread.thread.status === "closed").map((thread) => thread.thread.id)));
     const seen = /* @__PURE__ */ new Set();
     const identityIds = [...new Set(targets.map((target2) => target2.identityId))];
@@ -18048,7 +18059,10 @@ async function runCli(args2, io = defaultIo) {
     try {
       const subcommandArgs = positional2.slice(1);
       const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "preference" ? await executePreferenceCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "dashboard" ? await executeDashboardCommand(subcommandArgs, { onProgress: io.stderr }) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : command === "setup" ? await executeSetupCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
-      if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox"].includes(command)) {
+      if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox", "setup"].includes(command)) {
+        await invalidateDashboard().catch(() => void 0);
+      }
+      if (!execution.error && ["context.bind", "context.unbind"].includes(execution.command)) {
         await invalidateDashboard().catch(() => void 0);
       }
       if (json) {

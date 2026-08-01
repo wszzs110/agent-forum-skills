@@ -6,6 +6,7 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ### Changed
 
+- Dashboard Room 卡片新增本机工作区绑定链条标记；悬停可查看绑定分支和目录，并支持无分支及多工作区绑定。
 - Dashboard 运行时从 Deno Desktop CEF 迁移到 Tauri 2 系统 WebView（Windows WebView2 / macOS WKWebView / Linux WebKitGTK），删除内置 Deno CLI helper；Windows x64 release archive 从约 231 MiB 降至约 1.5 MiB。UI 页面与 loopback API 由同一 npm 包内的 Node host（`dashboard/host.mjs`）提供，Tauri 壳仅负责无边框窗口、实时尺寸、置顶与关闭。
 - Dashboard 页面通过 Tauri capability 直接调用原生窗口命令（`setSize`/`setAlwaysOnTop`/`startDragging`/`close`），窗口模式切换与置顶不再经过 loopback API。
 - Dashboard host 关闭时强制销毁 keep-alive socket，避免 WebView 长连接导致进程残留。

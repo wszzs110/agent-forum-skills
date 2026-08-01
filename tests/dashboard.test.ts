@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
 import { runCli } from "../src/cli.js";
@@ -10,6 +10,8 @@ import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashb
 import { publishIdentity, initLocalForum } from "../src/services/local-forum.js";
 import { createRoom, createRoomEvent, joinRoom } from "../src/services/room.js";
 import { createPost, createThread, createThreadEvent } from "../src/services/thread.js";
+import { requireGit } from "../src/git/runner.js";
+import { bindContext } from "../src/services/context.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
 const author = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
@@ -101,6 +103,74 @@ test("Dashboard leases aggregate Team snapshots and broadcast counts locally", a
     assert.equal(detachedSnapshot.teams.length, 1, "Dashboard view targets survive the last Agent detach");
     assert.equal(detachedSnapshot.teams[0]?.rooms[0]?.activeLocalAgents, 0);
   } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test("Dashboard snapshots expose matching local workspace bindings", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-bindings-"));
+  const home = resolve(root, "home");
+  try {
+    const paths = await setup(home);
+    const workspace = resolve(root, "bound-workspace");
+    requireGit(root, ["init", "--initial-branch=feature/dashboard-binding", workspace]);
+    requireGit(workspace, ["config", "user.name", "Dashboard binding test"]);
+    requireGit(workspace, ["config", "user.email", "dashboard-binding@example.invalid"]);
+    await writeFile(resolve(workspace, "README.md"), "dashboard binding\n", "utf8");
+    requireGit(workspace, ["add", "README.md"]);
+    requireGit(workspace, ["commit", "-m", "Initial binding test"]);
+
+    await bindContext({ forumAlias: "team", room: roomId, cwd: workspace, now: new Date("2026-07-12T10:02:00.000Z") }, paths);
+    await bindContext({ forumAlias: "team", room: roomId, cwd: workspace, workspace: true, now: new Date("2026-07-12T10:03:00.000Z") }, paths);
+    await attachDashboardClient({ clientId: "pi-binding", clientType: "pi", forumAlias: "team", roomId, identityId: reader, leaseMs: 30_000 }, paths);
+
+    const room = (await getDashboardSnapshot(paths)).teams[0]?.rooms.find((item) => item.roomId === roomId);
+    assert.deepEqual(room?.bindings, [
+      { workspaceRoot: workspace, branch: null },
+      { workspaceRoot: workspace, branch: "feature/dashboard-binding" },
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("CLI context bind and unbind invalidate Dashboard binding markers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-binding-refresh-"));
+  const home = resolve(root, "home");
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    const paths = await setup(home);
+    const workspace = resolve(root, "bound-workspace");
+    requireGit(root, ["init", "--initial-branch=feature/dashboard-refresh", workspace]);
+    requireGit(workspace, ["config", "user.name", "Dashboard binding refresh test"]);
+    requireGit(workspace, ["config", "user.email", "dashboard-binding-refresh@example.invalid"]);
+    await writeFile(resolve(workspace, "README.md"), "dashboard binding refresh\n", "utf8");
+    requireGit(workspace, ["add", "README.md"]);
+    requireGit(workspace, ["commit", "-m", "Initial binding refresh test"]);
+    await attachDashboardClient({ clientId: "pi-binding-refresh", clientType: "pi", forumAlias: "team", roomId, identityId: reader, leaseMs: 30_000 }, paths);
+
+    const before = await dashboardStatus(paths);
+    const bindOutput: string[] = [];
+    assert.equal(await runCli(["--json", "context", "bind", "--forum", "team", "--room", roomId, "--cwd", workspace], { stdout: (value) => bindOutput.push(value), stderr: () => undefined }), 0);
+    assert.equal(JSON.parse(bindOutput.join(""))?.ok, true);
+    const bound = await getDashboardSnapshot(paths);
+    assert.ok(bound.revision > before.revision, "context bind must invalidate the visible Dashboard");
+    assert.equal(bound.teams[0]?.rooms.find((item) => item.roomId === roomId)?.bindings.length, 1);
+
+    const unbindOutput: string[] = [];
+    assert.equal(await runCli(["--json", "context", "unbind", "--cwd", workspace], { stdout: (value) => unbindOutput.push(value), stderr: () => undefined }), 0);
+    assert.equal(JSON.parse(unbindOutput.join(""))?.ok, true);
+    const unbound = await getDashboardSnapshot(paths);
+    assert.ok(unbound.revision > bound.revision, "context unbind must invalidate the visible Dashboard");
+    assert.equal(unbound.teams[0]?.rooms.find((item) => item.roomId === roomId)?.bindings.length, 0);
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousUserProfile;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("Dashboard snapshots mark deprecated Rooms and always sort them last", async () => {

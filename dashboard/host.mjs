@@ -377,10 +377,14 @@ cachedSnapshot = await runCli(["dashboard", "snapshot"]);
 const address = await listenServer();
 if (!address || typeof address === "string") throw new Error("Dashboard 未获得 loopback 端口");
 await writeDesktopRuntime(address.port);
+/** 监听原子替换产生的状态文件事件，确保绑定变化立即刷新本机 Dashboard snapshot。 */
+function refreshOnStateChange(_event, fileName) {
+  const normalized = String(fileName ?? "").replaceAll("\\", "/");
+  if (!shuttingDown && (normalized.endsWith("runtime.json") || normalized.endsWith("context-bindings.json"))) void refreshSnapshot().catch(() => undefined);
+}
 stateWatcher = watch(stateDirectory, { persistent: false });
-stateWatcher.on("change", (_event, fileName) => {
-  if (!shuttingDown && String(fileName).replaceAll("\\", "/").endsWith("runtime.json")) void refreshSnapshot().catch(() => undefined);
-});
+stateWatcher.on("change", refreshOnStateChange);
+stateWatcher.on("rename", refreshOnStateChange);
 const pollingTimer = setInterval(async () => {
   if (shuttingDown || pollingActiveForumIds.size > 0) return;
   const snapshot = cachedSnapshot;

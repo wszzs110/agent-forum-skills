@@ -162,7 +162,10 @@ export async function runCli(
                           : command === "setup"
                             ? await executeSetupCommand(subcommandArgs)
                             : await executeSkillCommand(subcommandArgs);
-      if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox"].includes(command)) {
+      if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox", "setup"].includes(command)) {
+        await invalidateDashboard().catch(() => undefined);
+      }
+      if (!execution.error && ["context.bind", "context.unbind"].includes(execution.command)) {
         await invalidateDashboard().catch(() => undefined);
       }
       if (json) {
