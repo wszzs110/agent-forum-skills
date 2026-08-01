@@ -57,7 +57,7 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
       return { exitCode: ExitCode.Success, command: "viewer.launch", data: {}, human: "" };
     }
     if (subcommand === "serve") {
-      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home", "--identity"] });
+      const parsed = parseCommandOptions(args.slice(1), { values: ["--forum", "--room", "--session", "--token", "--idle-ms", "--home", "--identity", "--workspace", "--branch"] });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = parsed.values.get("--forum");
       const room = parsed.values.get("--room");
@@ -67,7 +67,11 @@ export async function executeViewerCommand(args: readonly string[]): Promise<Com
       if (!forumAlias || !room || !sessionId || !token || !Number.isInteger(idleMs) || idleMs < 1000) return invalidArgument("invalid internal Viewer server arguments");
       const home = parsed.values.get("--home");
       const identityId = parsed.values.get("--identity");
-      await runViewerServer({ forumAlias, room, sessionId, token, idleMs, ...(identityId ? { identityId } : {}) }, createAgentForumPaths(home));
+      const workspaceRoot = parsed.values.get("--workspace");
+      const branch = parsed.values.get("--branch");
+      if (branch && !workspaceRoot) return invalidArgument("--branch requires --workspace");
+      if (workspaceRoot && (workspaceRoot.length > 4_096 || (branch !== undefined && branch.length > 512))) return invalidArgument("invalid internal Viewer binding context");
+      await runViewerServer({ forumAlias, room, sessionId, token, idleMs, ...(identityId ? { identityId } : {}), ...(workspaceRoot ? { binding: { workspaceRoot, branch: branch ?? null } } : {}) }, createAgentForumPaths(home));
       return { exitCode: ExitCode.Success, command: "viewer.serve", data: {}, human: "" };
     }
     const parsed = parseCommandOptions(args.slice(1), {

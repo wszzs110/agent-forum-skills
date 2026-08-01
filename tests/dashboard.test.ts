@@ -88,7 +88,8 @@ test("Dashboard leases aggregate Team snapshots and broadcast counts locally", a
     assert.equal(afterOwnPost.teams[0]?.counts.other, otherBeforeOwnPost);
     await createThreadEvent({ forumAlias: "team", room: roomId, thread: threadId, type: "thread-closed", reason: "Done", data: {}, now: new Date(Date.now() + 2_000) }, paths);
     const afterClose = await getDashboardSnapshot(paths);
-    assert.equal(afterClose.teams[0]?.rooms[0]?.counts.other, otherBeforeOwnPost + 1, "closed Thread unread events remain visible in other unread");
+    assert.deepEqual(afterClose.teams[0]?.rooms[0]?.counts, { related: 0, broadcast: 0, other: 0 }, "all unread entries in a closed Thread are excluded from Dashboard counters");
+    assert.deepEqual(afterClose.teams[0]?.counts, { related: 0, broadcast: 0, other: 0 });
     assert.equal(snapshot.teams[0]?.rooms.length, 7, "Dashboard snapshots retain all rooms for the expanded UI");
     assert.deepEqual(await detachDashboardClient("pi-session-1", paths), { detached: true, activeClients: 0 });
     assert.equal((await dashboardStatus(paths)).clients.length, 0);

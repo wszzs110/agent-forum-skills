@@ -75,21 +75,46 @@ test("Dashboard CLI open 先复用 IPC，再走轻量本机启动检查", async 
 });
 
 test("Dashboard 最后一个 Agent 离开后等待用户手动关闭", async () => {
-  const source = await readFile(join(process.cwd(), "dashboard", "main.ts"), "utf8");
-  const detach = source.slice(source.indexOf('url.pathname === "/detach"'), source.indexOf('url.pathname === "/close"'));
-  const lease = source.slice(source.indexOf("const leaseTimer"), source.indexOf("async function shutdown"));
+  const host = await readFile(join(process.cwd(), "dashboard", "host.mjs"), "utf8");
+  const page = await readFile(join(process.cwd(), "dashboard", "page.mjs"), "utf8");
+  const detach = host.slice(host.indexOf('url.pathname === "/detach"'), host.indexOf('url.pathname === "/room-panel"'));
+  const lease = host.slice(host.indexOf("const leaseTimer"), host.lastIndexOf("launchDesktop("));
   assert.doesNotMatch(detach, /shutdown\(/u);
   assert.doesNotMatch(lease, /clients\.size === 0/u);
   assert.match(lease, /runCli\(\["dashboard", "lease-status"\]\)/u, "lease checks must not run the expensive installation status command");
-  assert.match(source, /await attachLease\(initialClient, true\)/u);
-  assert.match(source, /desktopWindow\?\.setSize\(670, barHeight \+ panel\)/u, "Deno BrowserWindow sizing uses CSS pixels and must not apply DPI twice");
-  assert.doesNotMatch(source, /desktopScale|devicePixelRatio:window\.devicePixelRatio/u, "DPI multiplication would create blank native window space");
-  assert.match(source, /\.team-tabs\{[^}]*padding-right:185px/u, "dense Team tabs reserve space for window controls");
-  assert.match(source, /\.right\{position:absolute;right:10px;top:9px/u, "window controls stay visible independently of Team tab width");
+  assert.match(host, /await attachLease\(initialClient, true\)/u);
+  assert.match(page, /native\.setSize\(new LogicalSize\(670,barHeight\+panel\)\)/u, "Tauri sizing uses CSS logical pixels and must not apply DPI twice");
+  assert.match(page, /window\.__TAURI__\?\.dpi\?\.LogicalSize/u, "remote Tauri window calls must serialize an explicit logical size");
+  assert.match(page, /const outerBackground = transparentWindow \? "transparent" : "linear-gradient/u, "transparent native windows need transparent document corners");
+  assert.match(page, /html,body\{[^}]*background:\$\{outerBackground\}/u, "document corners must follow the native transparency mode");
+  assert.match(host, /platform\(\) !== "darwin"/u, "macOS must retain an opaque document fallback because Tauri transparency uses a private API there");
+  assert.doesNotMatch(page, /desktopScale|devicePixelRatio:window\.devicePixelRatio/u, "DPI multiplication would create blank native window space");
+  assert.match(page, /\.team-tabs\{[^}]*padding-right:185px/u, "dense Team tabs reserve space for window controls");
+  assert.match(page, /\.right\{position:absolute;right:10px;top:9px/u, "window controls stay visible independently of Team tab width");
+  assert.match(page, /\.bar\{[^}]*border-radius:10px/u, "Dashboard outer surface keeps a compact radius");
+  assert.match(page, /\.teams\{height:34px/u, "Dashboard header leaves balanced vertical space");
+  assert.match(page, /\.rooms\{height:72px[^}]*padding:6px 2px 2px/u, "Dashboard Room row balances the header and bottom inset");
+  assert.match(page, /\.expanded \.rooms\{height:292px/u, "expanded Dashboard fills its resized native window without an oversized bottom gap");
+  assert.match(host, /server\.closeAllConnections\?\.\(\)/u, "Dashboard shutdown must not wait forever for WebView keep-alive sockets");
+  const shell = await readFile(join(process.cwd(), "dashboard", "tauri", "src", "main.rs"), "utf8");
+  assert.match(shell, /window\.transparent\(true\)\.shadow\(false\)/u, "Windows and Linux must not reserve a black native shadow around the rounded Dashboard surface");
+  assert.match(shell, /#\[cfg\(target_os = "macos"\)\][\s\S]*?window\.shadow\(true\)/u, "macOS keeps its supported native rounded shadow path");
+});
+
+test("Tauri remote capability only grants Dashboard window controls to its main loopback webview", async () => {
+  const capability = JSON.parse(await readFile(join(process.cwd(), "dashboard", "tauri", "capabilities", "dashboard.json"), "utf8")) as { windows?: unknown; remote?: { urls?: unknown }; permissions?: unknown };
+  assert.deepEqual(capability.windows, ["main"]);
+  assert.deepEqual(capability.remote?.urls, ["http://127.0.0.1:*"]);
+  assert.deepEqual(capability.permissions, [
+    "core:window:allow-close",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-size",
+    "core:window:allow-start-dragging",
+  ]);
 });
 
 test("Dashboard 选择弃用 Room 时保留末尾顺序和可见性", async () => {
-  const source = await readFile(join(process.cwd(), "dashboard", "main.ts"), "utf8");
+  const source = await readFile(join(process.cwd(), "dashboard", "page.mjs"), "utf8");
   const start = source.indexOf("function orderedRoomIds(");
   const end = source.indexOf("\nfunction roomSignature", start);
   assert.ok(start >= 0 && end > start);
@@ -105,7 +130,7 @@ test("Dashboard 选择弃用 Room 时保留末尾顺序和可见性", async () =
 });
 
 test("Dashboard 房间页面明确标记已关闭 Thread", async () => {
-  const source = await readFile(join(process.cwd(), "dashboard", "main.ts"), "utf8");
+  const source = await readFile(join(process.cwd(), "dashboard", "page.mjs"), "utf8");
   const start = source.indexOf("function memberColor(");
   const end = source.indexOf("\nfunction bindRoomThreads", start);
   assert.ok(start >= 0 && end > start);
@@ -123,7 +148,7 @@ test("Dashboard 房间页面明确标记已关闭 Thread", async () => {
 });
 
 test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", async () => {
-  const source = await readFile(join(process.cwd(), "dashboard", "main.ts"), "utf8");
+  const source = await readFile(join(process.cwd(), "dashboard", "page.mjs"), "utf8");
   assert.match(source, /function showNotice\(message\)/);
   // 房间页面加载失败时使用 showNotice，不替换 Bar
   assert.match(source, /Room page failed: '\+e\.message\)/);
@@ -144,10 +169,14 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.match(source, /\.rp-thread\.closed/);
   assert.match(source, /message\.bodyHtml/);
   assert.match(source, /receiptBadge\(m\.localReceipt\)/u);
-  assert.match(source, /AI unread/u);
-  assert.match(source, /title="Related unread"/u);
-  assert.match(source, /title="Broadcast unread"/u);
-  assert.match(source, /title="Other unread"/u);
+  assert.match(source, /roomText\('Unread','未读'\)/u);
+  assert.match(source, /title="Related"/u);
+  assert.match(source, /title="Broadcast"/u);
+  assert.match(source, /title="Other"/u);
+  assert.match(source, /● Active/u);
+  assert.doesNotMatch(source, /Active here|Related unread|Broadcast unread|Other unread|AI unread/u);
+  assert.match(source, /thread=>thread\.status==='closed'\?\[\]:thread\.messages\.filter/u, "Dashboard unread navigation skips closed Threads");
+  assert.match(source, /t\.status!=='closed'&&m\.localReceipt\?\.unreadBy\?\.length/u, "closed Thread messages do not receive Dashboard unread styling");
   assert.match(source, /function refreshOpenRoomPanel\(/u, "an open Room page refreshes when the Dashboard revision changes");
   assert.match(source, /id="room-language"/u, "Dashboard Room page exposes the shared language preference");
   assert.match(source, /api\('\/language'/u);

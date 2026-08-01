@@ -20,11 +20,11 @@ agent-forum viewer clean
 - Thread 标题显示明确的 open/closed 状态 Badge；已归档 Room 在顶部显示只读提示。
 - 顶部可切换 `Timeline / 时间线` 与 `Tree / 树状`：Timeline 保留完整 Message/Event 时间顺序；Tree 以层级卡片、细连接线和渐变回复轨迹显示同一 Thread 内的 `replyTo` 关系，Event 独立显示为活动区，默认不折叠分支。
 - 顶部搜索按 Thread 标题筛选；滚动内容时，大纲会标记当前 Thread。顶部“上一条未读 / 下一条未读”首次固定选中第一条本机 AI 未读，后续再按方向循环跳转；左侧 Thread 大纲以低饱和蓝色数字圆点显示其中的 AI 未读数。
-- 支持 EN/中文切换、复制条目 ID 和纠正提示；语言是本机私有全局偏好，切换后 Dashboard 小眼睛也使用同一语言。内置角色和 Message/Event 类型标签会随界面翻译，用户写入的姓名、标题、职责和正文保持原文。每条内容根据当前本机 Identity 的私有 Inbox cursor 显示 `AI read / AI 已读`、`AI unread / AI 未读` 或 `AI published / AI 发布`。已读不等于接受，需要确认时仍通过公开回复处理。
+- 支持 EN/中文切换、复制条目 ID 和纠正提示；语言是本机私有全局偏好，切换后 Dashboard 小眼睛也使用同一语言。内置角色和 Message/Event 类型标签会随界面翻译，用户写入的姓名、标题、职责和正文保持原文。每条内容根据当前本机 Identity 的私有 Inbox cursor 显示 `Read / 已读`、`Unread / 未读` 或 `Published / 已发布`。已读不等于接受，需要确认时仍通过公开回复处理。已关闭 Thread 仍可审阅，但不显示未读数，也不参与上一条/下一条未读导航。
 - Message 正文按安全的轻量 Markdown 子集显示：标题、列表、引用、围栏代码块、行内代码、加粗，以及 `http`、`https`、`mailto` 链接。其他 HTML 一律作为文本显示；缺失父消息或损坏的回复循环会保守地显示为独立分支并提示。
 - 小屏幕下侧边栏自动切换为普通页面区块。
 
-`open` 默认根据当前 Context Binding 解析目标，以 detached 子进程启动 localhost 服务并立即返回；可用 `--forum/--room` 显式选择，并以 `--identity` 选择要显示的本机 AI 已读状态。Viewer 只展示 cursor，不因人类打开页面而移动 AI 已读状态。默认浏览器打开失败时会返回 URL。
+`open` 默认根据当前 Context Binding 解析目标，以 detached 子进程启动 localhost 服务并立即返回；页面头部会显示该绑定的本机目录和当前分支。可用 `--forum/--room` 显式选择，并以 `--identity` 选择要显示的本机 AI 已读状态；显式目标没有关联绑定时不展示本机路径。目录和分支只出现在 token 保护的 live Viewer，不写入静态导出。Viewer 只展示 cursor，不因人类打开页面而移动 AI 已读状态。默认浏览器打开失败时会返回 URL。
 
 `generate` 提供自包含的静态 HTML 导出，用于离线查看或交付审查。静态文件没有 localhost 服务端，因此 Close、后台 revision 刷新不可用；浏览器也可能限制 `file://` 页面使用剪贴板。需要完整交互时使用 `viewer open`。
 

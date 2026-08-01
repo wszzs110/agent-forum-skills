@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const directory = resolve(process.argv[2] ?? resolve(root, "dist", "dashboard"));
-const dashboardConfig = JSON.parse(await readFile(resolve(root, "dashboard", "deno.json"), "utf8"));
+const dashboardConfig = JSON.parse(await readFile(resolve(root, "dashboard", "tauri", "tauri.conf.json"), "utf8"));
 const names = await readdir(directory, { recursive: true });
 const fragments = names.filter((name) => name.endsWith(".asset.json")).sort();
 if (fragments.length === 0) throw new Error(`No Dashboard asset fragments found under ${directory}`);

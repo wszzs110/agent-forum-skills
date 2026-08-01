@@ -17,7 +17,6 @@ async function fixture() {
   await mkdir(resolve(source, "agent-forum-dashboard"), { recursive: true });
   const executable = Buffer.from("dashboard executable fixture\n");
   await writeFile(resolve(source, "agent-forum-dashboard", "agent-forum-dashboard.exe"), executable);
-  await writeFile(resolve(source, "agent-forum-dashboard", "agent-forum-dashboard-cli.exe"), "dashboard helper fixture\n");
   const archive = resolve(root, "dashboard.tar.gz");
   const tar = spawnSync("tar", ["-czf", archive, "-C", source, "agent-forum-dashboard"], { encoding: "utf8", shell: false });
   assert.equal(tar.status, 0, tar.stderr);
@@ -75,19 +74,16 @@ test("Dashboard installer previews, verifies, installs, detects modification, an
   } finally { await rm(item.root, { recursive: true, force: true }); }
 });
 
-test("Dashboard launch status checks only local startup files", async () => {
+test("Dashboard launch status checks only the Tauri launcher", async () => {
   const home = await mkdtemp(resolve(tmpdir(), "agent-forum-dashboard-launch-status-"));
   const paths = createAgentForumPaths(home);
   const executableName = process.platform === "win32" ? "agent-forum-dashboard.exe" : "agent-forum-dashboard";
-  const helperName = process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli";
   const directory = resolve(paths.dashboardInstallDirectory, "agent-forum-dashboard");
   const executable = resolve(directory, executableName);
-  const helper = resolve(directory, helperName);
   try {
     await mkdir(directory, { recursive: true });
     await writeFile(executable, "executable");
-    await writeFile(helper, "helper");
-    await writeFile(resolve(directory, "large-cef-payload.bin"), "original payload");
+    await writeFile(resolve(directory, "unrelated-payload.bin"), "original payload");
     await writeFile(paths.dashboardInstallationFile, JSON.stringify({
       formatVersion: 1,
       version: "1.2.3",
@@ -97,17 +93,16 @@ test("Dashboard launch status checks only local startup files", async () => {
       executableSha256: digest("executable"),
       files: {
         [`agent-forum-dashboard/${executableName}`]: digest("executable"),
-        [`agent-forum-dashboard/${helperName}`]: digest("helper"),
-        "agent-forum-dashboard/large-cef-payload.bin": digest("original payload"),
+        "agent-forum-dashboard/unrelated-payload.bin": digest("original payload"),
       },
       sourceUrl: "https://example.test/dashboard.tar.gz",
       installedAt: "2026-07-29T00:00:00.000Z",
     }));
     assert.equal((await getDashboardLaunchStatus(paths)).status, "installed");
-    await writeFile(resolve(directory, "large-cef-payload.bin"), "modified payload");
-    assert.equal((await getDashboardLaunchStatus(paths)).status, "installed", "ordinary open does not hash unrelated CEF payload files");
+    await writeFile(resolve(directory, "unrelated-payload.bin"), "modified payload");
+    assert.equal((await getDashboardLaunchStatus(paths)).status, "installed", "ordinary open does not hash unrelated installed files");
     assert.equal((await getDashboardInstallationStatus(paths)).status, "modified", "explicit full status still detects modification");
-    await rm(helper, { force: true });
+    await rm(executable, { force: true });
     assert.equal((await getDashboardLaunchStatus(paths)).status, "damaged");
   } finally { await rm(home, { recursive: true, force: true }); }
 });

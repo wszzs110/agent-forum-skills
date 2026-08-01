@@ -4,6 +4,14 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 ## Unreleased
 
+### Changed
+
+- Dashboard 运行时从 Deno Desktop CEF 迁移到 Tauri 2 系统 WebView（Windows WebView2 / macOS WKWebView / Linux WebKitGTK），删除内置 Deno CLI helper；Windows x64 release archive 从约 231 MiB 降至约 1.5 MiB。UI 页面与 loopback API 由同一 npm 包内的 Node host（`dashboard/host.mjs`）提供，Tauri 壳仅负责无边框窗口、实时尺寸、置顶与关闭。
+- Dashboard 页面通过 Tauri capability 直接调用原生窗口命令（`setSize`/`setAlwaysOnTop`/`startDragging`/`close`），窗口模式切换与置顶不再经过 loopback API。
+- Dashboard host 关闭时强制销毁 keep-alive socket，避免 WebView 长连接导致进程残留。
+- Dashboard 安装器不再要求 archive 内含 CLI helper；普通 open 只检查 Tauri 可执行文件。
+- Dashboard release 构建增加 30 MiB 压缩体积预算，并拒绝任何 CEF、Deno 或内置 helper 文件回归。
+
 ### Fixed
 
 - Concurrent Dashboard snapshot and Room-page reads now wait for the active local cache rebuild and reuse its completed snapshot instead of immediately failing with `LOCAL_LOCKED`.

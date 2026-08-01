@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDashboardInstallationStatus, installDashboard, uninstallDashboard, type DashboardReleaseManifest } from "../src/services/dashboard-installer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
@@ -27,20 +26,17 @@ const fetcher = async (input: string | URL | Request) => {
 try {
   const installed = await installDashboard({ manifestUrl: "http://127.0.0.1/dashboard-manifest.json", platform, arch, fetcher: fetcher as typeof fetch }, paths);
   assert.equal(installed.installation.version, manifest.version);
-  const helper = resolve(dirname(installed.executable), platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli");
-  assert.ok(Object.keys(installed.installation.files).some((path) => path.endsWith(platform === "win32" ? "/agent-forum-dashboard-cli.exe" : "/agent-forum-dashboard-cli") || path === (platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli")), "installation does not contain the no-terminal CLI helper");
+  const files = Object.keys(installed.installation.files);
+  assert.equal(files.some((path) => /(?:libcef|chrome_elf|snapshot_blob|v8_context_snapshot|agent-forum-dashboard-cli|deno)/iu.test(path)), false, "Dashboard archive must not contain CEF, Deno, or an embedded CLI helper");
   if (platform === "win32") {
-    const portableExecutable = await readFile(helper);
+    const portableExecutable = await readFile(installed.executable);
     const peOffset = portableExecutable.readUInt32LE(0x3c);
     assert.equal(portableExecutable.toString("ascii", peOffset, peOffset + 4), "PE\0\0");
-    assert.equal(portableExecutable.readUInt16LE(peOffset + 24 + 68), 2, "Windows CLI helper must use the GUI subsystem and never allocate a console");
+    assert.equal(portableExecutable.readUInt16LE(peOffset + 24 + 68), 2, "Tauri Desktop executable must use the GUI subsystem and never allocate a console");
   }
-  const helperResult = spawnSync(helper, ["--json", "version"], { encoding: "utf8", shell: false, windowsHide: true, env: { ...process.env, HOME: home, USERPROFILE: home } });
-  assert.equal(helperResult.status, 0, helperResult.stderr);
-  assert.equal(JSON.parse(helperResult.stdout).ok, true);
   assert.equal((await getDashboardInstallationStatus(paths)).status, "installed");
   assert.equal((await uninstallDashboard({}, paths)).action, "uninstalled");
-  console.log(`Verified real Dashboard release archive for ${platform}-${arch}: ${asset.fileName}`);
+  console.log(`Verified real Tauri Dashboard release archive for ${platform}-${arch}: ${asset.fileName}`);
 } finally {
   await rm(home, { recursive: true, force: true });
 }

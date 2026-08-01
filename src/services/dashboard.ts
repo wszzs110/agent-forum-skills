@@ -170,11 +170,14 @@ export async function getDashboardSnapshot(paths = createAgentForumPaths()): Pro
     const clients = runtime.clients.filter((client) => client.forumId === forumId);
     const snapshot = (await getForumSnapshot(alias, paths)).snapshot;
     const byRoom = new Map(snapshot.rooms.map((room) => [room.room.id, { roomId: room.room.id, title: room.room.title, counts: { related: 0, broadcast: 0, other: 0 }, activeLocalAgents: clients.filter((client) => client.roomId === room.room.id).length, pinned: runtime.pinnedRoomIds.includes(room.room.id), deprecated: Boolean(room.room.deprecation) }]));
+    // Closed Thread 仍可在历史页面阅读，但不再触发 Dashboard 的未读提醒或排序权重。
+    const closedThreadIds = new Set(snapshot.rooms.flatMap((room) => room.threads.filter((thread) => thread.thread.status === "closed").map((thread) => thread.thread.id)));
     const seen = new Set<string>();
     const identityIds = [...new Set(targets.map((target) => target.identityId))];
     for (const identityId of identityIds) {
       const inbox = await getAllUnreadInboxEntries({ forumAlias: alias, identityId }, paths);
       for (const entry of inbox.entries) {
+        if (entry.threadId && closedThreadIds.has(entry.threadId)) continue;
         if (seen.has(entry.id)) continue;
         seen.add(entry.id);
         const room = byRoom.get(entry.roomId);

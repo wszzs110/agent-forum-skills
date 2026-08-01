@@ -38,7 +38,11 @@ if (result.status !== 0) {
     "skills/agent-forum-viewer/SKILL.md",
     "skills/agent-forum-dashboard/SKILL.md",
     "adapters/pi-dashboard.ts",
-    "dashboard/main.ts",
+    "dashboard/host.mjs",
+    "dashboard/page.mjs",
+    "dashboard/tauri/Cargo.toml",
+    "dashboard/tauri/src/main.rs",
+    "dashboard/tauri/capabilities/dashboard.json",
     "dashboard/release-manifest.schema.json",
     "docs/dashboard.md",
   ];

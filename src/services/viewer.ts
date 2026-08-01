@@ -11,7 +11,7 @@ import { refreshForumFromRemote } from "./forum-sync.js";
 import { refreshForRead, type ReadFreshness } from "./read-freshness.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
-import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerReadIdentity } from "../viewer/server.js";
+import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerBindingContext, type ViewerReadIdentity } from "../viewer/server.js";
 import { getInboxReadCursor } from "./inbox.js";
 import { invalidateDashboard } from "./dashboard.js";
 import { getUiLanguage, setUiLanguage } from "./ui-preferences.js";
@@ -182,6 +182,7 @@ export async function runViewerServer(input: {
   idleMs: number;
   identityId?: string;
   openBrowser?: boolean;
+  binding?: ViewerBindingContext;
 }, paths = createAgentForumPaths()): Promise<void> {
   const cached = await getForumSnapshot(input.forumAlias, paths);
   const room = cached.snapshot.rooms.find((item) => item.room.id === input.room || item.room.slug === input.room);
@@ -193,6 +194,7 @@ export async function runViewerServer(input: {
     idleMs: input.idleMs,
     readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths),
     language: await getUiLanguage(paths),
+    ...(input.binding ? { binding: input.binding } : {}),
     setLanguage: async (language) => { await setUiLanguage(language, paths); },
     refresh: async () => {
       try {
@@ -288,7 +290,8 @@ export async function openViewer(input: {
     const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
     const sessionId = randomUUID();
     const token = randomBytes(16).toString("hex");
-    const args = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root), ...(input.identityId ? ["--identity", input.identityId] : [])]);
+    const binding: ViewerBindingContext | undefined = context.context ? { workspaceRoot: context.context.workspaceRoot, branch: context.context.branch } : undefined;
+    const args = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root), ...(input.identityId ? ["--identity", input.identityId] : []), ...(binding ? ["--workspace", binding.workspaceRoot, ...(binding.branch ? ["--branch", binding.branch] : [])] : [])]);
     const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError: Error | undefined;
     child.once("error", (error) => { startError = error; });
@@ -340,7 +343,8 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   const snapshot = cached.snapshot;
   const readIdentities = await getViewerReadIdentities(context.forumAlias, input.identityIds?.length ? input.identityIds : [undefined], paths);
-  const localReceipt = (item: { id: string; authorId: string; createdAt: string }): ViewerLocalReceipt => {
+  // 收敛 Message 的本机 receipt；关闭主题保留发布/已读历史，但不产生未读导航目标。
+  const localReceipt = (item: { id: string; authorId: string; createdAt: string }, trackUnread = true): ViewerLocalReceipt => {
     const publishedBy = readIdentities.filter((identity) => identity.memberId === item.authorId);
     const recipients = readIdentities.filter((identity) => {
       if (identity.memberId === item.authorId) return false;
@@ -352,7 +356,7 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
     return {
       publishedBy: publishedBy.map(summary),
       readBy: recipients.filter((identity) => seen.get(identity.memberId)?.has(item.id)).map(summary),
-      unreadBy: recipients.filter((identity) => !seen.get(identity.memberId)?.has(item.id)).map(summary),
+      unreadBy: trackUnread ? recipients.filter((identity) => !seen.get(identity.memberId)?.has(item.id)).map(summary) : [],
     };
   };
   // 聚合成员活跃度：统计每个 Room 成员在本房间的消息数和最后发言时间
@@ -380,7 +384,7 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
       replyCount, lastActivityAt,
       messages: messages.map((msg) => ({
         id: msg.id, authorId: msg.authorId, authorName: snapshot.members[msg.authorId]?.displayName ?? msg.authorId,
-        type: msg.type, body: msg.body, bodyHtml: renderMarkdown(msg.body), replyTo: msg.replyTo ?? null, createdAt: msg.createdAt, localReceipt: localReceipt(msg),
+        type: msg.type, body: msg.body, bodyHtml: renderMarkdown(msg.body), replyTo: msg.replyTo ?? null, createdAt: msg.createdAt, localReceipt: localReceipt(msg, cachedThread.thread.status !== "closed"),
       })),
     };
   });

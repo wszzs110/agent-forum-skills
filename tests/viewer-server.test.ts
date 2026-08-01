@@ -132,7 +132,7 @@ test("Viewer refreshes before every page response and coalesces concurrent refre
     const [first, second] = await Promise.all([fetch(viewer.url), fetch(viewer.url)]);
     assert.equal(refreshes, 1, "parallel page loads share one sync");
     assert.match(await first.text(), /fedcba987654/);
-    assert.match(await second.text(), /Remote sync complete/);
+    assert.match(await second.text(), /Synced/);
     await fetch(viewer.url);
     assert.equal(refreshes, 2, "a browser refresh performs a new sync");
   } finally {
@@ -152,7 +152,7 @@ test("Viewer renders stale state without claiming cache is current after refresh
   try {
     const response = await fetch(viewer.url);
     const html = await response.text();
-    assert.match(html, /Content may be stale/);
+    assert.match(html, /Stale/);
     assert.match(html, /SYNC_NETWORK_FAILED/);
     assert.equal(html.includes("Remote sync complete"), false);
   } finally {
@@ -201,7 +201,7 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.match(html, /class="sidebar"/);
   assert.match(html, /class="outline-item"/);
   assert.match(html, /id="search"/);
-  assert.match(html, /data-placeholder-en="Search threads…"/);
+  assert.match(html, /data-placeholder-en="Search"/);
   assert.equal(html.includes(".lang-zh{display:none}"), false, "language switching must not leave Chinese content hidden by CSS");
   assert.match(html, /id="previous-unread"/u);
   assert.match(html, /id="next-unread"/u);
@@ -227,18 +227,39 @@ test("Viewer distinguishes local AI unread, read, and published states", () => {
 
   const unread = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [] }]);
   assert.match(unread, /class="read-badge unread"/u);
-  assert.match(unread, /AI unread/u);
+  assert.match(unread, />Unread<\/span>/u);
   assert.match(unread, /data-ai-unread="true"/u);
   assert.match(unread, /class="outline-unread"/u);
-  assert.doesNotMatch(unread, /outline-count/u, "Thread outline shows only the AI unread count");
+  assert.doesNotMatch(unread, /outline-count/u, "Thread outline shows only the unread count");
 
   const read = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [messageId] }]);
   assert.match(read, /class="read-badge read"/u);
-  assert.match(read, /AI read/u);
+  assert.match(read, />Read<\/span>/u);
 
   const published = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: room.threads[0]!.timeline[0]!.kind === "message" ? room.threads[0]!.timeline[0]!.authorId : "", displayName: "Agent A", seenIds: [] }]);
   assert.match(published, /class="read-badge published"/u);
-  assert.match(published, /AI published/u);
+  assert.match(published, />Published<\/span>/u);
+
+  room.threads[0]!.thread.status = "closed";
+  const closed = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [] }]);
+  assert.doesNotMatch(closed, /<article[^>]*data-ai-unread="true"/u, "closed Thread history does not become a Viewer unread target");
+  assert.doesNotMatch(closed, /<span class="outline-unread"/u, "closed Thread outline does not show unread counts");
+  assert.match(closed, /dataset\.threadStatus!==['"]closed['"]/u, "Viewer navigation defensively skips closed Threads");
+});
+
+test("Viewer displays the bound directory and branch only when supplied by the local launcher", () => {
+  const html = renderViewerHtml(snapshot(), snapshot().rooms[0]!, { state: "fresh" }, [], "en", {
+    workspaceRoot: "C:\\work\\agent-forum<&>",
+    branch: "feature/viewer-context",
+  });
+  assert.match(html, /class="binding-context"/u);
+  assert.match(html, /Path<\/span>/u);
+  assert.match(html, /C:\\work\\agent-forum&lt;&amp;&gt;/u);
+  assert.match(html, /Branch<\/span>/u);
+  assert.match(html, /feature\/viewer-context/u);
+
+  const explicit = renderViewerHtml(snapshot(), snapshot().rooms[0]!);
+  assert.doesNotMatch(explicit, /class="binding-context"/u, "explicit Forum/Room targets do not disclose an unrelated local path");
 });
 
 test("Viewer renders safe GFM pipe tables", () => {

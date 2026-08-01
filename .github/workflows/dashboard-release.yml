@@ -20,7 +20,7 @@ jobs:
         shell: bash
         run: |
           package_version=$(node -p 'require("./package.json").version')
-          dashboard_version=$(node -p 'require("./dashboard/deno.json").version')
+          dashboard_version=$(node -p 'require("./dashboard/tauri/tauri.conf.json").version')
           test -n "$dashboard_version"
           echo "dashboard_changed=$([ "$package_version" = "$dashboard_version" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
@@ -48,9 +48,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.9.4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux system WebView build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
       - run: npm ci
       - run: npm run build:dashboard
       - run: npm run manifest:dashboard

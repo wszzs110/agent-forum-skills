@@ -18,7 +18,6 @@ async function dashboardFixture() {
   await mkdir(source, { recursive: true });
   const executable = Buffer.from("dashboard ensure fixture\n");
   await writeFile(resolve(source, "agent-forum-dashboard.exe"), executable);
-  await writeFile(resolve(source, "agent-forum-dashboard-cli.exe"), "helper\n");
   const archive = resolve(root, "dashboard.tar.gz");
   const tar = spawnSync("tar", ["-czf", archive, "-C", resolve(root, "source"), "agent-forum-dashboard"], { encoding: "utf8", shell: false });
   assert.equal(tar.status, 0, tar.stderr);

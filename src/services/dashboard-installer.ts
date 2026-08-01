@@ -65,7 +65,6 @@ export interface DashboardLaunchStatus {
   status: "not-installed" | "installed" | "damaged";
   installation?: DashboardInstallation;
   executable?: string;
-  helper?: string;
 }
 
 function defaultManifestUrl(dashboardVersion = DASHBOARD_VERSION): string {
@@ -383,7 +382,7 @@ async function extractArchive(archive: string, destination: string): Promise<voi
   await runTar(["-xzf", archive, "-C", destination]);
 }
 
-/** 普通 open 的本机快路径：只验证记录、路径和启动所需文件，不递归 hash 大型 CEF payload。 */
+/** 普通 open 的本机快路径：只验证记录、路径和启动所需文件，不递归 hash 完整安装 payload。 */
 export async function getDashboardLaunchStatus(paths = createAgentForumPaths()): Promise<DashboardLaunchStatus> {
   let installation: DashboardInstallation;
   try { installation = JSON.parse(await readFile(paths.dashboardInstallationFile, "utf8")) as DashboardInstallation; }
@@ -396,10 +395,9 @@ export async function getDashboardLaunchStatus(paths = createAgentForumPaths()):
     !sha256Pattern.test(installation.executableSha256) || typeof installation.executable !== "string") return { status: "damaged", installation };
   try {
     const executable = safeExecutable(paths.dashboardInstallDirectory, installation.executable);
-    const helper = resolve(dirname(executable), process.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli");
-    const [executableStat, helperStat] = await Promise.all([stat(executable), stat(helper)]);
-    if (!executableStat.isFile() || !helperStat.isFile()) return { status: "damaged", installation };
-    return { status: "installed", installation, executable, helper };
+    const executableStat = await stat(executable);
+    if (!executableStat.isFile()) return { status: "damaged", installation };
+    return { status: "installed", installation, executable };
   } catch { return { status: "damaged", installation }; }
 }
 
@@ -500,10 +498,7 @@ export async function installDashboard(options: InstallDashboardOptions = {}, pa
     const stagedExecutable = safeExecutable(payload, release.asset.executable);
     await stat(stagedExecutable);
     if (await sha256File(stagedExecutable) !== release.asset.executableSha256) throw new ServiceError("DASHBOARD_CHECKSUM_MISMATCH", "extracted Dashboard executable failed SHA-256 verification");
-    const stagedHelper = resolve(dirname(stagedExecutable), release.asset.platform === "win32" ? "agent-forum-dashboard-cli.exe" : "agent-forum-dashboard-cli");
-    try { await stat(stagedHelper); }
-    catch { throw new ServiceError("DASHBOARD_INSTALL_FAILED", "Dashboard release does not contain its CLI helper"); }
-    if (process.platform !== "win32") { await chmod(stagedExecutable, 0o700); await chmod(stagedHelper, 0o700); }
+    if (process.platform !== "win32") await chmod(stagedExecutable, 0o700);
     const files = await collectInstalledFiles(payload);
     const installation: DashboardInstallation = { formatVersion: 1, version: release.version, platform: release.asset.platform, arch: release.asset.arch, executable: release.asset.executable, executableSha256: release.asset.executableSha256, files, sourceUrl: release.asset.url, installedAt: (options.now ?? new Date()).toISOString() };
     await writeJsonAtomic(resolve(payload, "installation.json"), installation, { overwrite: true });

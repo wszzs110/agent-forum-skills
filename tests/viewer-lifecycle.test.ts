@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -10,6 +10,8 @@ import { createRoom, joinRoom } from "../src/services/room.js";
 import { createThread, createThreadEvent } from "../src/services/thread.js";
 import { closeViewerSession, generateViewerHtml, getViewerRoomData, listViewerSessions, openViewer, viewerServerLaunchArgs } from "../src/services/viewer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
+import { requireGit } from "../src/git/runner.js";
+import { bindContext } from "../src/services/context.js";
 
 function isProcessAlive(pid: number): boolean {
   try {
@@ -73,6 +75,10 @@ test("Viewer data derives AI unread and read receipts from the private cursor", 
     const before = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
     assert.equal(before.threads[0]?.messages[0]?.localReceipt.unreadBy[0]?.displayName, "Reader Agent");
     assert.equal(before.threads[0]?.messages[0]?.localReceipt.readBy.length, 0);
+    await createThreadEvent({ forumAlias: "team", room: "review", thread: "thread_0194f6d2-8c10-7a31-9e42-123456789abe", type: "thread-closed", reason: "Done", data: {}, now: new Date("2026-07-12T12:02:00.000Z") }, paths);
+    const closed = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
+    assert.equal(closed.threads[0]?.status, "closed");
+    assert.equal(closed.threads[0]?.messages[0]?.localReceipt.unreadBy.length, 0, "closed Thread messages are not Dashboard navigation targets");
     await getInbox({ forumAlias: "team", identityId: readerId, sync: false, markAllRead: true }, paths);
     const after = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
     assert.equal(after.threads[0]?.messages[0]?.localReceipt.readBy[0]?.displayName, "Reader Agent");
@@ -105,6 +111,33 @@ test("Viewer launcher becomes ready, reports status, and closes without blocking
     assert.deepEqual((await closeViewerSession(replacement.sessionId, paths)).closed, [replacement.sessionId]);
     assert.equal(isProcessAlive(replacement.pid), false, "close waits for the Viewer process to exit");
     assert.equal((await listViewerSessions(paths)).length, 0);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Viewer opened from a binding displays its workspace and branch", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-viewer-binding-"));
+  try {
+    const paths = await setup(home);
+    const workspace = resolve(home, "workspace");
+    requireGit(home, ["init", "--initial-branch=main", workspace]);
+    requireGit(workspace, ["config", "user.name", "Viewer binding test"]);
+    requireGit(workspace, ["config", "user.email", "viewer-binding@example.invalid"]);
+    await writeFile(resolve(workspace, "README.md"), "binding test\n", "utf8");
+    requireGit(workspace, ["add", "README.md"]);
+    requireGit(workspace, ["commit", "-m", "Initial commit"]);
+    await bindContext({ forumAlias: "team", room: "review", cwd: workspace }, paths);
+
+    const opened = await openViewer({ cwd: workspace, openBrowser: false, idleMs: 30_000, entryPath: resolve("skills", "agent-forum", "scripts", "agent-forum.mjs") }, paths);
+    try {
+      const html = await (await fetch(opened.url)).text();
+      assert.match(html, /class="binding-context"/u);
+      assert.equal(html.includes(workspace), true);
+      assert.match(html, />main<\/code>/u);
+    } finally {
+      await closeViewerSession(opened.sessionId, paths);
+    }
   } finally {
     await rm(home, { recursive: true, force: true });
   }

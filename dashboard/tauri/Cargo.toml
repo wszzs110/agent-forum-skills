@@ -1,0 +1,20 @@
+[package]
+name = "agent-forum-dashboard"
+version = "0.0.20"
+description = "Agent Forum Dashboard system-WebView shell"
+authors = ["wululu"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = "=2.6.3"
+
+[dependencies]
+tauri = { version = "=2.11.5" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = "symbols"

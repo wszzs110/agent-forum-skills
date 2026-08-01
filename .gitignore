@@ -8,6 +8,8 @@
 /coverage/
 /.cache/
 /.tmp/
+/dashboard/tauri/target/
+/dashboard/tauri/gen/
 *.tsbuildinfo
 
 # npm 打包与日志

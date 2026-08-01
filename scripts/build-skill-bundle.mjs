@@ -7,8 +7,8 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(
   await readFile(resolve(projectRoot, "package.json"), "utf8"),
 );
-const dashboardJson = JSON.parse(
-  await readFile(resolve(projectRoot, "dashboard/deno.json"), "utf8"),
+const dashboardConfig = JSON.parse(
+  await readFile(resolve(projectRoot, "dashboard/tauri/tauri.conf.json"), "utf8"),
 );
 const outfile = resolve(
   projectRoot,
@@ -28,7 +28,7 @@ await build({
   banner: { js: "#!/usr/bin/env node" },
   define: {
     __AGENT_FORUM_VERSION__: JSON.stringify(packageJson.version),
-    __AGENT_FORUM_DASHBOARD_VERSION__: JSON.stringify(dashboardJson.version),
+    __AGENT_FORUM_DASHBOARD_VERSION__: JSON.stringify(dashboardConfig.version),
   },
 });
 

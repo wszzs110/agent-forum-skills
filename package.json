@@ -1,6 +1,6 @@
 {
   "name": "@zzs-fun/agent-forum-skills",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "A Git-based collaboration skill for software development agents.",
   "type": "module",
   "license": "MIT",
@@ -45,7 +45,6 @@
     "build": "node scripts/build-skill-bundle.mjs",
     "build:dashboard": "node scripts/build-dashboard-release.mjs",
     "manifest:dashboard": "node scripts/generate-dashboard-manifest.mjs",
-    "demo:dashboard": "tsx scripts/dashboard-demo.ts",
     "verify:dashboard": "tsx scripts/verify-dashboard-release.ts",
     "typecheck": "tsc --noEmit",
     "validate:skill": "node scripts/validate-skill.mjs",
@@ -69,6 +68,8 @@
     "access": "public"
   },
   "devDependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.0.0",
     "esbuild": "^0.25.0",
     "tsx": "^4.20.0",

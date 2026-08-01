@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExitCode } from "../errors.js";
@@ -137,17 +136,16 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
       const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard ensure --update to follow your acquisition policy.` : "";
       const moduleDirectory = dirname(fileURLToPath(import.meta.url));
-      const entrypoint = [resolve(moduleDirectory, "..", "..", "dashboard", "main.ts"), resolve(moduleDirectory, "..", "..", "..", "dashboard", "main.ts")].find(existsSync);
-      const deno = process.platform === "win32" ? resolve(homedir(), ".deno", "bin", "deno.exe") : "deno";
-      const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && entrypoint && (process.platform !== "win32" || existsSync(deno));
+      const hostEntrypoint = [resolve(moduleDirectory, "..", "..", "dashboard", "host.mjs"), resolve(moduleDirectory, "..", "..", "..", "dashboard", "host.mjs")].find(existsSync);
+      const executableName = process.platform === "win32" ? "agent-forum-dashboard.exe" : "agent-forum-dashboard";
+      const developmentExecutable = [resolve(moduleDirectory, "..", "..", "dashboard", "tauri", "target", "release", executableName), resolve(moduleDirectory, "..", "..", "..", "dashboard", "tauri", "target", "release", executableName)].find(existsSync);
+      const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && hostEntrypoint && developmentExecutable;
       if (installed.status !== "installed" && !developmentFallback) throw new ServiceError("DASHBOARD_UNAVAILABLE", installed.status === "not-installed" ? "Dashboard is not installed; run agent-forum dashboard ensure" : "Dashboard installation is damaged; run agent-forum dashboard ensure --update");
-      const executable = installed.status === "installed" ? installed.executable! : deno;
-      const executableArgs = installed.status === "installed" ? [] : ["desktop", "--icon", resolve(dirname(entrypoint!), process.platform === "win32" ? "icon.ico" : "icon.png"), "--allow-run", "--allow-env", "--allow-read", "--allow-write", "--allow-net=127.0.0.1", "--allow-ffi", entrypoint!];
-      const dashboardCli = installed.status === "installed" ? installed.helper! : process.execPath;
-      // CEF 可能在工作目录写入诊断或缓存。固定使用私有 state 目录，绝不让运行时文件污染已校验的安装 payload。
+      const desktopExecutable = installed.status === "installed" ? installed.executable! : developmentExecutable!;
+      // Tauri、Node host 与缓存均使用私有 state 目录，绝不污染已校验的安装 payload。
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir(dashboardRuntimeDirectory, { recursive: true, mode: 0o700 });
-      const child = spawn(executable, executableArgs, { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: dashboardCli, AGENT_FORUM_CLI_SCRIPT: installed.status === "installed" ? "" : process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_ICON: installed.status === "installed" ? resolve(dirname(executable), "AppIcon.ico") : resolve(dirname(entrypoint!), "icon.ico"), AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
+      const child = spawn(process.execPath, [hostEntrypoint!], { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: process.execPath, AGENT_FORUM_CLI_SCRIPT: process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_EXECUTABLE: desktopExecutable, AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
       child.unref();
       return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable, ...contextData }, human: `Dashboard started.${updateHint}\n` };
     }
