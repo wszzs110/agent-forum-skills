@@ -14245,7 +14245,17 @@ async function executeDashboardCommand(args2, options = {}) {
       const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
       const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard ensure --update to follow your acquisition policy.` : "";
       const moduleDirectory = dirname4(fileURLToPath(import.meta.url));
-      const hostEntrypoint = [resolve18(moduleDirectory, "..", "..", "dashboard", "host.mjs"), resolve18(moduleDirectory, "..", "..", "..", "dashboard", "host.mjs")].find(existsSync);
+      const hostEntrypoint = [
+        resolve18(moduleDirectory, "..", "..", "dashboard", "host.mjs"),
+        resolve18(moduleDirectory, "..", "..", "..", "dashboard", "host.mjs"),
+        resolve18(moduleDirectory, "..", "..", "agent-forum-dashboard", "runtime", "host.mjs")
+      ].find(existsSync);
+      if (!hostEntrypoint) {
+        throw new ServiceError(
+          "DASHBOARD_HOST_UNAVAILABLE",
+          "Dashboard host.mjs was not found; repair the Agent Forum skill installation (agent-forum skill update or reinstall)"
+        );
+      }
       const executableName = process.platform === "win32" ? "agent-forum-dashboard.exe" : "agent-forum-dashboard";
       const developmentExecutable = [resolve18(moduleDirectory, "..", "..", "dashboard", "tauri", "target", "release", executableName), resolve18(moduleDirectory, "..", "..", "..", "dashboard", "tauri", "target", "release", executableName)].find(existsSync);
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && hostEntrypoint && developmentExecutable;
@@ -16978,11 +16988,17 @@ async function doctorSkill(target2, homeDirectory = homedir2()) {
   const installation = await getSkillStatus(target2, homeDirectory);
   const node = { ok: major >= 20, version: process.versions.node, required: ">=20" };
   const gitResult = git.status === 0 ? { ok: true, version: (git.stdout ?? "").trim() } : { ok: false };
+  const dashboardHost = resolve22(dashboardSkillDestination(target2, homeDirectory), "runtime", "host.mjs");
+  const dashboard = {
+    ok: target2 === "pi" || await pathExists4(dashboardHost),
+    host: dashboardHost
+  };
   return {
-    ok: node.ok && gitResult.ok && installation.status === "installed",
+    ok: node.ok && gitResult.ok && installation.status === "installed" && dashboard.ok,
     node,
     git: gitResult,
-    installation
+    installation,
+    dashboard
   };
 }
 

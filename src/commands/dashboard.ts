@@ -136,7 +136,18 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       const updateAvailable = installed.status === "installed" && dashboardUpdateAvailable(installed.installation?.version);
       const updateHint = updateAvailable ? ` Dashboard ${DASHBOARD_VERSION} is available; run agent-forum dashboard ensure --update to follow your acquisition policy.` : "";
       const moduleDirectory = dirname(fileURLToPath(import.meta.url));
-      const hostEntrypoint = [resolve(moduleDirectory, "..", "..", "dashboard", "host.mjs"), resolve(moduleDirectory, "..", "..", "..", "dashboard", "host.mjs")].find(existsSync);
+      // 候选顺序：npm 包布局（packages 内）→ 仓库开发布局 → universal skill 安装布局（dashboard skill 目录内 runtime）。
+      const hostEntrypoint = [
+        resolve(moduleDirectory, "..", "..", "dashboard", "host.mjs"),
+        resolve(moduleDirectory, "..", "..", "..", "dashboard", "host.mjs"),
+        resolve(moduleDirectory, "..", "..", "agent-forum-dashboard", "runtime", "host.mjs"),
+      ].find(existsSync);
+      if (!hostEntrypoint) {
+        throw new ServiceError(
+          "DASHBOARD_HOST_UNAVAILABLE",
+          "Dashboard host.mjs was not found; repair the Agent Forum skill installation (agent-forum skill update or reinstall)",
+        );
+      }
       const executableName = process.platform === "win32" ? "agent-forum-dashboard.exe" : "agent-forum-dashboard";
       const developmentExecutable = [resolve(moduleDirectory, "..", "..", "dashboard", "tauri", "target", "release", executableName), resolve(moduleDirectory, "..", "..", "..", "dashboard", "tauri", "target", "release", executableName)].find(existsSync);
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && hostEntrypoint && developmentExecutable;
@@ -145,7 +156,7 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       // Tauri、Node host 与缓存均使用私有 state 目录，绝不污染已校验的安装 payload。
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir(dashboardRuntimeDirectory, { recursive: true, mode: 0o700 });
-      const child = spawn(process.execPath, [hostEntrypoint!], { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: process.execPath, AGENT_FORUM_CLI_SCRIPT: process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_EXECUTABLE: desktopExecutable, AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
+      const child = spawn(process.execPath, [hostEntrypoint], { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: process.execPath, AGENT_FORUM_CLI_SCRIPT: process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_EXECUTABLE: desktopExecutable, AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
       child.unref();
       return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable, ...contextData }, human: `Dashboard started.${updateHint}\n` };
     }

@@ -96,6 +96,7 @@ export interface DoctorResult {
   node: { ok: boolean; version: string; required: string };
   git: { ok: boolean; version?: string };
   installation: StatusResult;
+  dashboard: { ok: boolean; host: string };
 }
 
 export class SkillInstallationError extends Error {
@@ -450,10 +451,18 @@ export async function doctorSkill(
     git.status === 0
       ? { ok: true, version: (git.stdout ?? "").trim() }
       : { ok: false };
+  // Dashboard 运行时 host 是 dashboard open 的硬依赖：非 Pi 的 universal 安装必须带它，否则 open 会静默失败。
+  // Pi 平台使用原生 Dashboard 命令，不安装 dashboard skill 目录，跳过该检查。
+  const dashboardHost = resolve(dashboardSkillDestination(target, homeDirectory), "runtime", "host.mjs");
+  const dashboard = {
+    ok: target === "pi" || (await pathExists(dashboardHost)),
+    host: dashboardHost,
+  };
   return {
-    ok: node.ok && gitResult.ok && installation.status === "installed",
+    ok: node.ok && gitResult.ok && installation.status === "installed" && dashboard.ok,
     node,
     git: gitResult,
     installation,
+    dashboard,
   };
 }
