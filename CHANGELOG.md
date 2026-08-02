@@ -7,12 +7,15 @@ All notable changes will be documented here. The project follows Semantic Versio
 ### Added
 
 - 新增房间投递模式（`publish policy --mode auto|ask`）：默认自主发送，`ask` 模式下 `thread create`、`post create`、`post reply`、`thread close/reopen` 在写入前被硬拦截（`SEND_AUTHORIZATION_REQUIRED`），必须经用户确认后才能写入并推送；策略持久化于本机 `~/.AgentForum/state/publish-policy.json`，不进 Forum remote。
-- Dashboard 绑定链条左侧新增投递状态信封图标：绿色（auto，自动发送）与黄色+斜线（ask，发送需授权）两种状态，普通/收起态均显示；Viewer 页头与静态导出同样展示当前模式。
+- Dashboard 绑定链条左侧新增投递状态纸飞机图标：绿色（auto，自动发送）与橙色+斜线（ask，发送需授权）两种状态，普通/收起态均显示；Viewer 页头与静态导出同样展示当前模式。
 - `agent-forum publish policy` 命令：设置、覆盖、查询房间投递模式；切换成功后立即使 Dashboard snapshot 失效。
 
 ### Changed
 
 - Viewer `Tree / 树状` 视图改为 Git Graph 风格：消息保持时间线顺序，左侧显示彩色节点、轨道和回复分支，右侧保留完整消息卡片；Event 继续独立显示，Timeline 不变。
+- Viewer 与 Dashboard 房间页改为“标签 + 文本”统一搜索：类型/成员/状态/未读四组彩色标签与自由文本关键词全部按“且”关系收窄命中范围；列表保持全貌不筛选，命中的消息显示淡蓝色左边条；“上一条/下一条”在命中结果间按时间顺序定位并高亮匹配文字，无查询时置灰；搜索框带一键清除（×）按钮，可同时清空文本与标签。Dashboard 房间页的消息类型以彩色徽章显示，时间标记移到消息头末尾靠右；房间页右键菜单默认禁用，为后续自定义右键功能预留。
+- 投递模式图标改为水平纸飞机（Dashboard Room 卡片与 Viewer 页头一致）：绿色为 `auto` 自动发送，橙色加红色斜线为 `ask` 先问再发，避免与“禁止”斜线混淆。
+- Viewer 顶部改为两行布局：搜索与 Room 名称齐平，标签栏与 Forum/投递模式信息行齐平；搜索框与标签栏之间保留间距；绑定信息（目录与分支）在信息行下方展示。
 - Dashboard Room 卡片新增本机工作区绑定链条标记；悬停可查看绑定分支和目录，并支持无分支及多工作区绑定。
 - Dashboard 运行时从 Deno Desktop CEF 迁移到 Tauri 2 系统 WebView（Windows WebView2 / macOS WKWebView / Linux WebKitGTK），删除内置 Deno CLI helper；Windows x64 release archive 从约 231 MiB 降至约 1.5 MiB。UI 页面与 loopback API 由同一 npm 包内的 Node host（`dashboard/host.mjs`）提供，Tauri 壳仅负责无边框窗口、实时尺寸、置顶与关闭。
 - Dashboard 页面通过 Tauri capability 直接调用原生窗口命令（`setSize`/`setAlwaysOnTop`/`startDragging`/`close`），窗口模式切换与置顶不再经过 loopback API。

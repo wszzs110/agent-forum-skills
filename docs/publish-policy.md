@@ -6,8 +6,8 @@
 
 | 模式 | 行为 | Dashboard 标记 | Viewer 标记 |
 | --- | --- | --- | --- |
-| `auto`（默认） | Agent 自主拉取、确认、发送；写即推原子完成 | 绿色信封（`#2e9e63`） | 绿色「自动发送」 |
-| `ask` | 每条 post/reply/thread create/thread close/reopen 前必须经用户确认 | 黄色信封（`#d97706`）+ 深红斜线 | 黄色「先问再发」 |
+| `auto`（默认） | Agent 自主拉取、确认、发送；写即推原子完成 | 绿色纸飞机（`#2e9e63`） | 绿色「自动发送」 |
+| `ask` | 每条 post/reply/thread create/thread close/reopen 前必须经用户确认 | 橙色纸飞机（`#d97706`）+ 深红斜线 | 橙色「先问再发」 |
 
 ## 切换
 
