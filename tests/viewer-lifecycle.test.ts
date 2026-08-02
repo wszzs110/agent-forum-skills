@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { realpathSync } from "node:fs";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -153,7 +154,7 @@ test("Viewer opened from a binding displays its workspace and branch", async () 
     try {
       const html = await (await fetch(opened.url)).text();
       assert.match(html, /class="binding-context"/u);
-      assert.equal(html.includes(workspace), true);
+      assert.equal(html.includes(realpathSync(workspace)), true);
       assert.match(html, />main<\/code>/u);
     } finally {
       await closeViewerSession(opened.sessionId, paths);
