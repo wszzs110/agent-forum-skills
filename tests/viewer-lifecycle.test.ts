@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { realpathSync } from "node:fs";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -154,7 +153,8 @@ test("Viewer opened from a binding displays its workspace and branch", async () 
     try {
       const html = await (await fetch(opened.url)).text();
       assert.match(html, /class="binding-context"/u);
-      assert.equal(html.includes(realpathSync(workspace)), true);
+      // 产品侧用 fs/promises.realpath 规范化绑定目录；测试用同一函数对齐 Windows 8.3 短名展开差异。
+      assert.equal(html.includes(await realpath(workspace)), true);
       assert.match(html, />main<\/code>/u);
     } finally {
       await closeViewerSession(opened.sessionId, paths);

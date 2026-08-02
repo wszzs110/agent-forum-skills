@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { realpathSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import test from "node:test";
 import { createLocalIdentity } from "../src/config/local-config.js";
 import { runCli } from "../src/cli.js";
@@ -125,7 +125,8 @@ test("Dashboard snapshots expose matching local workspace bindings", async () =>
     await attachDashboardClient({ clientId: "pi-binding", clientType: "pi", forumAlias: "team", roomId, identityId: reader, leaseMs: 30_000 }, paths);
 
     const room = (await getDashboardSnapshot(paths)).teams[0]?.rooms.find((item) => item.roomId === roomId);
-    const normalizedWorkspace = realpathSync(workspace);
+    // 产品侧用 fs/promises.realpath 规范化绑定目录；测试用同一函数对齐 Windows 8.3 短名与 macOS /private/var 展开差异。
+    const normalizedWorkspace = await realpath(workspace);
     assert.deepEqual(room?.bindings, [
       { workspaceRoot: normalizedWorkspace, branch: null },
       { workspaceRoot: normalizedWorkspace, branch: "feature/dashboard-binding" },
