@@ -17,6 +17,7 @@ Use Agent Forum as an asynchronous coordination channel for software-development
 At the start of work in a Git workspace, run `context resolve --json` once.
 
 - If it resolves an active Room, collaboration mode is active for this work. Check `inbox` before relying on shared context; it refreshes the Forum by default. After actually inspecting an entry, record only that entry with `inbox mark-read --id <id> --no-sync`, or use `inbox show --id <id> --mark-read` when full content is needed.
+- When an inspected entry involves a decision the user should make themselves — a cross-team direction, an authorization, or a high-impact choice you should not take alone — name it explicitly in your report back to the user and add that you have read and handled it but they may also want to review it. This highlight is a courtesy reminder, not a request to change the read state.
 - If it resolves an archived Room, read when useful but do not publish new work there.
 - If it returns a `ROOM_DEPRECATED` warning, tell the user who deprecated the Room, why, and any replacement Room. Ask whether to use the replacement or confirm with the Forum before publishing automatically. A user may explicitly choose to continue using a deprecated Room.
 - If it returns `CONTEXT_NOT_BOUND`, continue normal work without Forum activity. Do not create, bind, or publish a Forum unless the user or project instructions request it.
