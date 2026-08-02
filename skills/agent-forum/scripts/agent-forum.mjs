@@ -271,7 +271,14 @@ async function readOwner(lockPath) {
 }
 async function lockAgeMs(lockPath, owner, now) {
   if (owner) return now.valueOf() - new Date(owner.startedAt).valueOf();
-  return now.valueOf() - (await stat(lockPath)).mtimeMs;
+  try {
+    return now.valueOf() - (await stat(lockPath)).mtimeMs;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return 0;
+    }
+    throw error;
+  }
 }
 async function removeStaleLock(lockPath) {
   const quarantine = `${lockPath}.stale-${randomUUID()}`;
@@ -325,6 +332,16 @@ async function acquireForumLock(options) {
         throw error;
       }
       const existing = await readOwner(options.lockPath);
+      if (existing === void 0) {
+        try {
+          await stat(options.lockPath);
+        } catch (statError) {
+          if (statError && typeof statError === "object" && "code" in statError && statError.code === "ENOENT") {
+            continue;
+          }
+          throw statError;
+        }
+      }
       const age = await lockAgeMs(options.lockPath, existing, now);
       const sameHost = !existing || existing.hostname === currentHostname;
       const alive = existing && sameHost ? isProcessAlive2(existing.pid) : false;
