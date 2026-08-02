@@ -88,7 +88,21 @@ async function lockAgeMs(
   now: Date,
 ): Promise<number> {
   if (owner) return now.valueOf() - new Date(owner.startedAt).valueOf();
-  return now.valueOf() - (await stat(lockPath)).mtimeMs;
+  try {
+    return now.valueOf() - (await stat(lockPath)).mtimeMs;
+  } catch (error) {
+    // 锁目录可能刚被并发获取方删除（writeFile 失败回滚或正常释放），
+    // 此时视为已释放（0ms），让外层 stale 检查直接重试，而不是让 stat 抛 ENOENT。
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return 0;
+    }
+    throw error;
+  }
 }
 
 async function removeStaleLock(lockPath: string): Promise<void> {
@@ -153,6 +167,23 @@ export async function acquireForumLock(
       }
 
       const existing = await readOwner(options.lockPath);
+      // 锁目录刚被并发获取方删除（writeFile 失败回滚或正常释放）时，
+      // 直接重试获取，而不是误报 LOCAL_LOCKED。
+      if (existing === undefined) {
+        try {
+          await stat(options.lockPath);
+        } catch (statError) {
+          if (
+            statError &&
+            typeof statError === "object" &&
+            "code" in statError &&
+            statError.code === "ENOENT"
+          ) {
+            continue;
+          }
+          throw statError;
+        }
+      }
       const age = await lockAgeMs(options.lockPath, existing, now);
       const sameHost = !existing || existing.hostname === currentHostname;
       const alive = existing && sameHost ? isProcessAlive(existing.pid) : false;
