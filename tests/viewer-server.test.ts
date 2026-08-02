@@ -205,9 +205,12 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.equal(html.includes(".lang-zh{display:none}"), false, "language switching must not leave Chinese content hidden by CSS");
   assert.match(html, /id="previous-unread"/u);
   assert.match(html, /id="next-unread"/u);
-  assert.match(html, /let unreadSelection=null/u);
-  assert.match(html, /current<0\?0:\(current\+direction\+items\.length\)%items\.length/u, "first navigation selects the first unread item as the baseline");
-  assert.match(html, /unread-selected/u);
+  assert.match(html, /const searchState=\{text:''[^;]*tags:/u, "search state drives the result-set navigation");
+  assert.match(html, /function moveResult\(direction\)/u, "previous/next navigate the current result set");
+  assert.match(html, /function applyQuery\(\)/u, "unified query locates messages without filtering the list");
+  assert.match(html, /function buildTagChips\(\)/u, "search tags are rendered from injected tag data");
+  assert.match(html, /const searchTagData=/u, "the page embeds searchable tag data");
+  assert.match(html, /query-hit/u, "matched messages are highlighted");
   assert.match(html, /outline-unread/u);
   assert.match(html, /outline-unread[^}]*background:#eff6ff/u, "unread badge should share the Viewer blue palette");
   assert.match(html, /graph-canvas\{position:absolute/u, "Tree view exposes a Git Graph gutter");
@@ -246,7 +249,7 @@ test("Viewer distinguishes local AI unread, read, and published states", () => {
   const closed = renderViewerHtml(input, room, { state: "fresh" }, [{ memberId: readerId, displayName: "Agent B", seenIds: [] }]);
   assert.doesNotMatch(closed, /<article[^>]*data-ai-unread="true"/u, "closed Thread history does not become a Viewer unread target");
   assert.doesNotMatch(closed, /<span class="outline-unread"/u, "closed Thread outline does not show unread counts");
-  assert.match(closed, /dataset\.threadStatus!==['"]closed['"]/u, "Viewer navigation defensively skips closed Threads");
+  assert.match(closed, /const indexes=threads\.map/u, "Viewer search index is still built for closed Threads");
 });
 
 test("Viewer displays the bound directory and branch only when supplied by the local launcher", () => {
