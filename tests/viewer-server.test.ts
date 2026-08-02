@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildReplyTree, renderViewerHtml, startViewerServer } from "../src/viewer/server.js";
+import { buildReplyGraph, buildReplyTree, renderViewerHtml, startViewerServer } from "../src/viewer/server.js";
 import type { ForumSnapshot } from "../src/services/timeline-cache.js";
 
 function snapshot(): ForumSnapshot {
@@ -210,7 +210,9 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.match(html, /unread-selected/u);
   assert.match(html, /outline-unread/u);
   assert.match(html, /outline-unread[^}]*background:#eff6ff/u, "unread badge should share the Viewer blue palette");
-  assert.match(html, /tree-children[^}]*border-left:2px solid #cbdaf5/u);
+  assert.match(html, /graph-canvas\{position:absolute/u, "Tree view exposes a Git Graph gutter");
+  assert.match(html, /function drawReplyGraph\(graph,relation\)/u, "Tree view redraws graph paths from real row geometry");
+  assert.match(html, /className='graph-row'/u, "Tree view keeps one row per message");
 
   const script = /<script nonce="agent-forum">([\s\S]*?)<\/script>/.exec(html)?.[1];
   assert.ok(script, "Viewer should include its client-side controls script");
@@ -290,7 +292,14 @@ test("Viewer derives a safe reply forest without losing malformed branches", () 
   const cycleA = { ...opening, id: "msg_cycle_a", replyTo: "msg_cycle_b", createdAt: "2026-07-12T10:04:00.000Z" };
   const cycleB = { ...opening, id: "msg_cycle_b", replyTo: cycleA.id, createdAt: "2026-07-12T10:05:00.000Z" };
   const tree = buildReplyTree([opening, reply, nestedReply, orphan, cycleA, cycleB]);
+  const branchReply = { ...opening, id: "msg_branch", replyTo: opening.id, createdAt: "2026-07-12T10:02:30.000Z" };
+  const graph = buildReplyGraph([opening, reply, nestedReply, branchReply]);
 
+  assert.equal(graph.lanes.get(opening.id), 0);
+  assert.equal(graph.lanes.get(reply.id), 0);
+  assert.equal(graph.lanes.get(branchReply.id), 1);
+  assert.equal(graph.lanes.get(nestedReply.id), 0);
+  assert.equal(graph.laneCount, 2);
   assert.deepEqual(tree.children.get(opening.id), [reply.id]);
   assert.deepEqual(tree.children.get(reply.id), [nestedReply.id]);
   assert.equal(tree.issues.get(orphan.id), "missing-parent");
@@ -312,6 +321,8 @@ test("Viewer exposes status markers and a timeline/tree switch", () => {
   assert.match(html, /class="status-badge thread-status status-closed"/);
   assert.match(html, /class="outline-status status-closed"/);
   assert.match(html, /data-reply-to=""/);
+  assert.match(html, /data-graph-lanes="1"/);
+  assert.match(html, /data-graph-lane="0"/);
   assert.match(html, /function renderTree\(thread\)/);
   assert.match(html, /Lifecycle events are shown separately/);
 });
