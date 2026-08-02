@@ -104,9 +104,9 @@ test("Dashboard 最后一个 Agent 离开后等待用户手动关闭", async () 
   assert.match(page, /title="Related"><span class="send-mode-slot'\+\(r\.bindings\?\.length\?'':' empty'\)\+'"/u, "the send-mode slot precedes the Related unread indicator");
   assert.match(page, /\.compact \.metrics\{display:grid;grid-template-columns:repeat\(5,22px\);column-gap:2px/u, "collapsed notification icons use five equal grid columns with the send-mode marker");
   assert.match(page, /\.compact \.metric\{display:contents/u, "collapsed notification groups do not distort icon spacing");
-  assert.match(page, /function renderSendModeMarker\(mode\)/u, "send-mode marker renders an envelope icon per Room mode");
+  assert.match(page, /function renderSendModeMarker\(mode\)/u, "send-mode marker renders a level paper-plane send icon per Room mode");
   assert.ok(page.includes("send-mode-marker'+(ask?' ask':'')+'\" role=\"img\""), "ask mode adds a distinct warning style to the send-mode marker");
-  assert.match(page, /stroke="#b3261e" stroke-width="2\.4"/u, "ask mode draws a diagonal line over the envelope icon");
+  assert.match(page, /stroke="#b3261e" stroke-width="2\.4"/u, "ask mode draws a diagonal line over the send icon");
   assert.match(page, /#2e9e63/u, "autonomous send-mode marker uses the agreed green");
   assert.match(page, /#d97706/u, "ask send-mode marker uses the agreed amber");
   const sendSlotPos = page.indexOf('class="send-mode-slot');
