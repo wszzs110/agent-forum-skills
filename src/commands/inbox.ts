@@ -11,7 +11,7 @@ export async function executeInboxCommand(args: readonly string[]): Promise<Comm
       exitCode: ExitCode.Success,
       command: "inbox.help",
       data: { usage: "agent-forum inbox [show|mark-read] [options]" },
-      human: "Inbox\n\nUsage:\n  agent-forum inbox --forum <alias> [--identity <member-id>] [--limit <1..100>] [--mark-read|--mark-all-read] [--no-sync]\n  agent-forum inbox show --forum <alias> --id <message-or-event-id> [--identity <member-id>] [--mark-read] [--no-sync]\n  agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id> ...] [--identity <member-id>] [--no-sync]\n",
+      human: "Inbox\n\nUsage:\n  agent-forum inbox --forum <alias> [--identity <member-id>] [--limit <1..100>] [--mark-read|--mark-all-read] [--no-sync]\n  agent-forum inbox show --forum <alias> --id <message-or-event-id> [--identity <member-id>] [--no-mark-read] [--no-sync]\n  agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id> ...] [--identity <member-id>] [--no-sync]\n\n`inbox show` marks the entry read by default; pass `--no-mark-read` to inspect without marking.\n",
     };
   }
   const show = subcommand === "show";
@@ -19,7 +19,7 @@ export async function executeInboxCommand(args: readonly string[]): Promise<Comm
   const parsed = parseCommandOptions(show || markSpecific ? args.slice(1) : args, {
     values: show ? ["--forum", "--identity", "--id"] : markSpecific ? ["--forum", "--identity"] : ["--forum", "--identity", "--limit", "--summary-chars"],
     ...(markSpecific ? { repeatableValues: ["--id"] } : {}),
-    flags: show ? ["--no-sync", "--mark-read"] : markSpecific ? ["--no-sync"] : ["--sync", "--no-sync", "--mark-read", "--mark-all-read"],
+    flags: show ? ["--no-sync", "--mark-read", "--no-mark-read"] : markSpecific ? ["--no-sync"] : ["--sync", "--no-sync", "--mark-read", "--mark-all-read"],
   });
   if ("error" in parsed) return invalidArgument(parsed.error);
   if (!show && !markSpecific && parsed.flags.has("--mark-read") && parsed.flags.has("--mark-all-read")) return invalidArgument("--mark-read and --mark-all-read cannot be combined");
@@ -37,13 +37,20 @@ export async function executeInboxCommand(args: readonly string[]): Promise<Comm
     if (show) {
       const id = requireOption(parsed, "--id");
       if (typeof id !== "string") return invalidArgument(id.error);
+      if (parsed.flags.has("--mark-read") && parsed.flags.has("--no-mark-read")) return invalidArgument("--mark-read and --no-mark-read cannot be combined");
       const result = await showInboxEntry({ forumAlias, id, ...(identityId ? { identityId } : {}), sync: !parsed.flags.has("--no-sync") });
       let markedRead = 0;
-      if (parsed.flags.has("--mark-read")) {
-        const marked = await markInboxEntriesRead({ forumAlias, ids: [id], ...(identityId ? { identityId } : {}), sync: false });
-        markedRead = marked.markedRead;
+      let markWarning: string | null = null;
+      if (!parsed.flags.has("--no-mark-read")) {
+        try {
+          const marked = await markInboxEntriesRead({ forumAlias, ids: [id], ...(identityId ? { identityId } : {}), sync: false });
+          markedRead = marked.markedRead;
+        } catch (error) {
+          // 已读标记是附带操作；失败降级为警告，不阻断正文展示。
+          markWarning = error instanceof Error ? error.message : String(error);
+        }
       }
-      return { exitCode: ExitCode.Success, command: "inbox.show", data: { ...result, markedRead }, human: `${result.entry.type}: ${result.entry.id}\n${result.content.body ?? result.content.reason ?? ""}${parsed.flags.has("--mark-read") ? `\nmarked read: ${markedRead}` : ""}\n` };
+      return { exitCode: ExitCode.Success, command: "inbox.show", data: { ...result, markedRead, markWarning }, human: `${result.entry.type}: ${result.entry.id}\n${result.content.body ?? result.content.reason ?? ""}${parsed.flags.has("--no-mark-read") ? "" : `\nmarked read: ${markedRead}${markWarning ? ` (mark failed: ${markWarning})` : ""}`}\n` };
     }
     const limitText = parsed.values.get("--limit"); const summaryText = parsed.values.get("--summary-chars");
     const limit = limitText === undefined ? undefined : Number(limitText); const summaryChars = summaryText === undefined ? undefined : Number(summaryText);

@@ -15867,7 +15867,7 @@ async function executeInboxCommand(args2) {
       exitCode: ExitCode.Success,
       command: "inbox.help",
       data: { usage: "agent-forum inbox [show|mark-read] [options]" },
-      human: "Inbox\n\nUsage:\n  agent-forum inbox --forum <alias> [--identity <member-id>] [--limit <1..100>] [--mark-read|--mark-all-read] [--no-sync]\n  agent-forum inbox show --forum <alias> --id <message-or-event-id> [--identity <member-id>] [--mark-read] [--no-sync]\n  agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id> ...] [--identity <member-id>] [--no-sync]\n"
+      human: "Inbox\n\nUsage:\n  agent-forum inbox --forum <alias> [--identity <member-id>] [--limit <1..100>] [--mark-read|--mark-all-read] [--no-sync]\n  agent-forum inbox show --forum <alias> --id <message-or-event-id> [--identity <member-id>] [--no-mark-read] [--no-sync]\n  agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id> ...] [--identity <member-id>] [--no-sync]\n\n`inbox show` marks the entry read by default; pass `--no-mark-read` to inspect without marking.\n"
     };
   }
   const show = subcommand === "show";
@@ -15875,7 +15875,7 @@ async function executeInboxCommand(args2) {
   const parsed = parseCommandOptions(show || markSpecific ? args2.slice(1) : args2, {
     values: show ? ["--forum", "--identity", "--id"] : markSpecific ? ["--forum", "--identity"] : ["--forum", "--identity", "--limit", "--summary-chars"],
     ...markSpecific ? { repeatableValues: ["--id"] } : {},
-    flags: show ? ["--no-sync", "--mark-read"] : markSpecific ? ["--no-sync"] : ["--sync", "--no-sync", "--mark-read", "--mark-all-read"]
+    flags: show ? ["--no-sync", "--mark-read", "--no-mark-read"] : markSpecific ? ["--no-sync"] : ["--sync", "--no-sync", "--mark-read", "--mark-all-read"]
   });
   if ("error" in parsed) return invalidArgument(parsed.error);
   if (!show && !markSpecific && parsed.flags.has("--mark-read") && parsed.flags.has("--mark-all-read")) return invalidArgument("--mark-read and --mark-all-read cannot be combined");
@@ -15894,15 +15894,21 @@ async function executeInboxCommand(args2) {
     if (show) {
       const id = requireOption(parsed, "--id");
       if (typeof id !== "string") return invalidArgument(id.error);
+      if (parsed.flags.has("--mark-read") && parsed.flags.has("--no-mark-read")) return invalidArgument("--mark-read and --no-mark-read cannot be combined");
       const result2 = await showInboxEntry({ forumAlias, id, ...identityId ? { identityId } : {}, sync: !parsed.flags.has("--no-sync") });
       let markedRead = 0;
-      if (parsed.flags.has("--mark-read")) {
-        const marked = await markInboxEntriesRead({ forumAlias, ids: [id], ...identityId ? { identityId } : {}, sync: false });
-        markedRead = marked.markedRead;
+      let markWarning = null;
+      if (!parsed.flags.has("--no-mark-read")) {
+        try {
+          const marked = await markInboxEntriesRead({ forumAlias, ids: [id], ...identityId ? { identityId } : {}, sync: false });
+          markedRead = marked.markedRead;
+        } catch (error) {
+          markWarning = error instanceof Error ? error.message : String(error);
+        }
       }
-      return { exitCode: ExitCode.Success, command: "inbox.show", data: { ...result2, markedRead }, human: `${result2.entry.type}: ${result2.entry.id}
-${result2.content.body ?? result2.content.reason ?? ""}${parsed.flags.has("--mark-read") ? `
-marked read: ${markedRead}` : ""}
+      return { exitCode: ExitCode.Success, command: "inbox.show", data: { ...result2, markedRead, markWarning }, human: `${result2.entry.type}: ${result2.entry.id}
+${result2.content.body ?? result2.content.reason ?? ""}${parsed.flags.has("--no-mark-read") ? "" : `
+marked read: ${markedRead}${markWarning ? ` (mark failed: ${markWarning})` : ""}`}
 ` };
     }
     const limitText = parsed.values.get("--limit");

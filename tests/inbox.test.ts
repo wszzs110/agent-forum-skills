@@ -152,6 +152,49 @@ test("Inbox promotes replies and watched closed Threads without hiding discovery
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
+test("Inbox show marks read by default and respects --no-mark-read", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-inbox-show-read-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    const paths = await setup(home);
+    const created = await createThread({ forumAlias: "team", room: "checkout", identityId: memberB, title: "Show read", kind: "question", body: "Inspect me.", threadId, now: new Date("2026-07-12T10:21:00.000Z") }, paths);
+    const id = created.firstMessage.id;
+    // 默认 show 标记已读：一次 show 后 inbox 不再返回该条
+    const out1: string[] = [];
+    assert.equal(await runCli(["--json", "inbox", "show", "--forum", "team", "--id", id, "--no-sync"], { stdout: (value) => out1.push(value), stderr: () => undefined }), 0);
+    const env1 = JSON.parse(out1.join(""));
+    assert.equal(env1.ok, true);
+    assert.equal(env1.command, "inbox.show");
+    assert.equal(env1.data.markedRead, 1);
+    assert.equal(env1.data.markWarning, null);
+    assert.equal((await getInbox({ forumAlias: "team" }, paths)).totalUnread, 0);
+    // --no-mark-read 不标记：show 后仍为未读
+    await createPost({ forumAlias: "team", room: "checkout", thread: threadId, identityId: memberB, type: "status", body: "Second.", now: new Date("2026-07-12T10:22:00.000Z") }, paths);
+    const secondId = (await getInbox({ forumAlias: "team" }, paths)).entries[0]!.id;
+    const out2: string[] = [];
+    assert.equal(await runCli(["--json", "inbox", "show", "--forum", "team", "--id", secondId, "--no-sync", "--no-mark-read"], { stdout: (value) => out2.push(value), stderr: () => undefined }), 0);
+    const env2 = JSON.parse(out2.join(""));
+    assert.equal(env2.ok, true);
+    assert.equal(env2.data.markedRead, 0);
+    assert.equal(env2.data.markWarning, null);
+    assert.equal((await getInbox({ forumAlias: "team" }, paths)).totalUnread, 1);
+    // --mark-read 与 --no-mark-read 互斥报错
+    const out3: string[] = [];
+    assert.equal(await runCli(["--json", "inbox", "show", "--forum", "team", "--id", secondId, "--no-sync", "--mark-read", "--no-mark-read"], { stdout: (value) => out3.push(value), stderr: () => undefined }), 2);
+    const env3 = JSON.parse(out3.join(""));
+    assert.equal(env3.ok, false);
+    assert.equal(env3.error.code, "INVALID_ARGUMENT");
+    assert.match(env3.error.message, /cannot be combined/u);
+  } finally {
+    process.env.HOME = previousHome;
+    process.env.USERPROFILE = previousUserProfile;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test("Inbox includes Room/Thread events, excludes own activity, and stops while left", async () => {
   const home = await mkdtemp(join(tmpdir(), "agent-forum-inbox-membership-"));
   try {
