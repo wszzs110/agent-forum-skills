@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile, rm } from "node:fs/promises";
 import test from "node:test";
 import { runCli, type CliIo } from "../src/cli.js";
 
@@ -34,6 +35,19 @@ test("version supports stable JSON output", async () => {
   assert.equal(result.command, "version");
   assert.equal(result.data.name, "agent-forum");
   assert.equal(typeof result.data.version, "string");
+});
+
+test("--to-file writes JSON to a temp file and prints its path", async () => {
+  const output = captureIo();
+  const exitCode = await runCli(["--version", "--json", "--to-file"], output.io);
+  assert.equal(exitCode, 0);
+  const filePath = output.stdout.join("").trim();
+  assert.match(filePath, /agent-forum-.*\.json$/u);
+  const content = JSON.parse(await readFile(filePath, "utf8"));
+  assert.equal(content.ok, true);
+  assert.equal(content.command, "version");
+  assert.equal(output.stderr.length, 0);
+  await rm(filePath, { force: true });
 });
 
 test("skill help exposes the self-management interface", async () => {

@@ -97,6 +97,7 @@ export interface DoctorResult {
   git: { ok: boolean; version?: string };
   installation: StatusResult;
   dashboard: { ok: boolean; host: string };
+  version: { ok: boolean; installed: string | null; current: string };
 }
 
 export class SkillInstallationError extends Error {
@@ -461,11 +462,18 @@ export async function doctorSkill(
     ok: target === "pi" || (await pathExists(dashboardHost) && await pathExists(dashboardPage)),
     host: dashboardHost,
   };
+  // 版本匹配：CLI 与已安装 Skill 版本一致，避免文档/命令行为漂移。
+  const version = {
+    ok: installation.status === "installed" && installation.version === VERSION,
+    installed: installation.status === "installed" ? (installation.version ?? null) : null,
+    current: VERSION,
+  };
   return {
-    ok: node.ok && gitResult.ok && installation.status === "installed" && dashboard.ok,
+    ok: node.ok && gitResult.ok && installation.status === "installed" && dashboard.ok && version.ok,
     node,
     git: gitResult,
     installation,
     dashboard,
+    version,
   };
 }

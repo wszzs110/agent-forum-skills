@@ -10060,7 +10060,7 @@ async function listThreads(forumAlias, room, paths = createAgentForumPaths()) {
     const byActivity = right.lastActivityAt.localeCompare(left.lastActivityAt);
     return byActivity || left.id.localeCompare(right.id);
   });
-  return { room: roomResult.room, threads, warnings };
+  return { room: roomResult.room, threads, warnings: dedupeWarnings(warnings) };
 }
 async function showThread(forumAlias, room, threadId, paths = createAgentForumPaths()) {
   const roomResult = await showRoom(forumAlias, room, paths);
@@ -10081,7 +10081,7 @@ async function showThread(forumAlias, room, threadId, paths = createAgentForumPa
     room: roomResult.room,
     thread: result.thread,
     messages: result.messages,
-    warnings: [...roomResult.warnings, ...result.warnings]
+    warnings: dedupeWarnings([...roomResult.warnings, ...result.warnings])
   };
 }
 function assertRoomWritable(room) {
@@ -11000,6 +11000,7 @@ var room_exports = {};
 __export(room_exports, {
   createRoom: () => createRoom,
   createRoomEvent: () => createRoomEvent,
+  dedupeWarnings: () => dedupeWarnings,
   joinRoom: () => joinRoom,
   leaveRoom: () => leaveRoom,
   listRooms: () => listRooms,
@@ -11053,6 +11054,17 @@ function protocolWarning(path2, error) {
     path: path2,
     message: error instanceof Error ? error.message : String(error)
   };
+}
+function dedupeWarnings(warnings) {
+  const seen = /* @__PURE__ */ new Set();
+  const result = [];
+  for (const warning of warnings) {
+    const key = `${warning.code}\0${warning.path ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(warning);
+  }
+  return result;
 }
 async function openForum(alias, paths, options = {}) {
   const config = await loadLocalConfig(paths);
@@ -12565,9 +12577,9 @@ init_errors();
 init_lock();
 init_paths();
 init_errors2();
-init_forum_sync();
 import { readFile as readFile12, readdir as readdir7 } from "node:fs/promises";
 import { resolve as resolve14 } from "node:path";
+init_forum_sync();
 
 // src/services/identity-attention.ts
 init_local_config();
@@ -13120,13 +13132,14 @@ async function readEvents(directory, roomId, roomSlug, threadId, actorId, active
   }
   return { entries, warnings };
 }
-async function collectRelevantEntries(forumAlias, memberId, paths) {
+async function collectRelevantEntries(forumAlias, memberId, paths, roomIds) {
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, forumAlias);
   const rooms = await listRooms(forumAlias, paths);
   const entries = [];
   const warnings = [...rooms.warnings];
   for (const room of rooms.rooms) {
+    if (roomIds && !roomIds.has(room.id)) continue;
     const membershipPath = resolve14(
       registration.path,
       "rooms",
@@ -13200,7 +13213,7 @@ async function collectRelevantEntries(forumAlias, memberId, paths) {
     }
   }
   const unique = new Map(entries.map((entry) => [entry.id, entry]));
-  return { entries: [...unique.values()], warnings };
+  return { entries: [...unique.values()], warnings: dedupeWarnings(warnings) };
 }
 function classifyEntries(entries, attentionIds, watchedIds) {
   const authorByMessageId = new Map(entries.filter((entry) => entry.kind === "message").map((entry) => [entry.id, entry.actorId]));
@@ -13263,10 +13276,24 @@ async function markInboxEntriesRead(input, paths = createAgentForumPaths()) {
   if (publicProfile2.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
   const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
   const eligible = new Set(collected.entries.filter((entry) => entry.actorId !== identity.memberId).map((entry) => entry.id));
-  const unknown = ids.filter((id) => !eligible.has(id));
-  if (unknown.length > 0) throw new ServiceError("MESSAGE_NOT_FOUND", `Inbox entries were not found or are outside active Room membership: ${unknown.join(", ")}`);
-  const result = await appendSeenIds(registration.forumId, identity.memberId, ids, paths);
-  return { ids, ...result, warnings: collected.warnings, sync, refreshWarning };
+  const cursor = await loadCursor(paths, registration.forumId, identity.memberId);
+  const seen = new Set(cursor.seenIds);
+  const markedIds = ids.filter((id) => eligible.has(id));
+  const results = ids.map((id) => {
+    if (!eligible.has(id)) return { id, status: "skipped" };
+    return { id, status: seen.has(id) ? "already-read" : "read" };
+  });
+  const result = markedIds.length > 0 ? await appendSeenIds(registration.forumId, identity.memberId, markedIds, paths) : { markedRead: 0, alreadyRead: 0 };
+  return { ids, ...result, results, warnings: collected.warnings, sync, refreshWarning };
+}
+async function markThreadRead(input, paths = createAgentForumPaths()) {
+  const detail = await showThread(input.forumAlias, input.room, input.thread, paths);
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const ids = detail.messages.map((message) => message.id);
+  const result = ids.length > 0 ? await appendSeenIds(registration.forumId, identity.memberId, ids, paths) : { markedRead: 0, alreadyRead: 0 };
+  return { threadId: detail.thread.id, ...result, warnings: detail.warnings };
 }
 function balancedPage(entries, limit) {
   const ordered = [...entries].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
@@ -13311,6 +13338,66 @@ async function showInboxEntry(input, paths = createAgentForumPaths()) {
   const event = await readJsonDocument(eventPath, "event");
   return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback", sync, refreshWarning };
 }
+async function resolveInboxRoomScope(input, registration, paths) {
+  if (input.all) return { scope: "all", roomIds: void 0 };
+  if (input.roomId) {
+    const room = await findRoomByScope(registration, input.roomId, paths);
+    return { scope: "room", roomIds: /* @__PURE__ */ new Set([room.id]) };
+  }
+  try {
+    const context = await resolveContext({}, paths);
+    if (context.forumId !== registration.forumId) {
+      throw new ServiceError(
+        "INBOX_SCOPE_BOUND_MISMATCH",
+        `the bound context Forum (${context.forumAlias}) differs from the requested --forum (${registration.alias}); use --room <slug> or --all`
+      );
+    }
+    return { scope: "bound", roomIds: /* @__PURE__ */ new Set([context.roomId]) };
+  } catch (error) {
+    if (error instanceof ContextError && error.code === "CONTEXT_NOT_BOUND") {
+      throw new ServiceError(
+        "INBOX_SCOPE_REQUIRED",
+        "no bound context; use --room <slug> or --all to select a scope"
+      );
+    }
+    throw error;
+  }
+}
+async function findRoomByScope(registration, roomIdOrSlug, paths) {
+  const rooms = await listRooms(registration.alias, paths);
+  const room = rooms.rooms.find(
+    (item) => item.id === roomIdOrSlug || item.slug === roomIdOrSlug
+  );
+  if (!room) {
+    throw new ServiceError(
+      "ROOM_NOT_FOUND",
+      `Room not found: ${roomIdOrSlug}`
+    );
+  }
+  return { id: room.id };
+}
+async function fullContentPage(page, forumAlias, paths) {
+  try {
+    const cached = await getForumSnapshot(forumAlias, paths);
+    const items = new Map(
+      cached.snapshot.rooms.flatMap((room) => [
+        ...room.events.map((event) => [event.id, event]),
+        ...room.threads.flatMap((thread) => thread.timeline.map((item) => [item.id, item]))
+      ])
+    );
+    return page.map((entry) => {
+      const item = items.get(entry.id);
+      const content = item?.kind === "message" ? item.body : item?.kind === "event" ? item.reason : void 0;
+      return {
+        ...entry,
+        ...content !== void 0 ? { summary: content } : {},
+        summaryTruncated: false
+      };
+    });
+  } catch {
+    return page.map((entry) => ({ ...entry, summaryTruncated: entry.summaryTruncated }));
+  }
+}
 async function getInbox(input, paths = createAgentForumPaths()) {
   const limit = input.limit ?? 20;
   const summaryChars = input.summaryChars ?? 180;
@@ -13334,8 +13421,13 @@ async function getInbox(input, paths = createAgentForumPaths()) {
       `identity is not an active Forum member: ${identity.memberId}`
     );
   }
+  const roomScope = await resolveInboxRoomScope(
+    { forumAlias: input.forumAlias, ...input.roomId !== void 0 ? { roomId: input.roomId } : {}, ...input.all !== void 0 ? { all: input.all } : {} },
+    registration,
+    paths
+  );
   const [collected, cursor, attention, watches] = await Promise.all([
-    collectRelevantEntries(input.forumAlias, identity.memberId, paths),
+    collectRelevantEntries(input.forumAlias, identity.memberId, paths, roomScope.roomIds),
     loadCursor(paths, registration.forumId, identity.memberId),
     listIdentityAttention({ forumAlias: input.forumAlias, ownerMemberId: identity.memberId }, paths),
     listWatchedThreadIds({ forumAlias: input.forumAlias, identityId: identity.memberId }, paths)
@@ -13348,7 +13440,7 @@ async function getInbox(input, paths = createAgentForumPaths()) {
   if (idsToMark.length > 0) await appendSeenIds(registration.forumId, identity.memberId, idsToMark, paths);
   const relevanceCounts = { direct: 0, watched: 0, priority: 0, discovery: 0 };
   for (const entry of unread) relevanceCounts[entry.relevance] += 1;
-  const displayed = page.map((entry) => {
+  const displayed = input.full ? await fullContentPage(page, input.forumAlias, paths) : page.map((entry) => {
     const truncated = entry.summary.length > summaryChars;
     return {
       ...entry,
@@ -13362,6 +13454,7 @@ async function getInbox(input, paths = createAgentForumPaths()) {
     relevanceCounts,
     hasMore: unread.length > page.length,
     markedRead: idsToMark.length,
+    scope: roomScope.scope,
     warnings: collected.warnings,
     sync: syncResult
   };
@@ -14923,6 +15016,21 @@ async function diagnoseAgentForum(input = {}, paths = createAgentForumPaths()) {
     } else {
       checks.push({ id: `${prefix}.lock`, status: "ok", message: "no forum lock" });
     }
+    try {
+      const cached = await getForumSnapshot(forum.alias, paths);
+      const damageWarnings = cached.snapshot.warnings.filter(
+        (warning) => warning.code === "INVALID_MESSAGE_PATH" || warning.code === "INVALID_MESSAGE_BODY" || warning.code === "PROTOCOL_DATA_DAMAGED"
+      );
+      const uniquePaths = [...new Set(damageWarnings.map((warning) => warning.path))];
+      checks.push({
+        id: `${prefix}.data`,
+        status: uniquePaths.length > 0 ? "warning" : "ok",
+        message: uniquePaths.length > 0 ? `${uniquePaths.length} damaged record(s) detected; they are isolated and do not block unrelated work` : "no damaged records",
+        ...uniquePaths.length > 0 ? { details: uniquePaths.slice(0, 10) } : {}
+      });
+    } catch (error) {
+      checks.push({ id: `${prefix}.data`, status: "warning", message: error instanceof Error ? error.message : String(error) });
+    }
   }
   if (await exists(paths.locksDirectory)) {
     const known = new Set(config.forums.map((forum) => `${forum.forumId}.lock`));
@@ -15883,19 +15991,20 @@ async function executeInboxCommand(args2) {
       exitCode: ExitCode.Success,
       command: "inbox.help",
       data: { usage: "agent-forum inbox [show|mark-read] [options]" },
-      human: "Inbox\n\nUsage:\n  agent-forum inbox --forum <alias> [--identity <member-id>] [--limit <1..100>] [--mark-read|--mark-all-read] [--no-sync]\n  agent-forum inbox show --forum <alias> --id <message-or-event-id> [--identity <member-id>] [--no-mark-read] [--no-sync]\n  agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id> ...] [--identity <member-id>] [--no-sync]\n\n`inbox show` marks the entry read by default; pass `--no-mark-read` to inspect without marking.\n"
+      human: "Inbox\n\nUsage:\n  agent-forum inbox --forum <alias> [--identity <member-id>] [--limit <1..100>] [--mark-read|--mark-all-read] [--room <slug>|--all] [--no-sync]\n  agent-forum inbox show --forum <alias> --id <message-or-event-id> [--identity <member-id>] [--no-mark-read] [--no-sync]\n  agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id> ...] [--identity <member-id>] [--no-sync]\n\n`inbox show` marks the entry read by default; pass `--no-mark-read` to inspect without marking.\n`inbox` defaults to the bound Room; pass `--room` or `--all` to choose a different scope.\n"
     };
   }
   const show = subcommand === "show";
   const markSpecific = subcommand === "mark-read";
   const parsed = parseCommandOptions(show || markSpecific ? args2.slice(1) : args2, {
-    values: show ? ["--forum", "--identity", "--id"] : markSpecific ? ["--forum", "--identity"] : ["--forum", "--identity", "--limit", "--summary-chars"],
+    values: show ? ["--forum", "--identity", "--id"] : markSpecific ? ["--forum", "--identity"] : ["--forum", "--identity", "--limit", "--summary-chars", "--room"],
     ...markSpecific ? { repeatableValues: ["--id"] } : {},
-    flags: show ? ["--no-sync", "--mark-read", "--no-mark-read"] : markSpecific ? ["--no-sync"] : ["--sync", "--no-sync", "--mark-read", "--mark-all-read"]
+    flags: show ? ["--no-sync", "--mark-read", "--no-mark-read"] : markSpecific ? ["--no-sync"] : ["--sync", "--no-sync", "--mark-read", "--mark-all-read", "--all", "--full"]
   });
   if ("error" in parsed) return invalidArgument(parsed.error);
   if (!show && !markSpecific && parsed.flags.has("--mark-read") && parsed.flags.has("--mark-all-read")) return invalidArgument("--mark-read and --mark-all-read cannot be combined");
   if (!show && !markSpecific && parsed.flags.has("--sync") && parsed.flags.has("--no-sync")) return invalidArgument("--sync and --no-sync cannot be combined");
+  if (!show && !markSpecific && parsed.values.has("--room") && parsed.flags.has("--all")) return invalidArgument("--room and --all cannot be combined");
   const forumAlias = requireOption(parsed, "--forum");
   if (typeof forumAlias !== "string") return invalidArgument(forumAlias.error);
   try {
@@ -15904,7 +16013,8 @@ async function executeInboxCommand(args2) {
       const ids = parsed.multiValues.get("--id") ?? [];
       if (ids.length === 0) return invalidArgument("inbox mark-read requires at least one --id");
       const result2 = await markInboxEntriesRead({ forumAlias, ids, ...identityId ? { identityId } : {}, sync: !parsed.flags.has("--no-sync") });
-      return { exitCode: ExitCode.Success, command: "inbox.mark-read", data: result2, human: `Marked ${result2.markedRead} Inbox entr${result2.markedRead === 1 ? "y" : "ies"} read${result2.alreadyRead ? `; ${result2.alreadyRead} already read` : ""}${result2.refreshWarning ? ` (sync failed: ${result2.refreshWarning})` : ""}.
+      const skipped = result2.results.filter((item) => item.status === "skipped").length;
+      return { exitCode: ExitCode.Success, command: "inbox.mark-read", data: result2, human: `Marked ${result2.markedRead} Inbox entr${result2.markedRead === 1 ? "y" : "ies"} read${result2.alreadyRead ? `; ${result2.alreadyRead} already read` : ""}${skipped ? `; ${skipped} skipped (not in Inbox)` : ""}${result2.refreshWarning ? ` (sync failed: ${result2.refreshWarning})` : ""}.
 ` };
     }
     if (show) {
@@ -15934,11 +16044,12 @@ marked read: ${markedRead}${markWarning ? ` (mark failed: ${markWarning})` : ""}
     const summaryChars = summaryText === void 0 ? void 0 : Number(summaryText);
     if (limit !== void 0 && (!Number.isInteger(limit) || limit < 1 || limit > 100)) return invalidArgument("--limit must be an integer between 1 and 100");
     if (summaryChars !== void 0 && (!Number.isInteger(summaryChars) || summaryChars < 0 || summaryChars > 500)) return invalidArgument("--summary-chars must be an integer between 0 and 500");
-    const result = await getInbox({ forumAlias, ...identityId ? { identityId } : {}, sync: !parsed.flags.has("--no-sync"), ...limit !== void 0 ? { limit } : {}, ...summaryChars !== void 0 ? { summaryChars } : {}, markRead: parsed.flags.has("--mark-read"), markAllRead: parsed.flags.has("--mark-all-read") });
-    return { exitCode: ExitCode.Success, command: "inbox", data: result, human: result.entries.length === 0 ? `No unread entries.
+    const roomIdValue = parsed.values.get("--room");
+    const result = await getInbox({ forumAlias, ...identityId ? { identityId } : {}, sync: !parsed.flags.has("--no-sync"), ...limit !== void 0 ? { limit } : {}, ...summaryChars !== void 0 ? { summaryChars } : {}, markRead: parsed.flags.has("--mark-read"), markAllRead: parsed.flags.has("--mark-all-read"), ...roomIdValue !== void 0 ? { roomId: roomIdValue } : {}, all: parsed.flags.has("--all"), full: parsed.flags.has("--full") });
+    return { exitCode: ExitCode.Success, command: "inbox", data: result, human: result.entries.length === 0 ? `No unread entries (scope: ${result.scope}).
 marked read: ${result.markedRead}
 ` : `${result.entries.map((entry) => `${entry.createdAt}	${entry.relevance}	${entry.roomSlug}	${entry.type}	${entry.summary}`).join("\n")}
-unread: ${result.totalUnread}${result.hasMore ? " (more available)" : ""}
+unread: ${result.totalUnread} (scope: ${result.scope})${result.hasMore ? " (more available)" : ""}
 ` };
   } catch (error) {
     const command = markSpecific ? "inbox.mark-read" : show ? "inbox.show" : "inbox";
@@ -17045,12 +17156,18 @@ async function doctorSkill(target2, homeDirectory = homedir2()) {
     ok: target2 === "pi" || await pathExists4(dashboardHost) && await pathExists4(dashboardPage),
     host: dashboardHost
   };
+  const version2 = {
+    ok: installation.status === "installed" && installation.version === VERSION,
+    installed: installation.status === "installed" ? installation.version ?? null : null,
+    current: VERSION
+  };
   return {
-    ok: node.ok && gitResult.ok && installation.status === "installed" && dashboard.ok,
+    ok: node.ok && gitResult.ok && installation.status === "installed" && dashboard.ok && version2.ok,
     node,
     git: gitResult,
     installation,
-    dashboard
+    dashboard,
+    version: version2
   };
 }
 
@@ -17323,7 +17440,7 @@ commit: ${result.commit}
     if (subcommand === "show") {
       const parsed = parseCommandOptions(args2.slice(1), {
         values: ["--forum", "--room", "--thread"],
-        flags: ["--no-sync"]
+        flags: ["--no-sync", "--mark-read"]
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = required(parsed, "--forum");
@@ -17334,14 +17451,20 @@ commit: ${result.commit}
       if (typeof thread !== "string") return thread;
       const freshness = await refreshForRead(forumAlias, { noSync: parsed.flags.has("--no-sync") });
       const result = await showThread(forumAlias, room, thread);
+      let markedRead = 0;
+      if (parsed.flags.has("--mark-read")) {
+        const marked = await markThreadRead({ forumAlias, room, thread });
+        markedRead = marked.markedRead;
+      }
       return {
         exitCode: ExitCode.Success,
         command: "thread.show",
-        data: { ...result, freshness },
+        data: { ...result, freshness, markedRead },
         human: `${result.thread.title}
 status: ${result.thread.status}
 kind: ${result.thread.kind}
-messages: ${result.thread.messageCount}
+messages: ${result.thread.messageCount}${parsed.flags.has("--mark-read") ? `
+marked read: ${markedRead}` : ""}
 `
       };
     }
@@ -18493,6 +18616,12 @@ Replaced ${result.replacedSessionIds.length} existing Viewer session(s) for this
   }
 }
 
+// src/cli.ts
+import { randomUUID as randomUUID8 } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 // src/output/result.ts
 function success(command, data) {
   return { ok: true, command, data };
@@ -18538,19 +18667,39 @@ Commands:
 
 Options:
   --json             Emit a stable machine-readable result
+  --to-file          Write JSON to a temp file and print its path (avoids pipe truncation)
+  --no-warnings      Omit the warnings field from JSON success output
 `;
-function writeJson(io, value) {
-  io.stdout(`${JSON.stringify(value)}
+function writeJson(io, value, options = {}) {
+  const output2 = options.noWarnings && isSuccessWithWarnings(value) ? { ...value, data: { ...value.data, warnings: void 0 } } : value;
+  if (options.toFile) {
+    const file = join(tmpdir(), `agent-forum-${process.pid}-${randomUUID8()}.json`);
+    writeFileSync(file, `${JSON.stringify(output2)}
+`, { encoding: "utf8", mode: 384 });
+    io.stdout(`${file}
 `);
+    return;
+  }
+  io.stdout(`${JSON.stringify(output2)}
+`);
+}
+function isSuccessWithWarnings(value) {
+  return Boolean(
+    value && typeof value === "object" && "ok" in value && value.ok === true && "data" in value && value.data !== null && typeof value.data === "object" && "warnings" in value.data
+  );
 }
 async function runCli(args2, io = defaultIo) {
   const json = args2.includes("--json");
-  const positional2 = args2.filter((arg) => arg !== "--json");
+  const toFile = args2.includes("--to-file");
+  const noWarnings = args2.includes("--no-warnings");
+  const emitJson = (value) => writeJson(io, value, { toFile, noWarnings });
+  const positional2 = args2.filter(
+    (arg) => arg !== "--json" && arg !== "--to-file" && arg !== "--no-warnings"
+  );
   const command = positional2[0];
   if (command === void 0 || command === "help" || command === "--help" || command === "-h") {
     if (json) {
-      writeJson(
-        io,
+      emitJson(
         success("help", {
           name: CLI_NAME,
           packageName: PACKAGE_NAME,
@@ -18583,8 +18732,7 @@ async function runCli(args2, io = defaultIo) {
   }
   if (command === "version" || command === "--version" || command === "-v") {
     if (json) {
-      writeJson(
-        io,
+      emitJson(
         success("version", {
           name: CLI_NAME,
           packageName: PACKAGE_NAME,
@@ -18608,8 +18756,7 @@ async function runCli(args2, io = defaultIo) {
         await invalidateDashboard().catch(() => void 0);
       }
       if (json) {
-        writeJson(
-          io,
+        emitJson(
           execution.error ? failure(
             execution.error.code,
             execution.error.message,
@@ -18627,7 +18774,7 @@ async function runCli(args2, io = defaultIo) {
         "UNEXPECTED_ERROR",
         "The command failed unexpectedly. Check the managed files, Git installation, and filesystem permissions."
       );
-      if (json) writeJson(io, unexpected);
+      if (json) emitJson(unexpected);
       else io.stderr(`Error [${unexpected.error.code}]: ${unexpected.error.message}
 `);
       return ExitCode.Unexpected;
@@ -18638,7 +18785,7 @@ async function runCli(args2, io = defaultIo) {
     `Unknown command: ${command}. Run '${CLI_NAME} --help' for usage.`
   );
   if (json) {
-    writeJson(io, result);
+    emitJson(result);
   } else {
     io.stderr(`Error [${result.error.code}]: ${result.error.message}
 `);

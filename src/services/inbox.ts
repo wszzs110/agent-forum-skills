@@ -4,6 +4,7 @@ import {
   findForum,
   findIdentity,
   loadLocalConfig,
+  type LocalForumRegistration,
 } from "../config/local-config.js";
 import { currentUtcTimestamp } from "../domain/timestamps.js";
 import { validateProtocolDocument } from "../protocol/validator.js";
@@ -16,11 +17,14 @@ import {
   type AgentForumPaths,
 } from "../storage/paths.js";
 import { ServiceError } from "./errors.js";
+import { resolveContext } from "./context.js";
+import { ContextError } from "../context/bindings.js";
 import { refreshForumFromRemote, type ForumRefreshResult } from "./forum-sync.js";
 import { listIdentityAttention } from "./identity-attention.js";
 import { listWatchedThreadIds } from "./thread-watch.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import {
+  dedupeWarnings,
   listRooms,
   protocolWarning,
   readJsonDocument,
@@ -110,7 +114,7 @@ export async function getInboxReadCursor(
   return { memberId: identity.memberId, seenIds: cursor.seenIds, updatedAt: cursor.updatedAt };
 }
 
-async function appendSeenIds(
+export async function appendSeenIds(
   forumId: string,
   memberId: string,
   ids: readonly string[],
@@ -197,6 +201,7 @@ async function collectRelevantEntries(
   forumAlias: string,
   memberId: string,
   paths: AgentForumPaths,
+  roomIds?: Set<string>,
 ): Promise<{ entries: InboxEntry[]; warnings: ProtocolWarning[] }> {
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, forumAlias);
@@ -204,6 +209,7 @@ async function collectRelevantEntries(
   const entries: InboxEntry[] = [];
   const warnings = [...rooms.warnings];
   for (const room of rooms.rooms) {
+    if (roomIds && !roomIds.has(room.id)) continue;
     const membershipPath = resolve(
       registration.path,
       "rooms",
@@ -282,7 +288,7 @@ async function collectRelevantEntries(
     }
   }
   const unique = new Map(entries.map((entry) => [entry.id, entry]));
-  return { entries: [...unique.values()], warnings };
+  return { entries: [...unique.values()], warnings: dedupeWarnings(warnings) };
 }
 
 function classifyEntries(entries: InboxEntry[], attentionIds: Set<string>, watchedIds: Set<string>): InboxEntry[] {
@@ -334,10 +340,15 @@ export async function getAllUnreadInboxEntries(
   };
 }
 
+export interface InboxMarkResult {
+  id: string;
+  status: "read" | "already-read" | "skipped";
+}
+
 export async function markInboxEntriesRead(
   input: { forumAlias: string; identityId?: string; ids: string[]; sync?: boolean },
   paths: AgentForumPaths = createAgentForumPaths(),
-): Promise<{ ids: string[]; markedRead: number; alreadyRead: number; warnings: ProtocolWarning[]; sync: ForumRefreshResult | null; refreshWarning: string | null }> {
+): Promise<{ ids: string[]; markedRead: number; alreadyRead: number; results: InboxMarkResult[]; warnings: ProtocolWarning[]; sync: ForumRefreshResult | null; refreshWarning: string | null }> {
   const ids = [...new Set(input.ids)];
   if (ids.length === 0) throw new ServiceError("PROTOCOL_DATA_DAMAGED", "at least one Inbox entry ID is required");
   // 同步失败（如 forum 锁被 dashboard/viewer 的读刷新占用）时降级为基于本地数据标记，
@@ -358,10 +369,37 @@ export async function markInboxEntriesRead(
   if (publicProfile.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
   const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
   const eligible = new Set(collected.entries.filter((entry) => entry.actorId !== identity.memberId).map((entry) => entry.id));
-  const unknown = ids.filter((id) => !eligible.has(id));
-  if (unknown.length > 0) throw new ServiceError("MESSAGE_NOT_FOUND", `Inbox entries were not found or are outside active Room membership: ${unknown.join(", ")}`);
-  const result = await appendSeenIds(registration.forumId, identity.memberId, ids, paths);
-  return { ids, ...result, warnings: collected.warnings, sync, refreshWarning };
+  const cursor = await loadCursor(paths, registration.forumId, identity.memberId);
+  const seen = new Set(cursor.seenIds);
+  // 部分成功：不在收件箱的 id 自动跳过（skipped），不再整体失败。
+  const markedIds = ids.filter((id) => eligible.has(id));
+  const results: InboxMarkResult[] = ids.map((id) => {
+    if (!eligible.has(id)) return { id, status: "skipped" as const };
+    return { id, status: seen.has(id) ? ("already-read" as const) : ("read" as const) };
+  });
+  const result = markedIds.length > 0
+    ? await appendSeenIds(registration.forumId, identity.memberId, markedIds, paths)
+    : { markedRead: 0, alreadyRead: 0 };
+  return { ids, ...result, results, warnings: collected.warnings, sync, refreshWarning };
+}
+
+/**
+ * 将线程内所有消息（含自己发布的）标记为已读。
+ * 线程是 AI 实际完整阅读的单位，不受收件箱 eligibility 限制。
+ */
+export async function markThreadRead(
+  input: { forumAlias: string; room: string; thread: string; identityId?: string },
+  paths: AgentForumPaths = createAgentForumPaths(),
+): Promise<{ threadId: string; markedRead: number; alreadyRead: number; warnings: ProtocolWarning[] }> {
+  const detail = await showThread(input.forumAlias, input.room, input.thread, paths);
+  const config = await loadLocalConfig(paths);
+  const registration = findForum(config, input.forumAlias);
+  const identity = findIdentity(config, input.identityId);
+  const ids = detail.messages.map((message) => message.id);
+  const result = ids.length > 0
+    ? await appendSeenIds(registration.forumId, identity.memberId, ids, paths)
+    : { markedRead: 0, alreadyRead: 0 };
+  return { threadId: detail.thread.id, ...result, warnings: detail.warnings };
 }
 
 function balancedPage(entries: InboxEntry[], limit: number): InboxEntry[] {
@@ -417,6 +455,97 @@ export async function showInboxEntry(
   return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback" as const, sync, refreshWarning };
 }
 
+export type InboxScope = "bound" | "room" | "all";
+
+interface InboxRoomScope {
+  scope: InboxScope;
+  roomIds: Set<string> | undefined;
+}
+
+/**
+ * 解析收件箱的取数范围：默认按当前绑定房间隔离（无绑定时报错），
+ * 也可用 --room 指定房间或 --all 拉取全部房间。
+ */
+async function resolveInboxRoomScope(
+  input: { forumAlias: string; roomId?: string; all?: boolean },
+  registration: LocalForumRegistration,
+  paths: AgentForumPaths,
+): Promise<InboxRoomScope> {
+  if (input.all) return { scope: "all", roomIds: undefined };
+  if (input.roomId) {
+    const room = await findRoomByScope(registration, input.roomId, paths);
+    return { scope: "room", roomIds: new Set([room.id]) };
+  }
+  try {
+    const context = await resolveContext({}, paths);
+    if (context.forumId !== registration.forumId) {
+      throw new ServiceError(
+        "INBOX_SCOPE_BOUND_MISMATCH",
+        `the bound context Forum (${context.forumAlias}) differs from the requested --forum (${registration.alias}); use --room <slug> or --all`,
+      );
+    }
+    return { scope: "bound", roomIds: new Set([context.roomId]) };
+  } catch (error) {
+    if (error instanceof ContextError && error.code === "CONTEXT_NOT_BOUND") {
+      throw new ServiceError(
+        "INBOX_SCOPE_REQUIRED",
+        "no bound context; use --room <slug> or --all to select a scope",
+      );
+    }
+    throw error;
+  }
+}
+
+async function findRoomByScope(
+  registration: LocalForumRegistration,
+  roomIdOrSlug: string,
+  paths: AgentForumPaths,
+): Promise<{ id: string }> {
+  const rooms = await listRooms(registration.alias, paths);
+  const room = rooms.rooms.find(
+    (item) => item.id === roomIdOrSlug || item.slug === roomIdOrSlug,
+  );
+  if (!room) {
+    throw new ServiceError(
+      "ROOM_NOT_FOUND",
+      `Room not found: ${roomIdOrSlug}`,
+    );
+  }
+  return { id: room.id };
+}
+
+/**
+ * --full 模式：从快照缓存读取条目完整正文（Message body / Event reason），
+ * 缓存未命中时退回原有摘要。
+ */
+async function fullContentPage(
+  page: InboxEntry[],
+  forumAlias: string,
+  paths: AgentForumPaths,
+): Promise<Array<InboxEntry & { summaryTruncated: boolean }>> {
+  try {
+    const cached = await getForumSnapshot(forumAlias, paths);
+    const items = new Map(
+      cached.snapshot.rooms.flatMap((room) => [
+        ...room.events.map((event) => [event.id, event] as const),
+        ...room.threads.flatMap((thread) => thread.timeline.map((item) => [item.id, item] as const)),
+      ]),
+    );
+    return page.map((entry) => {
+      const item = items.get(entry.id);
+      const content = item?.kind === "message" ? item.body : item?.kind === "event" ? item.reason : undefined;
+      return {
+        ...entry,
+        ...(content !== undefined ? { summary: content } : {}),
+        summaryTruncated: false,
+      };
+    });
+  } catch {
+    // 缓存不可用时退回原摘要（可能仍被截断）。
+    return page.map((entry) => ({ ...entry, summaryTruncated: entry.summaryTruncated }));
+  }
+}
+
 export async function getInbox(
   input: {
     forumAlias: string;
@@ -426,6 +555,9 @@ export async function getInbox(
     markRead?: boolean;
     markAllRead?: boolean;
     summaryChars?: number;
+    roomId?: string;
+    all?: boolean;
+    full?: boolean;
   },
   paths: AgentForumPaths = createAgentForumPaths(),
 ): Promise<{
@@ -434,6 +566,7 @@ export async function getInbox(
   relevanceCounts: { direct: number; watched: number; priority: number; discovery: number };
   hasMore: boolean;
   markedRead: number;
+  scope: InboxScope;
   warnings: ProtocolWarning[];
   sync: ForumRefreshResult | null;
 }> {
@@ -459,8 +592,13 @@ export async function getInbox(
       `identity is not an active Forum member: ${identity.memberId}`,
     );
   }
+  const roomScope = await resolveInboxRoomScope(
+    { forumAlias: input.forumAlias, ...(input.roomId !== undefined ? { roomId: input.roomId } : {}), ...(input.all !== undefined ? { all: input.all } : {}) },
+    registration,
+    paths,
+  );
   const [collected, cursor, attention, watches] = await Promise.all([
-    collectRelevantEntries(input.forumAlias, identity.memberId, paths),
+    collectRelevantEntries(input.forumAlias, identity.memberId, paths, roomScope.roomIds),
     loadCursor(paths, registration.forumId, identity.memberId),
     listIdentityAttention({ forumAlias: input.forumAlias, ownerMemberId: identity.memberId }, paths),
     listWatchedThreadIds({ forumAlias: input.forumAlias, identityId: identity.memberId }, paths),
@@ -479,20 +617,24 @@ export async function getInbox(
   if (idsToMark.length > 0) await appendSeenIds(registration.forumId, identity.memberId, idsToMark, paths);
   const relevanceCounts = { direct: 0, watched: 0, priority: 0, discovery: 0 };
   for (const entry of unread) relevanceCounts[entry.relevance] += 1;
-  const displayed = page.map((entry) => {
-    const truncated = entry.summary.length > summaryChars;
-    return {
-      ...entry,
-      summary: summaryChars === 0 ? "" : truncated ? `${entry.summary.slice(0, Math.max(0, summaryChars - 3))}...` : entry.summary,
-      summaryTruncated: entry.summaryTruncated || truncated,
-    };
-  });
+  // --full：从快照缓存读取完整正文（body/reason），不截断摘要。
+  const displayed = input.full
+    ? await fullContentPage(page, input.forumAlias, paths)
+    : page.map((entry) => {
+      const truncated = entry.summary.length > summaryChars;
+      return {
+        ...entry,
+        summary: summaryChars === 0 ? "" : truncated ? `${entry.summary.slice(0, Math.max(0, summaryChars - 3))}...` : entry.summary,
+        summaryTruncated: entry.summaryTruncated || truncated,
+      };
+    });
   return {
     entries: input.markAllRead ? [] : displayed,
     totalUnread: unread.length,
     relevanceCounts,
     hasMore: unread.length > page.length,
     markedRead: idsToMark.length,
+    scope: roomScope.scope,
     warnings: collected.warnings,
     sync: syncResult,
   };

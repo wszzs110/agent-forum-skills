@@ -59,6 +59,10 @@ test("doctor reports local-only forums without treating warnings as fatal", asyn
       ),
       true,
     );
+    // 数据健康检查项存在且无损坏时 ok
+    const dataCheck = result.checks.find((check) => check.id === "forum.a-team.data");
+    assert.equal(dataCheck !== undefined, true);
+    assert.equal(dataCheck?.status, "ok");
     const missing = await diagnoseAgentForum({ forumAlias: "missing" }, paths);
     assert.equal(missing.healthy, false);
   } finally {

@@ -13,6 +13,10 @@ import { executeSkillCommand } from "./commands/skill.js";
 import { executeThreadCommand } from "./commands/thread.js";
 import { executeViewerCommand } from "./commands/viewer.js";
 import { invalidateDashboard } from "./services/dashboard.js";
+import { randomUUID } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ExitCode, type ExitCodeValue } from "./errors.js";
 import { failure, success } from "./output/result.js";
 import { CLI_NAME, PACKAGE_NAME, VERSION } from "./version.js";
@@ -52,10 +56,40 @@ Commands:
 
 Options:
   --json             Emit a stable machine-readable result
+  --to-file          Write JSON to a temp file and print its path (avoids pipe truncation)
+  --no-warnings      Omit the warnings field from JSON success output
 `;
 
-function writeJson(io: CliIo, value: unknown): void {
-  io.stdout(`${JSON.stringify(value)}\n`);
+function writeJson(
+  io: CliIo,
+  value: unknown,
+  options: { toFile?: boolean; noWarnings?: boolean } = {},
+): void {
+  // --no-warnings：成功结果的 data 中省略 warnings 字段，减小 JSON 体积。
+  const output = options.noWarnings && isSuccessWithWarnings(value)
+    ? { ...value, data: { ...value.data, warnings: undefined } }
+    : value;
+  // --to-file：JSON 写入系统临时目录的唯一文件，stdout 只输出文件路径，避免大输出管道截断与污染 git 工作区。
+  if (options.toFile) {
+    const file = join(tmpdir(), `agent-forum-${process.pid}-${randomUUID()}.json`);
+    writeFileSync(file, `${JSON.stringify(output)}\n`, { encoding: "utf8", mode: 0o600 });
+    io.stdout(`${file}\n`);
+    return;
+  }
+  io.stdout(`${JSON.stringify(output)}\n`);
+}
+
+function isSuccessWithWarnings(value: unknown): value is { ok: true; data: { warnings?: unknown } } {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "ok" in value &&
+      (value as { ok?: unknown }).ok === true &&
+      "data" in value &&
+      (value as { data?: unknown }).data !== null &&
+      typeof (value as { data?: unknown }).data === "object" &&
+      "warnings" in (value as { data: { warnings?: unknown } }).data,
+  );
 }
 
 export async function runCli(
@@ -63,7 +97,12 @@ export async function runCli(
   io: CliIo = defaultIo,
 ): Promise<ExitCodeValue> {
   const json = args.includes("--json");
-  const positional = args.filter((arg) => arg !== "--json");
+  const toFile = args.includes("--to-file");
+  const noWarnings = args.includes("--no-warnings");
+  const emitJson = (value: unknown) => writeJson(io, value, { toFile, noWarnings });
+  const positional = args.filter(
+    (arg) => arg !== "--json" && arg !== "--to-file" && arg !== "--no-warnings",
+  );
   const command = positional[0];
 
   if (
@@ -73,8 +112,7 @@ export async function runCli(
     command === "-h"
   ) {
     if (json) {
-      writeJson(
-        io,
+      emitJson(
         success("help", {
           name: CLI_NAME,
           packageName: PACKAGE_NAME,
@@ -108,8 +146,7 @@ export async function runCli(
 
   if (command === "version" || command === "--version" || command === "-v") {
     if (json) {
-      writeJson(
-        io,
+      emitJson(
         success("version", {
           name: CLI_NAME,
           packageName: PACKAGE_NAME,
@@ -175,8 +212,7 @@ export async function runCli(
         await invalidateDashboard().catch(() => undefined);
       }
       if (json) {
-        writeJson(
-          io,
+        emitJson(
           execution.error
             ? failure(
                 execution.error.code,
@@ -196,7 +232,7 @@ export async function runCli(
         "UNEXPECTED_ERROR",
         "The command failed unexpectedly. Check the managed files, Git installation, and filesystem permissions.",
       );
-      if (json) writeJson(io, unexpected);
+      if (json) emitJson(unexpected);
       else io.stderr(`Error [${unexpected.error.code}]: ${unexpected.error.message}\n`);
       return ExitCode.Unexpected;
     }
@@ -208,7 +244,7 @@ export async function runCli(
   );
 
   if (json) {
-    writeJson(io, result);
+    emitJson(result);
   } else {
     io.stderr(`Error [${result.error.code}]: ${result.error.message}\n`);
   }

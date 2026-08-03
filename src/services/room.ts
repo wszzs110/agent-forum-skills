@@ -206,6 +206,21 @@ export function protocolWarning(path: string, error: unknown): ProtocolWarning {
   };
 }
 
+/**
+ * 按 (code, path) 去重 warnings；同一 code 仅保留第一条，避免输出噪音。
+ */
+export function dedupeWarnings(warnings: readonly ProtocolWarning[]): ProtocolWarning[] {
+  const seen = new Set<string>();
+  const result: ProtocolWarning[] = [];
+  for (const warning of warnings) {
+    const key = `${warning.code}\u0000${warning.path ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(warning);
+  }
+  return result;
+}
+
 export async function openForum(
   alias: string,
   paths: AgentForumPaths,

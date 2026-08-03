@@ -12,6 +12,7 @@ import {
 } from "../storage/paths.js";
 import { listConflicts } from "./conflicts.js";
 import { getForumRemoteStatus } from "./forum-remote.js";
+import { getForumSnapshot } from "./timeline-cache.js";
 
 export interface DoctorCheck {
   id: string;
@@ -154,6 +155,28 @@ export async function diagnoseAgentForum(
       }
     } else {
       checks.push({ id: `${prefix}.lock`, status: "ok", message: "no forum lock" });
+    }
+
+    // 数据健康：扫描损坏记录（schema 非法消息等）。损坏叶子记录被隔离展示，不影响无关操作。
+    try {
+      const cached = await getForumSnapshot(forum.alias, paths);
+      const damageWarnings = cached.snapshot.warnings.filter(
+        (warning) =>
+          warning.code === "INVALID_MESSAGE_PATH" ||
+          warning.code === "INVALID_MESSAGE_BODY" ||
+          warning.code === "PROTOCOL_DATA_DAMAGED",
+      );
+      const uniquePaths = [...new Set(damageWarnings.map((warning) => warning.path))];
+      checks.push({
+        id: `${prefix}.data`,
+        status: uniquePaths.length > 0 ? "warning" : "ok",
+        message: uniquePaths.length > 0
+          ? `${uniquePaths.length} damaged record(s) detected; they are isolated and do not block unrelated work`
+          : "no damaged records",
+        ...(uniquePaths.length > 0 ? { details: uniquePaths.slice(0, 10) } : {}),
+      });
+    } catch (error) {
+      checks.push({ id: `${prefix}.data`, status: "warning", message: error instanceof Error ? error.message : String(error) });
     }
   }
 

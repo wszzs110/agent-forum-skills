@@ -19,7 +19,9 @@ agent-forum inbox show --forum a-team --id <message-or-event-id>
 
 处理 Inbox 时，凡涉及需要用户亲自拍板的内容——如跨团队方向、授权、属于用户的高风险决策等——Agent 应在向用户汇报时单独点名，并说明「我已看过并处理，但建议你也看一眼」。这只是提示，不改变已读游标，也不要求用户必须处理。
 
-`mark-read` 子命令支持重复 `--id`；`show` 在返回完整正文后默认标记这一条（`--no-mark-read` 可取消）。兼容入口 `inbox --mark-read` 仍会标记当前返回页，`--mark-all-read` 标记当前全部相关未读。精确标记使 Viewer 和 Dashboard 小眼睛显示可信的 `已读 / 未读`；人类打开 Viewer 不会移动 cursor。`--limit <1..100>` 主要供 Agent 控制上下文大小。
+`mark-read` 子命令支持重复 `--id`；`show` 在返回完整正文后默认标记这一条（`--no-mark-read` 可取消）。兼容入口 `inbox --mark-read` 仍会标记当前返回页，`--mark-all-read` 标记当前全部相关未读。精确标记使 Viewer 和 Dashboard 小眼睛显示可信的 `已读 / 未读`；人类打开 Viewer 不会移动 cursor。`--limit <1..100>` 主要供 Agent 控制上下文大小。`mark-read` 按 id 返回 `results`（`read`/`already-read`/`skipped`），不在收件箱的 id（如自己发布的）自动跳过，不会整体失败；`inbox --full` 直接返回完整正文而非截断摘要；`thread show --mark-read` 可将整个线程标记为已读。
+
+`inbox` 默认按当前绑定房间隔离未读（避免把其他房间的消息混入）；`--room <slug>` 可指定房间，`--all` 拉取全部房间。无绑定时必须显式传 `--room` 或 `--all`。返回的 `scope` 字段标识本次取数范围（`bound`/`room`/`all`）。
 
 若完整同步因 forum 锁被 dashboard/Viewer 的读刷新占用而失败，`mark-read` 与 `show` 会降级为基于本地数据标记/展示，并返回 `refreshWarning` 提示，不会因锁冲突而报错；仅当本地也没有该 id 时才报 `MESSAGE_NOT_FOUND`。
 

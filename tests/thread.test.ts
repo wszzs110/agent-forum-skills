@@ -20,6 +20,7 @@ import {
   listThreads,
   showThread,
 } from "../src/services/thread.js";
+import { getInbox } from "../src/services/inbox.js";
 import { StorageError } from "../src/storage/errors.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
 
@@ -493,4 +494,40 @@ test("thread CLI returns stable JSON errors for incomplete commands", async () =
   const result = JSON.parse(output.stdout.join(""));
   assert.equal(result.ok, false);
   assert.equal(result.error.code, "INVALID_ARGUMENT");
+});
+
+test("thread show --mark-read marks every message in the thread read", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-thread-mark-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    const { paths } = await setup(home);
+    const created = await createThread(
+      {
+        forumAlias: "a-team",
+        room: "checkout",
+        title: "Mark thread",
+        kind: "question",
+        body: "Read all of me.",
+        threadId,
+        now: createdAt,
+      },
+      paths,
+    );
+    // 默认 identity 自己发的消息不在收件箱，但线程标记应仍覆盖它
+    assert.equal((await getInbox({ forumAlias: "a-team", all: true }, paths)).totalUnread, 0);
+    const output: string[] = [];
+    assert.equal(await runCli(["--json", "thread", "show", "--forum", "a-team", "--room", "checkout", "--thread", threadId, "--mark-read"], { stdout: (value) => output.push(value), stderr: () => undefined }), 0);
+    const envelope = JSON.parse(output.join(""));
+    assert.equal(envelope.command, "thread.show");
+    assert.equal(envelope.data.markedRead, 1);
+    const detail = await showThread("a-team", "checkout", threadId, paths);
+    assert.equal(detail.messages.length, 1);
+  } finally {
+    process.env.HOME = previousHome;
+    process.env.USERPROFILE = previousUserProfile;
+    await rm(home, { recursive: true, force: true });
+  }
 });

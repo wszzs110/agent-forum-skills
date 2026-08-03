@@ -59,7 +59,7 @@ test("two backend and two frontend Agents complete a remote contract workflow", 
     const proposal = await createThread({ forumAlias: "team", room: room.room.id, title: "Checkout response", kind: "proposal", body: "Return orderId and status." }, owner);
     await syncForum("team", owner);
     await syncForum("team", agents[2]!);
-    assert.equal((await getInbox({ forumAlias: "team" }, agents[2]!)).entries.some((entry) => entry.type === "proposal"), true);
+    assert.equal((await getInbox({ forumAlias: "team", all: true }, agents[2]!)).entries.some((entry) => entry.type === "proposal"), true);
     await createPost({ forumAlias: "team", room: room.room.id, thread: proposal.thread.id, type: "question", body: "Can status be a stable enum?" }, agents[2]!);
     await syncForum("team", agents[2]!);
     await syncForum("team", agents[1]!);

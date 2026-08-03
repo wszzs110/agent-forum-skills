@@ -34,6 +34,7 @@ import {
 import { ServiceError } from "./errors.js";
 import { assertRoomPublishAllowed } from "./publish-policy.js";
 import {
+  dedupeWarnings,
   openForum,
   protocolWarning,
   readJsonDocument,
@@ -550,7 +551,7 @@ export async function listThreads(
     const byActivity = right.lastActivityAt.localeCompare(left.lastActivityAt);
     return byActivity || left.id.localeCompare(right.id);
   });
-  return { room: roomResult.room, threads, warnings };
+  return { room: roomResult.room, threads, warnings: dedupeWarnings(warnings) };
 }
 
 export async function showThread(
@@ -577,7 +578,7 @@ export async function showThread(
     room: roomResult.room,
     thread: result.thread,
     messages: result.messages,
-    warnings: [...roomResult.warnings, ...result.warnings],
+    warnings: dedupeWarnings([...roomResult.warnings, ...result.warnings]),
   };
 }
 

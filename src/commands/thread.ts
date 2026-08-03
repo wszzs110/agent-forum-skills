@@ -5,6 +5,7 @@ import {
   listThreads,
   showThread,
 } from "../services/thread.js";
+import { markThreadRead } from "../services/inbox.js";
 import { listWatchedThreadIds, setThreadWatch } from "../services/thread-watch.js";
 import { refreshForRead } from "../services/read-freshness.js";
 import { commandError, invalidArgument } from "./error-result.js";
@@ -139,7 +140,7 @@ export async function executeThreadCommand(
     if (subcommand === "show") {
       const parsed = parseCommandOptions(args.slice(1), {
         values: ["--forum", "--room", "--thread"],
-        flags: ["--no-sync"],
+        flags: ["--no-sync", "--mark-read"],
       });
       if ("error" in parsed) return invalidArgument(parsed.error);
       const forumAlias = required(parsed, "--forum");
@@ -150,11 +151,16 @@ export async function executeThreadCommand(
       if (typeof thread !== "string") return thread;
       const freshness = await refreshForRead(forumAlias, { noSync: parsed.flags.has("--no-sync") });
       const result = await showThread(forumAlias, room, thread);
+      let markedRead = 0;
+      if (parsed.flags.has("--mark-read")) {
+        const marked = await markThreadRead({ forumAlias, room, thread });
+        markedRead = marked.markedRead;
+      }
       return {
         exitCode: ExitCode.Success,
         command: "thread.show",
-        data: { ...result, freshness },
-        human: `${result.thread.title}\nstatus: ${result.thread.status}\nkind: ${result.thread.kind}\nmessages: ${result.thread.messageCount}\n`,
+        data: { ...result, freshness, markedRead },
+        human: `${result.thread.title}\nstatus: ${result.thread.status}\nkind: ${result.thread.kind}\nmessages: ${result.thread.messageCount}${parsed.flags.has("--mark-read") ? `\nmarked read: ${markedRead}` : ""}\n`,
       };
     }
 

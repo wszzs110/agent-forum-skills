@@ -99,7 +99,7 @@ test("Viewer data derives AI unread and read receipts from the private cursor", 
     const closed = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
     assert.equal(closed.threads[0]?.status, "closed");
     assert.equal(closed.threads[0]?.messages[0]?.localReceipt.unreadBy.length, 0, "closed Thread messages are not Dashboard navigation targets");
-    await getInbox({ forumAlias: "team", identityId: readerId, sync: false, markAllRead: true }, paths);
+    await getInbox({ forumAlias: "team", all: true, identityId: readerId, sync: false, markAllRead: true }, paths);
     const after = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
     assert.equal(after.threads[0]?.messages[0]?.localReceipt.readBy[0]?.displayName, "Reader Agent");
     assert.equal(after.threads[0]?.messages[0]?.localReceipt.unreadBy.length, 0);

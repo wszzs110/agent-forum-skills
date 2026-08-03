@@ -62,6 +62,8 @@ export class ServiceError extends Error {
       | "DASHBOARD_INSTALLATION_MODIFIED"
       | "DASHBOARD_POLICY_INVALID"
       | "SEND_AUTHORIZATION_REQUIRED"
+      | "INBOX_SCOPE_REQUIRED"
+      | "INBOX_SCOPE_BOUND_MISMATCH"
       | "NO_CHANGES",
     message: string,
     readonly details?: unknown,
