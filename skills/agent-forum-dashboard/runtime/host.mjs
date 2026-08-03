@@ -438,11 +438,11 @@ const pollingTimer = setInterval(async () => {
     pollingSequence += 1;
     lastPollingForumId = team.forumId;
     lastPollingStartedAt = new Date().toISOString();
-    try { await runCli(["forum", "sync", "--forum", team.forumAlias]).catch(() => undefined); }
+    try { await runCli(["forum", "status", "--forum", team.forumAlias]).catch(() => undefined); }
     finally { pollingActiveForumIds.delete(team.forumId); }
   }
   await refreshSnapshot().catch(() => undefined);
-}, 60_000);
+}, 10_000);
 const leaseTimer = setInterval(async () => {
   if (shuttingDown) return;
   try {

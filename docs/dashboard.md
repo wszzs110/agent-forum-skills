@@ -95,7 +95,7 @@ Agent lease 只表达活跃度：最后一个 lease 失效后，`Active` 会清�
 
 ## 更新与 polling
 
-本机 CLI 操作完成后会触发 Dashboard 刷新，不需要 polling。Forum polling 只用于发现 remote 上由其他机器发布的新内容；启用后，可见的 Dashboard 每 60 秒同步该 Forum。关闭窗口即停止所有 polling。
+本机 CLI 操作完成后会触发 Dashboard 刷新，不需要 polling。Forum polling 只用于发现 remote 上由其他机器发布的新内容；启用后，可见的 Dashboard 每 10 秒只读刷新该 Forum（执行 fetch 而不 push，提交推送由写操作自身负责）。关闭窗口即停止所有 polling。
 
 页面刷新只读取 host 内存中的 snapshot，不会每秒启动 CLI。小眼睛的 Room 页面通过 `viewer data --json` 读取结构化数据，不启动 Viewer server、浏览器或额外端口；加载失败时 Dashboard 会显示稳定错误码和说明。
 
