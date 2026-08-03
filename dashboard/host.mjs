@@ -180,16 +180,61 @@ async function attachToExisting(input) {
   return false;
 }
 
-/** 创建唯一 host 锁；无法附加的旧锁按已失效运行时清理。 */
+/** 判断锁记录的 host 进程是否仍然存在；权限错误按“仍存在”处理以避免误开第二个窗口。 */
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error && typeof error === "object" && error.code === "ESRCH" ? false : true;
+  }
+}
+
+/** 读取旧版本或异常退出留下的 host 锁记录。 */
+async function readLockOwner() {
+  try {
+    const value = JSON.parse(await readFile(lockFile, "utf8"));
+    return Number.isSafeInteger(value?.pid) && value.pid > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 从旧版本 runtime 记录补充活跃 host PID，避免升级期间误删仍在运行的锁。 */
+async function readRuntimeOwner() {
+  try {
+    const value = JSON.parse(await readFile(desktopFile, "utf8"));
+    return Number.isSafeInteger(value?.pid) && value.pid > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 创建唯一 host 锁；活跃 host 未完成启动时绝不强制删除其锁并再开窗口。 */
 async function acquireDesktopLock() {
   await mkdir(stateDirectory, { recursive: true, mode: 0o700 });
-  try { return await open(lockFile, "wx", 0o600); }
-  catch (error) {
+  try {
+    const handle = await open(lockFile, "wx", 0o600);
+    try {
+      await handle.writeFile(`${JSON.stringify({ formatVersion: 1, pid: process.pid, startedAt: new Date().toISOString() })}\n`, "utf8");
+      return handle;
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      await rm(lockFile, { force: true });
+      throw error;
+    }
+  } catch (error) {
     if (error && typeof error === "object" && error.code === "EEXIST") {
       if (await attachToExisting(initialClient)) process.exit(0);
+      const owner = await readLockOwner();
+      const runtimeOwner = await readRuntimeOwner();
+      const activePid = owner?.pid ?? runtimeOwner?.pid;
+      if (activePid && isProcessAlive(activePid)) throw new Error("Dashboard is already starting; refusing to open a second window");
       await rm(lockFile, { force: true });
       await rm(desktopFile, { force: true });
-      return open(lockFile, "wx", 0o600);
+      const handle = await open(lockFile, "wx", 0o600);
+      await handle.writeFile(`${JSON.stringify({ formatVersion: 1, pid: process.pid, startedAt: new Date().toISOString() })}\n`, "utf8");
+      return handle;
     }
     throw error;
   }

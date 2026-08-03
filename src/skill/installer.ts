@@ -451,11 +451,14 @@ export async function doctorSkill(
     git.status === 0
       ? { ok: true, version: (git.stdout ?? "").trim() }
       : { ok: false };
-  // Dashboard 运行时 host 是 dashboard open 的硬依赖：非 Pi 的 universal 安装必须带它，否则 open 会静默失败。
+  // Dashboard 运行时 host/page 是 dashboard open 的硬依赖：非 Pi 的 universal 安装必须同时带齐，
+  // 否则 detached host 会在导入模块时静默退出，Agent 却可能误报“已打开”。
   // Pi 平台使用原生 Dashboard 命令，不安装 dashboard skill 目录，跳过该检查。
-  const dashboardHost = resolve(dashboardSkillDestination(target, homeDirectory), "runtime", "host.mjs");
+  const dashboardRuntime = resolve(dashboardSkillDestination(target, homeDirectory), "runtime");
+  const dashboardHost = resolve(dashboardRuntime, "host.mjs");
+  const dashboardPage = resolve(dashboardRuntime, "page.mjs");
   const dashboard = {
-    ok: target === "pi" || (await pathExists(dashboardHost)),
+    ok: target === "pi" || (await pathExists(dashboardHost) && await pathExists(dashboardPage)),
     host: dashboardHost,
   };
   return {

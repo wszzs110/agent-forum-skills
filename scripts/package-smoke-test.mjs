@@ -37,6 +37,8 @@ if (result.status !== 0) {
     "skills/agent-forum/scripts/agent-forum.mjs",
     "skills/agent-forum-viewer/SKILL.md",
     "skills/agent-forum-dashboard/SKILL.md",
+    "skills/agent-forum-dashboard/runtime/host.mjs",
+    "skills/agent-forum-dashboard/runtime/page.mjs",
     "adapters/pi-dashboard.ts",
     "dashboard/host.mjs",
     "dashboard/page.mjs",

@@ -11,7 +11,7 @@ import { getDashboardInstallationStatus, getDashboardLaunchStatus, uninstallDash
 import { ensureDashboard } from "../services/dashboard-ensure.js";
 import { ServiceError } from "../services/errors.js";
 import { getDashboardAcquisitionPolicy, setDashboardAcquisitionPolicy, type DashboardAcquisitionPolicy } from "../services/dashboard-policy.js";
-import { attachExistingDashboardDesktop, closeExistingDashboardDesktop, detachExistingDashboardDesktop } from "../services/dashboard-desktop.js";
+import { attachExistingDashboardDesktop, closeExistingDashboardDesktop, detachExistingDashboardDesktop, waitForExistingDashboardDesktop } from "../services/dashboard-desktop.js";
 import { resolveContext } from "../services/context.js";
 import { commandError, invalidArgument } from "./error-result.js";
 import { parseCommandOptions, requireOption } from "./options.js";
@@ -148,6 +148,13 @@ export async function executeDashboardCommand(args: readonly string[], options: 
           "Dashboard host.mjs was not found; repair the Agent Forum skill installation (agent-forum skill update or reinstall)",
         );
       }
+      const pageEntrypoint = resolve(dirname(hostEntrypoint), "page.mjs");
+      if (!existsSync(pageEntrypoint)) {
+        throw new ServiceError(
+          "DASHBOARD_HOST_UNAVAILABLE",
+          "Dashboard page.mjs was not found beside host.mjs; repair the Agent Forum skill installation (agent-forum skill update or reinstall)",
+        );
+      }
       const executableName = process.platform === "win32" ? "agent-forum-dashboard.exe" : "agent-forum-dashboard";
       const developmentExecutable = [resolve(moduleDirectory, "..", "..", "dashboard", "tauri", "target", "release", executableName), resolve(moduleDirectory, "..", "..", "..", "dashboard", "tauri", "target", "release", executableName)].find(existsSync);
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && hostEntrypoint && developmentExecutable;
@@ -156,8 +163,14 @@ export async function executeDashboardCommand(args: readonly string[], options: 
       // Tauri、Node host 与缓存均使用私有 state 目录，绝不污染已校验的安装 payload。
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir(dashboardRuntimeDirectory, { recursive: true, mode: 0o700 });
+      const dashboardClient = { clientId, clientType, forumAlias: forum, roomId: room, ...(identity ? { identityId: identity } : {}) };
       const child = spawn(process.execPath, [hostEntrypoint], { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: process.execPath, AGENT_FORUM_CLI_SCRIPT: process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_EXECUTABLE: desktopExecutable, AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...(typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {}) } });
       child.unref();
+      // detached spawn 只代表 host 进程已创建；必须等共享 IPC 可用后再报告成功，
+      // 同时让并发 open 调用附着同一实例，而不是各自再启动一个窗口。
+      if (!(await waitForExistingDashboardDesktop(dashboardClient))) {
+        throw new ServiceError("DASHBOARD_HOST_UNAVAILABLE", "Dashboard host did not become ready; repair the Agent Forum skill installation or restart Dashboard");
+      }
       return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable, ...contextData }, human: `Dashboard started.${updateHint}\n` };
     }
     if (subcommand === "pin") {

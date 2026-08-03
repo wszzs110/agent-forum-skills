@@ -17,7 +17,20 @@ async function readDesktop(paths: AgentForumPaths): Promise<DashboardDesktopRunt
   } catch { return undefined; }
 }
 
-async function requestDesktop(pathname: string, body: unknown, paths: AgentForumPaths): Promise<boolean> {
+/** 判断 runtime 文件记录的 host 进程是否仍然存在；权限错误按“仍存在”处理以避免误开第二个窗口。 */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error && typeof error === "object" && "code" in error && error.code === "ESRCH" ? false : true;
+  }
+}
+
+/**
+ * 调用 Dashboard loopback IPC；启动竞态期间可以保留仍由活跃 host 持有的 runtime 文件。
+ */
+async function requestDesktop(pathname: string, body: unknown, paths: AgentForumPaths, cleanupStale = true): Promise<boolean> {
   const runtime = await readDesktop(paths);
   if (!runtime) return false;
   try {
@@ -28,13 +41,27 @@ async function requestDesktop(pathname: string, body: unknown, paths: AgentForum
       signal: AbortSignal.timeout(2_000),
     });
     if (response.ok) return true;
-  } catch { /* stale Desktop state is cleaned below */ }
-  await rm(paths.dashboardDesktopFile, { force: true });
+  } catch { /* 瞬态启动/响应失败交给调用方决定是否继续等待。 */ }
+  if (cleanupStale && !isProcessAlive(runtime.pid)) await rm(paths.dashboardDesktopFile, { force: true });
   return false;
 }
 
 export async function attachExistingDashboardDesktop(input: { clientId: string; clientType: string; forumAlias: string; roomId: string; identityId?: string }, paths = createAgentForumPaths()): Promise<boolean> {
   return requestDesktop("/attach", input, paths);
+}
+
+/** 等待刚启动的共享 host 写入可用 runtime，并通过 IPC 完成当前客户端附着。 */
+export async function waitForExistingDashboardDesktop(
+  input: { clientId: string; clientType: string; forumAlias: string; roomId: string; identityId?: string },
+  paths = createAgentForumPaths(),
+  timeoutMs = 15_000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await requestDesktop("/attach", input, paths, false)) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  return false;
 }
 
 export async function detachExistingDashboardDesktop(clientId: string, paths = createAgentForumPaths()): Promise<boolean> {

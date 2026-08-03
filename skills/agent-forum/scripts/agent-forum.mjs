@@ -290,7 +290,7 @@ async function acquireForumLock(options) {
   const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
   const currentHostname = options.hostname ?? hostname();
   const currentPid = options.pid ?? process.pid;
-  const isProcessAlive2 = options.isProcessAlive ?? defaultProcessAlive;
+  const isProcessAlive3 = options.isProcessAlive ?? defaultProcessAlive;
   const owner = {
     token: randomUUID(),
     pid: currentPid,
@@ -344,7 +344,7 @@ async function acquireForumLock(options) {
       }
       const age = await lockAgeMs(options.lockPath, existing, now);
       const sameHost = !existing || existing.hostname === currentHostname;
-      const alive = existing && sameHost ? isProcessAlive2(existing.pid) : false;
+      const alive = existing && sameHost ? isProcessAlive3(existing.pid) : false;
       const removable = sameHost && !alive && (existing !== void 0 || age >= staleAfterMs);
       if (attempt === 0 && removable) {
         try {
@@ -373,7 +373,7 @@ async function clearStaleForumLock(options) {
   const now = options.now ?? /* @__PURE__ */ new Date();
   const staleAfterMs = options.staleAfterMs ?? 10 * 60 * 1e3;
   const currentHostname = options.hostname ?? hostname();
-  const isProcessAlive2 = options.isProcessAlive ?? defaultProcessAlive;
+  const isProcessAlive3 = options.isProcessAlive ?? defaultProcessAlive;
   let owner;
   try {
     owner = await readOwner(options.lockPath);
@@ -393,7 +393,7 @@ async function clearStaleForumLock(options) {
     throw error;
   }
   const sameHost = !owner || owner.hostname === currentHostname;
-  const alive = owner && sameHost ? isProcessAlive2(owner.pid) : false;
+  const alive = owner && sameHost ? isProcessAlive3(owner.pid) : false;
   const removable = sameHost && !alive && (owner !== void 0 || age >= staleAfterMs);
   if (!removable) {
     throw new StorageError(
@@ -12543,8 +12543,8 @@ init_paths();
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.21" : "0.0.0-dev";
-var DASHBOARD_VERSION = true ? "0.0.21" : "0.0.0-dev";
+var VERSION = true ? "0.0.22" : "0.0.0-dev";
+var DASHBOARD_VERSION = true ? "0.0.22" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
@@ -14080,7 +14080,15 @@ async function readDesktop(paths) {
     return void 0;
   }
 }
-async function requestDesktop(pathname, body, paths) {
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error && typeof error === "object" && "code" in error && error.code === "ESRCH" ? false : true;
+  }
+}
+async function requestDesktop(pathname, body, paths, cleanupStale = true) {
   const runtime = await readDesktop(paths);
   if (!runtime) return false;
   try {
@@ -14093,11 +14101,19 @@ async function requestDesktop(pathname, body, paths) {
     if (response.ok) return true;
   } catch {
   }
-  await rm8(paths.dashboardDesktopFile, { force: true });
+  if (cleanupStale && !isProcessAlive(runtime.pid)) await rm8(paths.dashboardDesktopFile, { force: true });
   return false;
 }
 async function attachExistingDashboardDesktop(input, paths = createAgentForumPaths()) {
   return requestDesktop("/attach", input, paths);
+}
+async function waitForExistingDashboardDesktop(input, paths = createAgentForumPaths(), timeoutMs = 15e3) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await requestDesktop("/attach", input, paths, false)) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  return false;
 }
 async function detachExistingDashboardDesktop(clientId, paths = createAgentForumPaths()) {
   return requestDesktop("/detach", { clientId }, paths);
@@ -14256,6 +14272,13 @@ async function executeDashboardCommand(args2, options = {}) {
           "Dashboard host.mjs was not found; repair the Agent Forum skill installation (agent-forum skill update or reinstall)"
         );
       }
+      const pageEntrypoint = resolve18(dirname4(hostEntrypoint), "page.mjs");
+      if (!existsSync(pageEntrypoint)) {
+        throw new ServiceError(
+          "DASHBOARD_HOST_UNAVAILABLE",
+          "Dashboard page.mjs was not found beside host.mjs; repair the Agent Forum skill installation (agent-forum skill update or reinstall)"
+        );
+      }
       const executableName = process.platform === "win32" ? "agent-forum-dashboard.exe" : "agent-forum-dashboard";
       const developmentExecutable = [resolve18(moduleDirectory, "..", "..", "dashboard", "tauri", "target", "release", executableName), resolve18(moduleDirectory, "..", "..", "..", "dashboard", "tauri", "target", "release", executableName)].find(existsSync);
       const developmentFallback = installed.status === "not-installed" && (VERSION === "0.0.0-dev" || process.env.AGENT_FORUM_DASHBOARD_DEV === "1") && hostEntrypoint && developmentExecutable;
@@ -14263,8 +14286,12 @@ async function executeDashboardCommand(args2, options = {}) {
       const desktopExecutable = installed.status === "installed" ? installed.executable : developmentExecutable;
       const dashboardRuntimeDirectory = createAgentForumPaths().dashboardDirectory;
       await mkdir4(dashboardRuntimeDirectory, { recursive: true, mode: 448 });
+      const dashboardClient = { clientId, clientType, forumAlias: forum, roomId: room, ...identity ? { identityId: identity } : {} };
       const child = spawn2(process.execPath, [hostEntrypoint], { cwd: dashboardRuntimeDirectory, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, AGENT_FORUM_CLI: process.execPath, AGENT_FORUM_CLI_SCRIPT: process.argv[1] ?? "", AGENT_FORUM_DASHBOARD_EXECUTABLE: desktopExecutable, AGENT_FORUM_DASHBOARD_CLIENT_ID: clientId, AGENT_FORUM_DASHBOARD_CLIENT_TYPE: clientType, AGENT_FORUM_DASHBOARD_FORUM: forum, AGENT_FORUM_DASHBOARD_ROOM: room, ...typeof identity === "string" ? { AGENT_FORUM_DASHBOARD_IDENTITY: identity } : {} } });
       child.unref();
+      if (!await waitForExistingDashboardDesktop(dashboardClient)) {
+        throw new ServiceError("DASHBOARD_HOST_UNAVAILABLE", "Dashboard host did not become ready; repair the Agent Forum skill installation or restart Dashboard");
+      }
       return { exitCode: ExitCode.Success, command: "dashboard.open", data: { clientId, pid: child.pid, updateAvailable, ...contextData }, human: `Dashboard started.${updateHint}
 ` };
     }
@@ -16988,9 +17015,11 @@ async function doctorSkill(target2, homeDirectory = homedir2()) {
   const installation = await getSkillStatus(target2, homeDirectory);
   const node = { ok: major >= 20, version: process.versions.node, required: ">=20" };
   const gitResult = git.status === 0 ? { ok: true, version: (git.stdout ?? "").trim() } : { ok: false };
-  const dashboardHost = resolve22(dashboardSkillDestination(target2, homeDirectory), "runtime", "host.mjs");
+  const dashboardRuntime = resolve22(dashboardSkillDestination(target2, homeDirectory), "runtime");
+  const dashboardHost = resolve22(dashboardRuntime, "host.mjs");
+  const dashboardPage = resolve22(dashboardRuntime, "page.mjs");
   const dashboard = {
-    ok: target2 === "pi" || await pathExists4(dashboardHost),
+    ok: target2 === "pi" || await pathExists4(dashboardHost) && await pathExists4(dashboardPage),
     host: dashboardHost
   };
   return {
@@ -17993,7 +18022,7 @@ function sessionPath(paths, id) {
   if (!/^[0-9a-f-]{36}$/u.test(id)) throw new ServiceError("VIEWER_SESSION_NOT_FOUND", "invalid Viewer session ID");
   return resolve23(paths.viewerDirectory, `${id}.json`);
 }
-async function isProcessAlive(pid) {
+async function isProcessAlive2(pid) {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
@@ -18005,10 +18034,10 @@ async function isProcessAlive(pid) {
 async function waitForProcessExit(pid, timeoutMs = 5e3) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (!await isProcessAlive(pid)) return true;
+    if (!await isProcessAlive2(pid)) return true;
     await new Promise((resolveWait) => setTimeout(resolveWait, 50));
   }
-  return !await isProcessAlive(pid);
+  return !await isProcessAlive2(pid);
 }
 async function readSession(path2) {
   try {
@@ -18031,7 +18060,7 @@ async function listViewerSessions(paths = createAgentForumPaths()) {
   for (const name of names.filter((name2) => name2.endsWith(".json"))) {
     const path2 = resolve23(paths.viewerDirectory, name);
     const session = await readSession(path2);
-    if (session && await isProcessAlive(session.pid)) sessions.push(session);
+    if (session && await isProcessAlive2(session.pid)) sessions.push(session);
     else await rm12(path2, { force: true });
   }
   return sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
@@ -18047,7 +18076,7 @@ async function cleanViewerSessions(paths = createAgentForumPaths()) {
   for (const name of names.filter((name2) => name2.endsWith(".json") || name2.endsWith(".ready"))) {
     const path2 = resolve23(paths.viewerDirectory, name);
     const session = name.endsWith(".json") ? await readSession(path2) : void 0;
-    if (!session || !await isProcessAlive(session.pid)) {
+    if (!session || !await isProcessAlive2(session.pid)) {
       await rm12(path2, { force: true });
       removed += 1;
     }
@@ -18070,7 +18099,7 @@ async function stopViewerSessions(sessions, paths, options = {}) {
     } catch (error) {
       stopError = error;
     }
-    if (!await isProcessAlive(session.pid)) {
+    if (!await isProcessAlive2(session.pid)) {
       closed.push(session.sessionId);
       await rm12(sessionPath(paths, session.sessionId), { force: true });
       continue;
@@ -18230,7 +18259,7 @@ async function openViewer(input, paths = createAgentForumPaths()) {
     while (Date.now() < deadline) {
       session = await readSession(path2);
       if (session) break;
-      if (!await isProcessAlive(child.pid ?? -1)) break;
+      if (!await isProcessAlive2(child.pid ?? -1)) break;
       await new Promise((resolveWait) => setTimeout(resolveWait, 50));
     }
     if (!session) throw new ServiceError("VIEWER_START_FAILED", startError?.message ?? "Viewer did not become ready within 10 seconds");

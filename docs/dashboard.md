@@ -44,7 +44,7 @@ Desktop 程序不随 `npm install` 或 `postinstall` 自动下载。获取行为
 - `managed`：用户一次授权后，在用户明确要求使用 Dashboard 时，Agent 可自行下载、续传、校验、安装和修复；
 - `manual`：绝不联网下载，只给出官方 Release 页面并允许导入本地文件。
 
-打开时先调用 `dashboard open --json`。它会优先通过本机 IPC 附着已经运行的共享 Dashboard，不检查安装 payload，也不访问 GitHub。没有运行实例但已有安装时，open 只读取安装记录并检查 Tauri 可执行文件是否存在，随后直接启动；它不会为普通打开递归 hash 安装目录。完整校验保留给显式 `status`、`ensure`、update 与 repair。只有返回稳定错误码 `DASHBOARD_UNAVAILABLE` 时，才进入以下获取入口：
+打开时先调用 `dashboard open --json`。它会优先通过本机 IPC 附着已经运行的共享 Dashboard，不检查安装 payload，也不访问 GitHub。没有运行实例但已有安装时，open 只读取安装记录并检查 Tauri 可执行文件是否存在，随后启动 host 并等待 IPC 就绪；并发 open 会附着同一个 host，不会报告 detached 进程已创建就误称窗口已打开。Universal Skill 必须同时安装 `runtime/host.mjs` 与 `runtime/page.mjs`，缺失时明确返回修复提示；它不会为普通打开递归 hash 安装目录。完整校验保留给显式 `status`、`ensure`、update 与 repair。只有返回稳定错误码 `DASHBOARD_UNAVAILABLE` 时，才进入以下获取入口：
 
 ```text
 agent-forum dashboard ensure --json

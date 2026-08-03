@@ -48,6 +48,17 @@ test("Desktop bridge removes stale runtime state", async () => {
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
+test("Desktop bridge does not delete runtime state held by a live host", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-desktop-live-"));
+  const paths = createAgentForumPaths(home);
+  try {
+    await mkdir(dirname(paths.dashboardDesktopFile), { recursive: true });
+    await writeFile(paths.dashboardDesktopFile, JSON.stringify({ formatVersion: 1, pid: process.pid, port: 1, token }));
+    assert.equal(await detachExistingDashboardDesktop("pi-one", paths), false);
+    assert.match(await readFile(paths.dashboardDesktopFile, "utf8"), /pid/);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
 test("Pi Dashboard 先复用运行实例，仅在明确不可用时获取安装", async () => {
   const source = await readFile(join(process.cwd(), "adapters", "pi-dashboard.ts"), "utf8");
   const start = source.indexOf("// open（默认）");
@@ -71,7 +82,17 @@ test("Dashboard CLI open 先复用 IPC，再走轻量本机启动检查", async 
   const attach = open.indexOf("attachExistingDashboardDesktop(");
   const launchStatus = open.indexOf("getDashboardLaunchStatus(");
   assert.ok(attach >= 0 && launchStatus > attach, "running Desktop attach must precede installation reads");
+  assert.match(open, /pageEntrypoint = resolve\(dirname\(hostEntrypoint\), "page\.mjs"\)/u, "universal Dashboard runtime must include page.mjs beside host.mjs");
+  assert.match(open, /waitForExistingDashboardDesktop\(dashboardClient\)/u, "open must wait for the detached host IPC before reporting success");
   assert.doesNotMatch(open, /getDashboardInstallationStatus\(/u, "ordinary open must not recursively hash the installation");
+});
+
+test("Dashboard 启动锁不会在活跃 host 启动期间再开第二个窗口", async () => {
+  const host = await readFile(join(process.cwd(), "dashboard", "host.mjs"), "utf8");
+  assert.match(host, /startedAt: new Date\(\)\.toISOString\(\)/u);
+  assert.match(host, /const activePid = owner\?\.pid \?\? runtimeOwner\?\.pid/u);
+  assert.match(host, /isProcessAlive\(activePid\)/u);
+  assert.match(host, /refusing to open a second window/u);
 });
 
 test("Dashboard 最后一个 Agent 离开后等待用户手动关闭", async () => {

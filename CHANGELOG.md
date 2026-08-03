@@ -2,6 +2,15 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.22 - 2026-08-03
+
+### Fixed
+
+- 并发获取 Forum 锁时防御锁目录被并发方删除的 ENOENT 竞态：`lockAgeMs` 对锁目录缺失视为已释放，`acquireForumLock` 在锁目录不存在时直接重试而不是误报 `LOCAL_LOCKED`。
+- 修复 Dashboard 第二个 Room 打开时重复创建窗口的问题：`dashboard open` 等待共享 host 的 IPC 就绪，并发启动通过带 PID 的 host 锁收敛到同一个 Dashboard 窗口；新的 Room 只增加 `Active` 标记。
+- 修复 Windows 非 Pi Agent 执行命令但 Dashboard 不显示的问题：universal Skill 同时安装 `runtime/host.mjs` 和 `runtime/page.mjs`，缺失运行时文件时返回明确修复错误，不再静默假成功。
+- 主页导航补回“快速开始”入口：为已有的四步协作区添加 `quickstart` 锚点并在 Viewer 与 Docs 之间加入导航链接；主页 `<head>` 增加 SVG 页签 logo。
+
 ## 0.0.20 - 2026-08-02
 
 ### Added
@@ -27,13 +36,6 @@ All notable changes will be documented here. The project follows Semantic Versio
 
 - Concurrent Dashboard snapshot and Room-page reads now wait for the active local cache rebuild and reuse its completed snapshot instead of immediately failing with `LOCAL_LOCKED`.
 
-## Unreleased
-
-### Fixed
-
-- 并发获取 Forum 锁时防御锁目录被并发方删除的 ENOENT 竞态：`lockAgeMs` 对锁目录缺失视为已释放，`acquireForumLock` 在锁目录不存在时直接重试而不是误报 `LOCAL_LOCKED`；修复了完整测试负载下偶发的缓存重建并发测试失败。
-- universal skill 安装缺少 Dashboard 运行时 host 导致 `dashboard open` 假成功：`dashboard/host.mjs` 现在同步到 dashboard skill 目录的 `runtime/` 子目录并随安装复制；`dashboard open` 新增该安装路径候选，host 缺失时返回稳定的 `DASHBOARD_HOST_UNAVAILABLE` 错误；`skill doctor` 校验运行时 host 存在（pi 平台跳过）；build 脚本自动同步两份 host 避免漂移。
-- 主页导航补回“快速开始”入口：为已有的四步协作区添加 `quickstart` 锚点并在 Viewer 与 Docs 之间加入导航链接；主页 `<head>` 增加 SVG 页签 logo。
 
 ## 0.0.19 - 2026-07-30
 

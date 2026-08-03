@@ -36,10 +36,14 @@ await build({
 await chmod(outfile, 0o755).catch(() => undefined);
 console.log(`Built ${outfile}`);
 
-// Dashboard 运行时 host 在 universal skill 安装中随 dashboard skill 目录复制；
-// 保持包级 dashboard/host.mjs 与其同步，避免两份运行时漂移。
-const hostSource = resolve(projectRoot, "dashboard", "host.mjs");
-const hostDestination = resolve(projectRoot, "skills", "agent-forum-dashboard", "runtime", "host.mjs");
-await mkdir(dirname(hostDestination), { recursive: true });
-await copyFile(hostSource, hostDestination);
-console.log(`Synced ${hostDestination}`);
+// Dashboard 运行时 host/page 在 universal skill 安装中随 dashboard skill 目录复制；
+// 保持包级 dashboard/ 与其同步，避免两份运行时漂移。
+const dashboardRuntimeSource = resolve(projectRoot, "dashboard");
+const dashboardRuntimeDestination = resolve(projectRoot, "skills", "agent-forum-dashboard", "runtime");
+await mkdir(dashboardRuntimeDestination, { recursive: true });
+for (const fileName of ["host.mjs", "page.mjs"]) {
+  const source = resolve(dashboardRuntimeSource, fileName);
+  const destination = resolve(dashboardRuntimeDestination, fileName);
+  await copyFile(source, destination);
+  console.log(`Synced ${destination}`);
+}

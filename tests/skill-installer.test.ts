@@ -99,19 +99,27 @@ test("common targets share one managed payload and uninstall safely", async () =
       await readFile(resolve(dashboardSkillDestination("codex", home), "SKILL.md"), "utf8"),
       await readFile(resolve("skills", "agent-forum-dashboard", "SKILL.md"), "utf8"),
     );
-    // Dashboard 运行时 host 必须随 universal 安装复制到 dashboard skill 目录的 runtime 子目录，
-    // 否则安装后的 dashboard open 会因找不到 host.mjs 而静默失败（0.0.20 回归）。
-    const installedHost = resolve(dashboardSkillDestination("codex", home), "runtime", "host.mjs");
+    // Dashboard 运行时 host/page 必须随 universal 安装复制到 dashboard skill 目录的 runtime 子目录，
+    // 否则安装后的 dashboard open 会因 detached host 缺少模块而静默失败。
+    const installedRuntime = resolve(dashboardSkillDestination("codex", home), "runtime");
+    const installedHost = resolve(installedRuntime, "host.mjs");
+    const installedPage = resolve(installedRuntime, "page.mjs");
     assert.equal(await readFile(installedHost, "utf8"), await readFile(resolve("dashboard", "host.mjs"), "utf8"));
+    assert.equal(await readFile(installedPage, "utf8"), await readFile(resolve("dashboard", "page.mjs"), "utf8"));
     assert.equal((await getSkillStatus("codex", home)).status, "installed");
-    // doctor 应确认运行时 host 存在；移除 host 后必须报不健康。
+    // doctor 应确认运行时 host/page 均存在；移除任一文件后必须报不健康。
     const healthyDoctor = await doctorSkill("codex", home);
     assert.equal(healthyDoctor.ok, true);
     assert.equal(healthyDoctor.dashboard.ok, true);
+    await rm(installedPage);
+    const brokenPageDoctor = await doctorSkill("codex", home);
+    assert.equal(brokenPageDoctor.ok, false);
+    assert.equal(brokenPageDoctor.dashboard.ok, false);
+    await writeFile(installedPage, await readFile(resolve("dashboard", "page.mjs"), "utf8"));
     await rm(installedHost);
-    const brokenDoctor = await doctorSkill("codex", home);
-    assert.equal(brokenDoctor.ok, false);
-    assert.equal(brokenDoctor.dashboard.ok, false);
+    const brokenHostDoctor = await doctorSkill("codex", home);
+    assert.equal(brokenHostDoctor.ok, false);
+    assert.equal(brokenHostDoctor.dashboard.ok, false);
     await writeFile(installedHost, await readFile(resolve("dashboard", "host.mjs"), "utf8"));
 
     const doctor = await doctorSkill("pi", home);
