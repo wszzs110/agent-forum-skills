@@ -337,10 +337,20 @@ export async function getAllUnreadInboxEntries(
 export async function markInboxEntriesRead(
   input: { forumAlias: string; identityId?: string; ids: string[]; sync?: boolean },
   paths: AgentForumPaths = createAgentForumPaths(),
-): Promise<{ ids: string[]; markedRead: number; alreadyRead: number; warnings: ProtocolWarning[]; sync: ForumRefreshResult | null }> {
+): Promise<{ ids: string[]; markedRead: number; alreadyRead: number; warnings: ProtocolWarning[]; sync: ForumRefreshResult | null; refreshWarning: string | null }> {
   const ids = [...new Set(input.ids)];
   if (ids.length === 0) throw new ServiceError("PROTOCOL_DATA_DAMAGED", "at least one Inbox entry ID is required");
-  const sync = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
+  // 同步失败（如 forum 锁被 dashboard/viewer 的读刷新占用）时降级为基于本地数据标记，
+  // 不阻断已读；仅当本地也没有该 id 时才报 MESSAGE_NOT_FOUND。
+  let sync: ForumRefreshResult | null = null;
+  let refreshWarning: string | null = null;
+  if (input.sync) {
+    try {
+      sync = await refreshForumFromRemote(input.forumAlias, paths);
+    } catch (error) {
+      refreshWarning = error instanceof Error ? error.message : String(error);
+    }
+  }
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
@@ -351,7 +361,7 @@ export async function markInboxEntriesRead(
   const unknown = ids.filter((id) => !eligible.has(id));
   if (unknown.length > 0) throw new ServiceError("MESSAGE_NOT_FOUND", `Inbox entries were not found or are outside active Room membership: ${unknown.join(", ")}`);
   const result = await appendSeenIds(registration.forumId, identity.memberId, ids, paths);
-  return { ids, ...result, warnings: collected.warnings, sync };
+  return { ids, ...result, warnings: collected.warnings, sync, refreshWarning };
 }
 
 function balancedPage(entries: InboxEntry[], limit: number): InboxEntry[] {
@@ -367,8 +377,17 @@ function balancedPage(entries: InboxEntry[], limit: number): InboxEntry[] {
 export async function showInboxEntry(
   input: { forumAlias: string; identityId?: string; id: string; sync?: boolean },
   paths: AgentForumPaths = createAgentForumPaths(),
-): Promise<{ entry: InboxEntry; content: { body?: string; reason?: string; data?: unknown }; cache: "hit" | "incremental" | "rebuilt" | "fallback"; sync: ForumRefreshResult | null }> {
-  const sync = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
+): Promise<{ entry: InboxEntry; content: { body?: string; reason?: string; data?: unknown }; cache: "hit" | "incremental" | "rebuilt" | "fallback"; sync: ForumRefreshResult | null; refreshWarning: string | null }> {
+  // 同步失败（如 forum 锁被 dashboard/viewer 的读刷新占用）时降级为展示本地内容，不阻断读取。
+  let sync: ForumRefreshResult | null = null;
+  let refreshWarning: string | null = null;
+  if (input.sync) {
+    try {
+      sync = await refreshForumFromRemote(input.forumAlias, paths);
+    } catch (error) {
+      refreshWarning = error instanceof Error ? error.message : String(error);
+    }
+  }
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
@@ -380,8 +399,8 @@ export async function showInboxEntry(
   try {
     const cached = await getForumSnapshot(input.forumAlias, paths);
     const item = cached.snapshot.rooms.flatMap((room) => [...room.events, ...room.threads.flatMap((thread) => thread.timeline)]).find((candidate) => candidate.id === entry.id);
-    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache, sync };
-    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache, sync };
+    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache, sync, refreshWarning };
+    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache, sync, refreshWarning };
   } catch {
     // 缓存仅用于加速；任意缓存问题均回退到协议读取。
   }
@@ -389,13 +408,13 @@ export async function showInboxEntry(
     const detail = await showThread(input.forumAlias, entry.roomId, entry.threadId, paths);
     const message = detail.messages.find((item) => item.id === entry.id);
     if (!message) throw new ServiceError("MESSAGE_NOT_FOUND", `message was not found: ${entry.id}`);
-    return { entry, content: { body: message.body }, cache: "fallback" as const, sync };
+    return { entry, content: { body: message.body }, cache: "fallback" as const, sync, refreshWarning };
   }
   const eventPath = entry.threadId
     ? resolve(registration.path, "rooms", entry.roomId, "threads", entry.threadId, "events", entry.id, "event.json")
     : resolve(registration.path, "rooms", entry.roomId, "events", entry.id, "event.json");
   const event = await readJsonDocument(eventPath, "event");
-  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback" as const, sync };
+  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback" as const, sync, refreshWarning };
 }
 
 export async function getInbox(

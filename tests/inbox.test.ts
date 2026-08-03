@@ -9,8 +9,9 @@ import { getInbox, markInboxEntriesRead, showInboxEntry } from "../src/services/
 import { initLocalForum, publishIdentity } from "../src/services/local-forum.js";
 import { createRoom, joinRoom, leaveRoom } from "../src/services/room.js";
 import { createPost, createThread, createThreadEvent } from "../src/services/thread.js";
-import { createAgentForumPaths } from "../src/storage/paths.js";
+import { createAgentForumPaths, forumLockPath } from "../src/storage/paths.js";
 import { setThreadWatch } from "../src/services/thread-watch.js";
+import { acquireForumLock } from "../src/storage/lock.js";
 
 const memberA = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
 const memberB = "member_0194f6d2-8c10-7a31-9e42-123456789ac2";
@@ -191,6 +192,35 @@ test("Inbox show marks read by default and respects --no-mark-read", async () =>
   } finally {
     process.env.HOME = previousHome;
     process.env.USERPROFILE = previousUserProfile;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Inbox mark-read degrades when the Forum lock is held by a reader refresh", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-inbox-lock-"));
+  try {
+    const paths = await setup(home);
+    const created = await createThread({ forumAlias: "team", room: "checkout", identityId: memberB, title: "Locked", kind: "question", body: "Mark me.", threadId, now: new Date("2026-07-12T10:21:00.000Z") }, paths);
+    const id = created.firstMessage.id;
+    // 模拟 dashboard/viewer 的读刷新持有 forum 锁
+    const heldLock = await acquireForumLock({ lockPath: forumLockPath(paths, forumId), command: "test reader refresh" });
+    try {
+      const degraded = await markInboxEntriesRead({ forumAlias: "team", ids: [id], sync: true }, paths);
+      assert.equal(degraded.markedRead, 1);
+      assert.equal(degraded.sync, null);
+      assert.notEqual(degraded.refreshWarning, null);
+      assert.match(degraded.refreshWarning ?? "", /lock/u);
+      assert.equal((await getInbox({ forumAlias: "team" }, paths)).totalUnread, 0);
+    } finally {
+      await heldLock.release();
+    }
+    // 锁释放后恢复正常：新消息 mark-read 无 refreshWarning
+    await createPost({ forumAlias: "team", room: "checkout", thread: threadId, identityId: memberB, type: "status", body: "After lock.", now: new Date("2026-07-12T10:22:00.000Z") }, paths);
+    const secondId = (await getInbox({ forumAlias: "team" }, paths)).entries[0]!.id;
+    const normal = await markInboxEntriesRead({ forumAlias: "team", ids: [secondId], sync: true }, paths);
+    assert.equal(normal.markedRead, 1);
+    assert.equal(normal.refreshWarning, null);
+  } finally {
     await rm(home, { recursive: true, force: true });
   }
 });

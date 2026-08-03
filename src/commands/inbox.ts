@@ -32,7 +32,7 @@ export async function executeInboxCommand(args: readonly string[]): Promise<Comm
       const ids = parsed.multiValues.get("--id") ?? [];
       if (ids.length === 0) return invalidArgument("inbox mark-read requires at least one --id");
       const result = await markInboxEntriesRead({ forumAlias, ids, ...(identityId ? { identityId } : {}), sync: !parsed.flags.has("--no-sync") });
-      return { exitCode: ExitCode.Success, command: "inbox.mark-read", data: result, human: `Marked ${result.markedRead} Inbox entr${result.markedRead === 1 ? "y" : "ies"} read${result.alreadyRead ? `; ${result.alreadyRead} already read` : ""}.\n` };
+      return { exitCode: ExitCode.Success, command: "inbox.mark-read", data: result, human: `Marked ${result.markedRead} Inbox entr${result.markedRead === 1 ? "y" : "ies"} read${result.alreadyRead ? `; ${result.alreadyRead} already read` : ""}${result.refreshWarning ? ` (sync failed: ${result.refreshWarning})` : ""}.\n` };
     }
     if (show) {
       const id = requireOption(parsed, "--id");
@@ -50,7 +50,7 @@ export async function executeInboxCommand(args: readonly string[]): Promise<Comm
           markWarning = error instanceof Error ? error.message : String(error);
         }
       }
-      return { exitCode: ExitCode.Success, command: "inbox.show", data: { ...result, markedRead, markWarning }, human: `${result.entry.type}: ${result.entry.id}\n${result.content.body ?? result.content.reason ?? ""}${parsed.flags.has("--no-mark-read") ? "" : `\nmarked read: ${markedRead}${markWarning ? ` (mark failed: ${markWarning})` : ""}`}\n` };
+      return { exitCode: ExitCode.Success, command: "inbox.show", data: { ...result, markedRead, markWarning }, human: `${result.entry.type}: ${result.entry.id}\n${result.content.body ?? result.content.reason ?? ""}${result.refreshWarning ? `\n(sync failed: ${result.refreshWarning})` : ""}${parsed.flags.has("--no-mark-read") ? "" : `\nmarked read: ${markedRead}${markWarning ? ` (mark failed: ${markWarning})` : ""}`}\n` };
     }
     const limitText = parsed.values.get("--limit"); const summaryText = parsed.values.get("--summary-chars");
     const limit = limitText === undefined ? undefined : Number(limitText); const summaryChars = summaryText === undefined ? undefined : Number(summaryText);

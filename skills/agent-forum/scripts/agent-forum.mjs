@@ -13247,7 +13247,15 @@ async function getAllUnreadInboxEntries(input, paths = createAgentForumPaths()) 
 async function markInboxEntriesRead(input, paths = createAgentForumPaths()) {
   const ids = [...new Set(input.ids)];
   if (ids.length === 0) throw new ServiceError("PROTOCOL_DATA_DAMAGED", "at least one Inbox entry ID is required");
-  const sync = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
+  let sync = null;
+  let refreshWarning = null;
+  if (input.sync) {
+    try {
+      sync = await refreshForumFromRemote(input.forumAlias, paths);
+    } catch (error) {
+      refreshWarning = error instanceof Error ? error.message : String(error);
+    }
+  }
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
@@ -13258,7 +13266,7 @@ async function markInboxEntriesRead(input, paths = createAgentForumPaths()) {
   const unknown = ids.filter((id) => !eligible.has(id));
   if (unknown.length > 0) throw new ServiceError("MESSAGE_NOT_FOUND", `Inbox entries were not found or are outside active Room membership: ${unknown.join(", ")}`);
   const result = await appendSeenIds(registration.forumId, identity.memberId, ids, paths);
-  return { ids, ...result, warnings: collected.warnings, sync };
+  return { ids, ...result, warnings: collected.warnings, sync, refreshWarning };
 }
 function balancedPage(entries, limit) {
   const ordered = [...entries].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
@@ -13269,7 +13277,15 @@ function balancedPage(entries, limit) {
   return [...ordered.filter((entry) => !selected.has(entry.id)).slice(0, limit - discovery.length), ...discovery].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
 }
 async function showInboxEntry(input, paths = createAgentForumPaths()) {
-  const sync = input.sync ? await refreshForumFromRemote(input.forumAlias, paths) : null;
+  let sync = null;
+  let refreshWarning = null;
+  if (input.sync) {
+    try {
+      sync = await refreshForumFromRemote(input.forumAlias, paths);
+    } catch (error) {
+      refreshWarning = error instanceof Error ? error.message : String(error);
+    }
+  }
   const config = await loadLocalConfig(paths);
   const registration = findForum(config, input.forumAlias);
   const identity = findIdentity(config, input.identityId);
@@ -13281,19 +13297,19 @@ async function showInboxEntry(input, paths = createAgentForumPaths()) {
   try {
     const cached = await getForumSnapshot(input.forumAlias, paths);
     const item = cached.snapshot.rooms.flatMap((room) => [...room.events, ...room.threads.flatMap((thread) => thread.timeline)]).find((candidate) => candidate.id === entry.id);
-    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache, sync };
-    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache, sync };
+    if (item?.kind === "message") return { entry, content: { body: item.body }, cache: cached.cache, sync, refreshWarning };
+    if (item?.kind === "event") return { entry, content: { reason: item.reason, data: item.data }, cache: cached.cache, sync, refreshWarning };
   } catch {
   }
   if (entry.kind === "message" && entry.threadId) {
     const detail = await showThread(input.forumAlias, entry.roomId, entry.threadId, paths);
     const message = detail.messages.find((item) => item.id === entry.id);
     if (!message) throw new ServiceError("MESSAGE_NOT_FOUND", `message was not found: ${entry.id}`);
-    return { entry, content: { body: message.body }, cache: "fallback", sync };
+    return { entry, content: { body: message.body }, cache: "fallback", sync, refreshWarning };
   }
   const eventPath = entry.threadId ? resolve14(registration.path, "rooms", entry.roomId, "threads", entry.threadId, "events", entry.id, "event.json") : resolve14(registration.path, "rooms", entry.roomId, "events", entry.id, "event.json");
   const event = await readJsonDocument(eventPath, "event");
-  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback", sync };
+  return { entry, content: { reason: String(event.reason), data: event.data }, cache: "fallback", sync, refreshWarning };
 }
 async function getInbox(input, paths = createAgentForumPaths()) {
   const limit = input.limit ?? 20;
@@ -15888,7 +15904,7 @@ async function executeInboxCommand(args2) {
       const ids = parsed.multiValues.get("--id") ?? [];
       if (ids.length === 0) return invalidArgument("inbox mark-read requires at least one --id");
       const result2 = await markInboxEntriesRead({ forumAlias, ids, ...identityId ? { identityId } : {}, sync: !parsed.flags.has("--no-sync") });
-      return { exitCode: ExitCode.Success, command: "inbox.mark-read", data: result2, human: `Marked ${result2.markedRead} Inbox entr${result2.markedRead === 1 ? "y" : "ies"} read${result2.alreadyRead ? `; ${result2.alreadyRead} already read` : ""}.
+      return { exitCode: ExitCode.Success, command: "inbox.mark-read", data: result2, human: `Marked ${result2.markedRead} Inbox entr${result2.markedRead === 1 ? "y" : "ies"} read${result2.alreadyRead ? `; ${result2.alreadyRead} already read` : ""}${result2.refreshWarning ? ` (sync failed: ${result2.refreshWarning})` : ""}.
 ` };
     }
     if (show) {
@@ -15907,7 +15923,8 @@ async function executeInboxCommand(args2) {
         }
       }
       return { exitCode: ExitCode.Success, command: "inbox.show", data: { ...result2, markedRead, markWarning }, human: `${result2.entry.type}: ${result2.entry.id}
-${result2.content.body ?? result2.content.reason ?? ""}${parsed.flags.has("--no-mark-read") ? "" : `
+${result2.content.body ?? result2.content.reason ?? ""}${result2.refreshWarning ? `
+(sync failed: ${result2.refreshWarning})` : ""}${parsed.flags.has("--no-mark-read") ? "" : `
 marked read: ${markedRead}${markWarning ? ` (mark failed: ${markWarning})` : ""}`}
 ` };
     }

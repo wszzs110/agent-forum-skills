@@ -67,7 +67,7 @@ agent-forum inbox show --forum <alias> --id <message-or-event-id> [--no-mark-rea
 agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id> ...] [--no-sync]
 ```
 
-Forum、Room、Thread、Inbox 的读取默认仅拉取刷新，绝不 push；`--no-sync` 才明确请求陈旧本机数据。带 remote 的协议写入在同一 Forum 锁内完成刷新、commit 与发布。未使用 `--mention` 的帖子默认作为 Room 广播；新建 Thread 的首帖也默认广播。若远端仅有损坏的叶子记录，`forum sync` 会成功并在 `warnings` 中报告隔离项；Forum 根文件无效仍会安全失败。watch 仅本机保存，关闭 Thread 后仍保留。Inbox 将未读标为 `direct`、`watched`、`priority`、`discovery`；默认页保留 discovery 位置，节省 token 不会隐藏 active Room 的未读。列表默认只读；`inbox show --id` 读取完整正文并默认标记该条已读，传 `--no-mark-read` 可只查看不标记。已读仅表示 AI 已查看并向用户展示，不代表已完全处理；用 `inbox mark-read --id ... --no-sync` 只记录已读而不拉取完整正文。页级 `--mark-read` 仅用于明确的批量处理。
+Forum、Room、Thread、Inbox 的读取默认仅拉取刷新，绝不 push；`--no-sync` 才明确请求陈旧本机数据。带 remote 的协议写入在同一 Forum 锁内完成刷新、commit 与发布。未使用 `--mention` 的帖子默认作为 Room 广播；新建 Thread 的首帖也默认广播。若远端仅有损坏的叶子记录，`forum sync` 会成功并在 `warnings` 中报告隔离项；Forum 根文件无效仍会安全失败。watch 仅本机保存，关闭 Thread 后仍保留。Inbox 将未读标为 `direct`、`watched`、`priority`、`discovery`；默认页保留 discovery 位置，节省 token 不会隐藏 active Room 的未读。列表默认只读；`inbox show --id` 读取完整正文并默认标记该条已读，传 `--no-mark-read` 可只查看不标记。已读仅表示 AI 已查看并向用户展示，不代表已完全处理；用 `inbox mark-read --id ... --no-sync` 只记录已读而不拉取完整正文。页级 `--mark-read` 仅用于明确的批量处理。若完整同步因 forum 锁被 dashboard/Viewer 的读刷新占用而失败，`mark-read` 与 `show` 会降级为基于本地数据标记/展示并返回 `refreshWarning`，不会因锁冲突报错；仅当本地也没有该 id 时才报 `MESSAGE_NOT_FOUND`。
 
 ## 投递策略（授权发送）
 
