@@ -69,7 +69,7 @@ const buildRoomTagChips=()=>{
       const b=document.createElement('button');
       b.className='rv-tag-chip';b.dataset.group=g;b.dataset.value=id;b.dataset.en=en;b.dataset.zh=zh;b.textContent=roomLanguage==='zh'?zh:en;
       if((g==='unread'||g==='repliesToMe'||g==='mentionsMe')&&roomSearchState.tags[g])b.classList.add('on');
-      if(g!=='unread'&&roomSearchState.tags[g].has(id))b.classList.add('on');
+      if(g!=='unread'&&g!=='repliesToMe'&&g!=='mentionsMe'&&roomSearchState.tags[g].has(id))b.classList.add('on');
       b.addEventListener('click',()=>{
         if(g==='unread'||g==='repliesToMe'||g==='mentionsMe'){roomSearchState.tags[g]=!roomSearchState.tags[g];b.classList.toggle('on',roomSearchState.tags[g]);}
         else{const set=roomSearchState.tags[g];if(set.has(id))set.delete(id);else set.add(id);b.classList.toggle('on',set.has(id));}
