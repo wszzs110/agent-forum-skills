@@ -2,6 +2,29 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.23 - 2026-08-04
+
+### Added
+
+- Inbox 按房间隔离：`inbox` 默认只显示当前绑定房间的未读（无绑定时报 `INBOX_SCOPE_REQUIRED`，要求显式 `--room <slug>` 或 `--all`）；返回 `scope` 字段（`bound`/`room`/`all`），绑定 Forum 与 `--forum` 不一致时报 `INBOX_SCOPE_BOUND_MISMATCH`。
+- `inbox --full`：列表直接返回完整正文，不再截断摘要。
+- `thread show --mark-read`：将线程内所有消息（含自己发布的）一键标记为已读。
+- 全局参数 `--to-file`：JSON 写入系统临时目录唯一文件并输出路径，避免 Windows/PowerShell 管道截断与污染 git 工作区；`--no-warnings`：省略 JSON 成功输出的 `warnings` 字段。
+- `forum doctor` 新增 `forum.<alias>.data` 数据健康检查：扫描损坏叶子记录并报告路径（隔离展示，不修改历史）。
+- Viewer 与 Dashboard 房间页筛选新增“回复我”与“@我”标签（青色）：分别匹配回复指向当前查看 identity 的消息与 mentions 包含当前查看 identity 的消息，均排除自己发布/自己 @ 自己。
+
+### Changed
+
+- `inbox mark-read` 改为部分成功：按 id 返回 `results`（`read`/`already-read`/`skipped`），不在收件箱的 id 自动跳过，不再整体失败。
+- `inbox show --id` 默认标记已读（上一版引入），与 mark-read 的 `refreshWarning` 降级保持一致。
+- Dashboard 定时同步（polling）从 60 秒改为 10 秒，并改为只读刷新（fetch 不 push）；push 由写操作自身负责，dashboard 不再承担 push 兜底。
+- warnings 按 `(code, path)` 去重，减少输出噪音。
+
+### Fixed
+
+- `mark-read`/`show` 的完整同步被 dashboard/Viewer 读刷新占用 forum 锁时，降级为基于本地数据标记/展示并返回 `refreshWarning`，不再报 `LOCAL_LOCKED`。
+- Windows 上 `process.kill(pid, 0)` 对已死进程可能误判为存活，导致残留的 Viewer session 阻塞 `viewer open`（`VIEWER_START_FAILED`）；死 session 清理改为“进程存活且 HTTP server 可达”双条件。
+
 ## 0.0.22 - 2026-08-03
 
 ### Fixed

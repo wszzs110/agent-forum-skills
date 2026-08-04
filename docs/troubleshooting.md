@@ -67,3 +67,5 @@ agent-forum skill doctor --target <platform> --json
 ```
 
 然后按平台要求重新加载或开启新 Session。平台自动发现与重载行为仍处于端到端验证阶段。
+
+`skill doctor` 还检查 CLI 版本与已安装 Skill 版本是否一致（`version.installed` vs `version.current`）；不一致时 `ok=false`，需要执行 `skill update` 同步后再重新加载。
