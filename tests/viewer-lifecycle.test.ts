@@ -7,7 +7,7 @@ import { createLocalIdentity } from "../src/config/local-config.js";
 import { initLocalForum, publishIdentity } from "../src/services/local-forum.js";
 import { getInbox } from "../src/services/inbox.js";
 import { createRoom, joinRoom } from "../src/services/room.js";
-import { createThread, createThreadEvent } from "../src/services/thread.js";
+import { createPost, createThread, createThreadEvent } from "../src/services/thread.js";
 import { setRoomPublishMode } from "../src/services/publish-policy.js";
 import { closeViewerSession, generateViewerHtml, getViewerRoomData, listViewerSessions, openViewer, viewerServerLaunchArgs } from "../src/services/viewer.js";
 import { createAgentForumPaths } from "../src/storage/paths.js";
@@ -175,6 +175,39 @@ test("Viewer static export is self-contained and does not mutate the Forum", asy
     const html = await readFile(output, "utf8");
     assert.equal(html.includes("Visible marker 你好"), true);
     assert.equal(html.includes("https://"), false);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Viewer data derives repliesToMe and mentionsMe from the viewing identity", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-viewer-relations-"));
+  try {
+    const paths = await setup(home);
+    const viewerId = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
+    const readerId = "member_0194f6d2-8c10-7a31-9e42-123456789ac2";
+    const threadId = "thread_0194f6d2-8c10-7a31-9e42-123456789abe";
+    // setup 已创建首帖（作者 = Viewer Agent），读者回复它
+    const before = await getViewerRoomData({ forumAlias: "team", room: "review" }, paths);
+    const openingId = before.threads[0]?.messages[0]?.id ?? "";
+    const reply = await createPost({ forumAlias: "team", room: "review", thread: threadId, identityId: readerId, type: "answer", body: "Replying to you.", replyTo: openingId, now: new Date("2026-07-12T12:03:00.000Z") }, paths);
+    // 他人 @我
+    const mention = await createPost({ forumAlias: "team", room: "review", thread: threadId, identityId: readerId, type: "status", body: "Mentioning you.", mentions: [viewerId], now: new Date("2026-07-12T12:04:00.000Z") }, paths);
+    // 自己 @自己：不算 mentionsMe
+    await createPost({ forumAlias: "team", room: "review", thread: threadId, identityId: viewerId, type: "status", body: "Self mention.", mentions: [viewerId], now: new Date("2026-07-12T12:05:00.000Z") }, paths);
+    const data = await getViewerRoomData({ forumAlias: "team", room: "review" }, paths);
+    const byId = new Map(data.threads[0]?.messages.map((m) => [m.id, m]) ?? []);
+    assert.equal(byId.get(reply.message.id)?.repliesToMe, true);
+    assert.equal(byId.get(reply.message.id)?.mentionsMe, false);
+    assert.equal(byId.get(mention.message.id)?.mentionsMe, true);
+    assert.equal(byId.get(mention.message.id)?.repliesToMe, false);
+    // 首帖：自己发布，不算 repliesToMe/mentionsMe
+    const opening = byId.get(openingId);
+    assert.equal(opening?.repliesToMe, false);
+    assert.equal(opening?.mentionsMe, false);
+    // 自己 @自己：排除
+    const selfMention = [...byId.values()].find((m) => m.body === "Self mention.");
+    assert.equal(selfMention?.mentionsMe, false);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

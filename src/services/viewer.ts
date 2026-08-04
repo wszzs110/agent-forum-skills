@@ -43,6 +43,23 @@ async function isProcessAlive(pid: number): Promise<boolean> {
   }
 }
 
+/**
+ * 探测 Viewer HTTP server 是否仍可到达。
+ * Windows 上 process.kill(pid, 0) 对已死进程可能误判为存活，
+ * 此时以 HTTP 连接是否被拒绝作为兜底判据：连接失败即认为会话已死。
+ */
+async function isServerReachable(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(baseUrl, {
+      method: "GET",
+      signal: AbortSignal.timeout(1_500),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForProcessExit(pid: number, timeoutMs = 5_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -74,7 +91,7 @@ export async function listViewerSessions(paths = createAgentForumPaths()): Promi
   for (const name of names.filter((name) => name.endsWith(".json"))) {
     const path = resolve(paths.viewerDirectory, name);
     const session = await readSession(path);
-    if (session && await isProcessAlive(session.pid)) sessions.push(session);
+    if (session && await isProcessAlive(session.pid) && await isServerReachable(session.url)) sessions.push(session);
     else await rm(path, { force: true });
   }
   return sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
@@ -87,7 +104,7 @@ export async function cleanViewerSessions(paths = createAgentForumPaths()): Prom
   for (const name of names.filter((name) => name.endsWith(".json") || name.endsWith(".ready"))) {
     const path = resolve(paths.viewerDirectory, name);
     const session = name.endsWith(".json") ? await readSession(path) : undefined;
-    if (!session || !(await isProcessAlive(session.pid))) {
+    if (!session || !(await isProcessAlive(session.pid)) || !(await isServerReachable(session.url))) {
       await rm(path, { force: true });
       removed += 1;
     }
@@ -116,7 +133,8 @@ async function stopViewerSessions(
       stopError = error;
     }
 
-    if (!(await isProcessAlive(session.pid))) {
+    // 进程存活判断在 Windows 上对已死进程可能误判；HTTP server 不可达时同样视为会话已死。
+    if (!(await isProcessAlive(session.pid)) || !(await isServerReachable(session.url))) {
       closed.push(session.sessionId);
       await rm(sessionPath(paths, session.sessionId), { force: true });
       continue;
@@ -330,7 +348,7 @@ export interface ViewerRoomData {
   threads: Array<{
     id: string; title: string; kind: string; status: string;
     authorId: string; authorName: string; replyCount: number; lastActivityAt: string;
-    messages: Array<{ id: string; authorId: string; authorName: string; type: string; body: string; bodyHtml: string; replyTo: string | null; createdAt: string; localReceipt: ViewerLocalReceipt }>;
+    messages: Array<{ id: string; authorId: string; authorName: string; type: string; body: string; bodyHtml: string; replyTo: string | null; mentions: string[]; repliesToMe: boolean; mentionsMe: boolean; createdAt: string; localReceipt: ViewerLocalReceipt }>;
   }>;
   members: Array<{ id: string; displayName: string; role: string; messageCount: number; lastMessageAt: string | null }>;
 }
@@ -365,11 +383,14 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
   const memberStats = new Map<string, { messageCount: number; lastMessageAt: string | null }>();
   const activeMemberIds = Object.entries(room.members).filter(([, m]) => m.status === "active").map(([id]) => id);
   for (const id of activeMemberIds) memberStats.set(id, { messageCount: 0, lastMessageAt: null });
+  // "我" = 当前查看的 identities；"回复我"/"@我" 均排除自己发布的消息。
+  const meIds = new Set(readIdentities.map((identity) => identity.memberId));
   let totalMessages = 0;
   const threads = room.threads.map((cachedThread) => {
     const messages = cachedThread.timeline.filter((item): item is Extract<typeof item, { kind: "message" }> => item.kind === "message");
     const replyCount = messages.filter((m) => m.replyTo).length;
     let lastActivityAt = cachedThread.thread.createdAt;
+    const authorByMessageId = new Map(messages.map((m) => [m.id, m.authorId]));
     for (const msg of messages) {
       totalMessages += 1;
       if (msg.createdAt > lastActivityAt) lastActivityAt = msg.createdAt;
@@ -384,10 +405,18 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
       id: cachedThread.thread.id, title: cachedThread.thread.title, kind: cachedThread.thread.kind, status: cachedThread.thread.status,
       authorId: cachedThread.thread.createdBy, authorName: creator?.displayName ?? cachedThread.thread.createdBy,
       replyCount, lastActivityAt,
-      messages: messages.map((msg) => ({
-        id: msg.id, authorId: msg.authorId, authorName: snapshot.members[msg.authorId]?.displayName ?? msg.authorId,
-        type: msg.type, body: msg.body, bodyHtml: renderMarkdown(msg.body), replyTo: msg.replyTo ?? null, createdAt: msg.createdAt, localReceipt: localReceipt(msg, cachedThread.thread.status !== "closed"),
-      })),
+      messages: messages.map((msg) => {
+        const authoredByMe = meIds.has(msg.authorId);
+        const targetAuthorId = msg.replyTo ? authorByMessageId.get(msg.replyTo) : undefined;
+        return {
+          id: msg.id, authorId: msg.authorId, authorName: snapshot.members[msg.authorId]?.displayName ?? msg.authorId,
+          type: msg.type, body: msg.body, bodyHtml: renderMarkdown(msg.body), replyTo: msg.replyTo ?? null,
+          mentions: [...msg.mentions],
+          repliesToMe: Boolean(targetAuthorId && meIds.has(targetAuthorId) && !authoredByMe),
+          mentionsMe: msg.mentions.some((id) => meIds.has(id)) && !authoredByMe,
+          createdAt: msg.createdAt, localReceipt: localReceipt(msg, cachedThread.thread.status !== "closed"),
+        };
+      }),
     };
   });
   threads.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
