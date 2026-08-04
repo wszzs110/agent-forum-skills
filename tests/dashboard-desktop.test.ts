@@ -240,3 +240,48 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.doesNotMatch(source, /Forum alias ·/);
   assert.doesNotMatch(source, /<strong>Forum<\/strong>/);
 });
+
+test("Dashboard Room 页面收到新快照时不重建 DOM", async () => {
+  const source = await readFile(join(process.cwd(), "dashboard", "page.mjs"), "utf8");
+  const refreshStart = source.indexOf("async function refresh(");
+  const refreshEnd = source.indexOf("\nsetInterval(refresh", refreshStart);
+  assert.ok(refreshStart >= 0 && refreshEnd > refreshStart);
+  const createRefreshController = new Function(
+    "api",
+    "render",
+    "showNotice",
+    "refreshPollingStatus",
+    `let roomPanelOpen=true,revision=-1,lastData;\n${source.slice(refreshStart, refreshEnd)}\nreturn {refresh,setRoomPanelOpen(value){roomPanelOpen=value},state(){return {revision,lastData}}};`,
+  ) as (
+    api: (path: string) => Promise<unknown>,
+    render: (data: unknown, reconcile: boolean) => void,
+    showNotice: (message: unknown) => void,
+    refreshPollingStatus: () => unknown,
+  ) => {
+    refresh: () => Promise<void>;
+    setRoomPanelOpen: (value: boolean) => void;
+    state: () => { revision: number; lastData: unknown };
+  };
+  let snapshot: { revision: number } = { revision: 41 };
+  const renders: Array<{ data: unknown; reconcile: boolean }> = [];
+  const notices: unknown[] = [];
+  const controller = createRefreshController(
+    async (path) => {
+      assert.equal(path, "/snapshot");
+      return snapshot;
+    },
+    (data, reconcile) => { renders.push({ data, reconcile }); },
+    (message) => { notices.push(message); },
+    () => undefined,
+  );
+
+  await controller.refresh();
+  assert.equal(renders.length, 0, "an open Room page must keep its existing DOM and scroll position");
+  assert.deepEqual(controller.state(), { revision: 41, lastData: snapshot });
+  assert.deepEqual(notices, []);
+
+  controller.setRoomPanelOpen(false);
+  snapshot = { revision: 42 };
+  await controller.refresh();
+  assert.deepEqual(renders, [{ data: snapshot, reconcile: true }], "the Bar still refreshes after the Room page is closed");
+});

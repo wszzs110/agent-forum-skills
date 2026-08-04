@@ -92,6 +92,23 @@ function isSuccessWithWarnings(value: unknown): value is { ok: true; data: { war
   );
 }
 
+/**
+ * 判断 forum status 的只读刷新是否实际合入远端数据。
+ *
+ * 空轮询会正常成功，但不代表 Dashboard 快照变化，不能据此递增 revision。
+ */
+function forumStatusHasRemoteUpdate(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const freshness = (data as { freshness?: unknown }).freshness;
+  if (!freshness || typeof freshness !== "object") return false;
+  const refresh = (freshness as { refresh?: unknown }).refresh;
+  return Boolean(
+    refresh &&
+      typeof refresh === "object" &&
+      (refresh as { outcome?: unknown }).outcome === "updated",
+  );
+}
+
 export async function runCli(
   args: readonly string[],
   io: CliIo = defaultIo,
@@ -205,7 +222,8 @@ export async function runCli(
                           : command === "setup"
                             ? await executeSetupCommand(subcommandArgs)
                             : await executeSkillCommand(subcommandArgs);
-      if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox", "setup"].includes(command)) {
+      const isNoopForumStatus = execution.command === "forum.status" && !forumStatusHasRemoteUpdate(execution.data);
+      if (!execution.error && !isNoopForumStatus && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox", "setup"].includes(command)) {
         await invalidateDashboard().catch(() => undefined);
       }
       if (!execution.error && ["context.bind", "context.unbind", "publish.policy"].includes(execution.command)) {

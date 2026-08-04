@@ -9,6 +9,7 @@ import { runCli } from "../src/cli.js";
 import { dashboardUpdateAvailable } from "../src/commands/dashboard.js";
 import { attachDashboardClient, dashboardStatus, detachDashboardClient, getDashboardSnapshot, invalidateDashboard, setDashboardForumPolling, setDashboardRoomPinned } from "../src/services/dashboard.js";
 import { publishIdentity, initLocalForum } from "../src/services/local-forum.js";
+import { addRemoteForum, publishLocalForum } from "../src/services/forum-remote.js";
 import { createRoom, createRoomEvent, joinRoom } from "../src/services/room.js";
 import { createPost, createThread, createThreadEvent } from "../src/services/thread.js";
 import { setRoomPublishMode } from "../src/services/publish-policy.js";
@@ -244,5 +245,63 @@ test("CLI posts invalidate the Dashboard without counting the author's post as u
     process.env.HOME = previousHome;
     process.env.USERPROFILE = previousUserProfile;
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("CLI forum status 在无远端变更时不递增 Dashboard revision", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-status-refresh-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    const paths = await setup(home);
+    await attachDashboardClient({ clientId: "pi-status", clientType: "pi", forumAlias: "team", roomId, identityId: reader, leaseMs: 30_000 }, paths);
+    const before = (await dashboardStatus(paths)).revision;
+    const output: string[] = [];
+    assert.equal(await runCli(["--json", "forum", "status", "--forum", "team"], { stdout: (value) => output.push(value), stderr: () => undefined }), 0);
+    assert.equal(JSON.parse(output.join("")).ok, true);
+    assert.equal((await dashboardStatus(paths)).revision, before, "an unchanged read-only forum status must not force a Dashboard redraw");
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousUserProfile;
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("CLI forum status 拉到远端更新时递增 Dashboard revision", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-forum-dashboard-status-remote-"));
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    const sourcePaths = await setup(resolve(root, "source-home"));
+    const remote = resolve(root, "forum.git");
+    requireGit(root, ["init", "--bare", "--initial-branch=main", remote]);
+    await publishLocalForum({ forumAlias: "team", remote }, sourcePaths);
+
+    const targetHome = resolve(root, "target-home");
+    const targetPaths = createAgentForumPaths(targetHome);
+    await createLocalIdentity({ memberId: reader, displayName: "Reader", role: "frontend", responsibility: "UI", now: new Date("2026-07-12T10:03:00.000Z") }, targetPaths);
+    await addRemoteForum({ alias: "team", remote, now: new Date("2026-07-12T10:04:00.000Z") }, targetPaths);
+    await attachDashboardClient({ clientId: "pi-status-remote", clientType: "pi", forumAlias: "team", roomId, identityId: reader, leaseMs: 30_000 }, targetPaths);
+    const before = (await dashboardStatus(targetPaths)).revision;
+
+    await createPost({ forumAlias: "team", room: roomId, thread: threadId, type: "status", body: "Remote update", messageId: "msg_0194f6d2-8c10-7a31-9e42-123456789ad3", now: new Date("2026-07-12T10:05:00.000Z") }, sourcePaths);
+    process.env.HOME = targetHome;
+    process.env.USERPROFILE = targetHome;
+    const output: string[] = [];
+    assert.equal(await runCli(["--json", "forum", "status", "--forum", "team"], { stdout: (value) => output.push(value), stderr: () => undefined }), 0);
+    const result = JSON.parse(output.join(""));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.freshness.refresh.outcome, "updated");
+    assert.ok((await dashboardStatus(targetPaths)).revision > before, "a real remote update must refresh the Dashboard Bar after polling");
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousUserProfile;
+    await rm(root, { recursive: true, force: true });
   }
 });

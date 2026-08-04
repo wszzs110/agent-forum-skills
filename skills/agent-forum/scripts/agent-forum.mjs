@@ -12555,8 +12555,8 @@ init_paths();
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.26" : "0.0.0-dev";
-var DASHBOARD_VERSION = true ? "0.0.26" : "0.0.0-dev";
+var VERSION = true ? "0.0.27" : "0.0.0-dev";
+var DASHBOARD_VERSION = true ? "0.0.27" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
@@ -18715,6 +18715,15 @@ function isSuccessWithWarnings(value) {
     value && typeof value === "object" && "ok" in value && value.ok === true && "data" in value && value.data !== null && typeof value.data === "object" && "warnings" in value.data
   );
 }
+function forumStatusHasRemoteUpdate(data) {
+  if (!data || typeof data !== "object") return false;
+  const freshness = data.freshness;
+  if (!freshness || typeof freshness !== "object") return false;
+  const refresh = freshness.refresh;
+  return Boolean(
+    refresh && typeof refresh === "object" && refresh.outcome === "updated"
+  );
+}
 async function runCli(args2, io = defaultIo) {
   const json = args2.includes("--json");
   const toFile = args2.includes("--to-file");
@@ -18776,7 +18785,8 @@ async function runCli(args2, io = defaultIo) {
     try {
       const subcommandArgs = positional2.slice(1);
       const execution = command === "forum" ? await executeForumCommand(subcommandArgs) : command === "identity" ? await executeIdentityCommand(subcommandArgs) : command === "context" ? await executeContextCommand(subcommandArgs) : command === "room" ? await executeRoomCommand(subcommandArgs) : command === "thread" ? await executeThreadCommand(subcommandArgs) : command === "post" ? await executePostCommand(subcommandArgs) : command === "publish" ? await executePublishCommand(subcommandArgs) : command === "inbox" ? await executeInboxCommand(subcommandArgs) : command === "preference" ? await executePreferenceCommand(subcommandArgs) : command === "viewer" ? await executeViewerCommand(subcommandArgs) : command === "dashboard" ? await executeDashboardCommand(subcommandArgs, { onProgress: io.stderr }) : command === "doctor" ? await executeDoctorCommand(subcommandArgs) : command === "setup" ? await executeSetupCommand(subcommandArgs) : await executeSkillCommand(subcommandArgs);
-      if (!execution.error && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox", "setup"].includes(command)) {
+      const isNoopForumStatus = execution.command === "forum.status" && !forumStatusHasRemoteUpdate(execution.data);
+      if (!execution.error && !isNoopForumStatus && !execution.command.endsWith(".help") && ["forum", "identity", "room", "thread", "post", "inbox", "setup"].includes(command)) {
         await invalidateDashboard().catch(() => void 0);
       }
       if (!execution.error && ["context.bind", "context.unbind", "publish.policy"].includes(execution.command)) {

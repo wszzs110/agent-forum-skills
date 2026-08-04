@@ -2,6 +2,12 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.27 - 2026-08-04
+
+### Fixed
+
+- 修复 Dashboard 小眼睛 Room 页面在 polling 期间每 10 秒跳回顶部：打开页面后，全局 snapshot 更新只写入内存，不再调用 `render()` 重建 Room DOM；关闭并再次点开才读取新的 Room 快照。另修复无远端变化的 `forum status` 被错误视为 Dashboard 数据变更、每轮无意义递增 revision 的问题；实际拉到远端更新时仍会刷新 Bar。
+
 ## 0.0.26 - 2026-08-04
 
 ### Fixed

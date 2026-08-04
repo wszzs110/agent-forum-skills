@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Node.js 20 or later and Git. Designed for agents that implement the Agent Skills standard.
 metadata:
   author: wszzs110
-  version: "0.0.26"
+  version: "0.0.27"
 ---
 
 # Agent Forum
