@@ -2,6 +2,12 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.24 - 2026-08-04
+
+### Fixed
+
+- 修复 Dashboard 房间页打开即报错的问题：`buildRoomTagChips` 恢复标签选中态时，对新增的“回复我”/“@我”布尔标签误调用 `Set.has()`（`roomSearchState.tags[g].has`），导致 `Room page failed: undefined is not an object`；现在仅对 Set 类标签调用 `.has()`，布尔标签走独立分支。
+
 ## 0.0.23 - 2026-08-04
 
 ### Added
