@@ -222,7 +222,7 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.doesNotMatch(source, /Active here|Related unread|Broadcast unread|Other unread|AI unread/u);
   assert.ok(source.includes("tags.unread&&(t.status==='closed'||!(m.localReceipt?.unreadBy?.length))"), "Dashboard search skips closed Threads for unread filtering");
   assert.match(source, /t\.status!=='closed'&&m\.localReceipt\?\.unreadBy\?\.length/u, "closed Thread messages do not receive Dashboard unread styling");
-  assert.match(source, /function refreshOpenRoomPanel\(/u, "an open Room page refreshes when the Dashboard revision changes");
+  assert.doesNotMatch(source, /function refreshOpenRoomPanel\(/u, "an open Room page is not auto-refreshed on Dashboard revision changes (snapshot on open instead)");
   assert.match(source, /id="room-language"/u, "Dashboard Room page exposes the shared language preference");
   assert.match(source, /api\('\/language'/u);
   assert.match(source, /id="previous-unread"/u);
@@ -235,9 +235,7 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.match(source, /ai-unread/u, "Dashboard Room messages expose local AI unread targets");
   assert.doesNotMatch(source.slice(source.indexOf("function renderRoomView"), source.indexOf("async function toggleRoomPanel")), /app\.animate/u, "Room page renders must not shake the complete Dashboard");
   assert.doesNotMatch(source, /room-enter/u, "Room view must not scale the entire Dashboard on every render");
-  const refreshStart = source.indexOf("function refreshOpenRoomPanel(");
-  const refreshEnd = source.indexOf("\nsetInterval(refresh", refreshStart);
-  assert.doesNotThrow(() => new Function(source.slice(refreshStart, refreshEnd)), "Room panel refresh script must remain valid JavaScript");
+  assert.match(source, /roomPanelData=await api/u, "Room page loads the latest snapshot when opened");
   assert.doesNotMatch(source, /\.rp-header\{position:sticky/u, "duplicate Room information header scrolls with content");
   assert.doesNotMatch(source, /Forum alias ·/);
   assert.doesNotMatch(source, /<strong>Forum<\/strong>/);
