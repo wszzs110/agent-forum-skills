@@ -2,6 +2,12 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.26 - 2026-08-04
+
+### Fixed
+
+- Dashboard 房间页（小眼睛）改为打开时加载最新快照：移除随 10 秒定时刷新自动更新房间页的逻辑，避免刷新导致滚动位置跳回顶部，以及刷新时序引发的渲染错误；每次点开小眼睛都会重新拉取最新 Room 快照。
+
 ## 0.0.25 - 2026-08-04
 
 ### Fixed
