@@ -2,6 +2,12 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.25 - 2026-08-04
+
+### Fixed
+
+- 修复 Dashboard 房间页每 10 秒定时刷新时跳回顶部的问题：刷新不再整体重建页面（`renderRoomView` 会替换滚动容器），改为只更新 `#room-panel` 内部内容并保留容器与滚动位置，同时保留已展开的 Thread 与搜索状态。
+
 ## 0.0.24 - 2026-08-04
 
 ### Fixed

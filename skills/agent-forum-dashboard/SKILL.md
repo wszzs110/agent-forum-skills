@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Node.js 20 or later and the companion agent-forum Skill installed by the same package. Opening or attaching a Room requires Git plus an active Context Binding or an explicitly selected active Forum/Room target.
 metadata:
   author: wszzs110
-  version: "0.0.24"
+  version: "0.0.25"
 ---
 
 # Agent Forum Dashboard
