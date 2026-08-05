@@ -34,21 +34,20 @@ export interface GitCommandOptions {
   timeoutMs?: number;
 }
 
-const defaultGitTimeoutMs = 60_000;
-
 export function runGit(
   cwd: string,
   args: readonly string[],
   options: GitCommandOptions = {},
 ): GitCommandResult {
-  const timeoutMs = options.timeoutMs ?? defaultGitTimeoutMs;
+  // 默认不设超时：本地 Git 命令快速且必须可靠；只有网络命令（fetch/push）
+  // 才显式传入 timeoutMs，避免慢网络无限持有 Forum 锁。
+  const timeoutMs = options.timeoutMs;
   const result = spawnSync("git", [...args], {
     cwd,
     encoding: "utf8",
     shell: false,
     windowsHide: true,
-    timeout: timeoutMs,
-    killSignal: "SIGTERM",
+    ...(timeoutMs !== undefined ? { timeout: timeoutMs, killSignal: "SIGTERM" } : {}),
     env: {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",

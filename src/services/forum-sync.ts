@@ -131,7 +131,7 @@ async function validateRebasedForum(
 
 function fetchRemoteHead(repository: string, branch: string): string {
   // 显式 refspec 始终更新 FETCH_HEAD；部分受限宿主会静默阻止 refs/remotes/ 写入。
-  const fetch = runGit(repository, ["fetch", "--no-tags", "origin", `refs/heads/${branch}`]);
+  const fetch = runGit(repository, ["fetch", "--no-tags", "origin", `refs/heads/${branch}`], { timeoutMs: 60_000 });
   if (fetch.status !== 0) throw classifyTransportFailure("fetch", fetch);
   return requireGit(repository, ["rev-parse", "FETCH_HEAD"]).stdout.trim();
 }
@@ -381,7 +381,7 @@ export async function syncForum(
         "push",
         "origin",
         registration.dataBranch,
-      ]);
+      ], { timeoutMs: 60_000 });
       if (push.status === 0) {
         successfulPush = true;
         break;

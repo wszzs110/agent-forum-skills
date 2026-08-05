@@ -8869,14 +8869,13 @@ function redactGitOutput(value) {
   return value.replace(/(https?:\/\/)[^/@\s]+@/giu, "$1***@").replace(/(https?:\/\/[^/:\s]+:)[^@\s]+@/giu, "$1***@").replace(/([?&][^=&#\s]+)=([^&#\s]+)/gu, "$1=***").replace(/(https?:\/\/[^#\s]+)#[^\s]+/giu, "$1#***");
 }
 function runGit(cwd, args2, options = {}) {
-  const timeoutMs = options.timeoutMs ?? defaultGitTimeoutMs;
+  const timeoutMs = options.timeoutMs;
   const result = spawnSync("git", [...args2], {
     cwd,
     encoding: "utf8",
     shell: false,
     windowsHide: true,
-    timeout: timeoutMs,
-    killSignal: "SIGTERM",
+    ...timeoutMs !== void 0 ? { timeout: timeoutMs, killSignal: "SIGTERM" } : {},
     env: {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",
@@ -8960,7 +8959,7 @@ function commitPaths(repository2, paths, message) {
   requireGit(repository2, ["commit", "-m", message]);
   return requireGit(repository2, ["rev-parse", "HEAD"]).stdout.trim();
 }
-var GitCommandError, defaultGitTimeoutMs;
+var GitCommandError;
 var init_runner = __esm({
   "src/git/runner.ts"() {
     "use strict";
@@ -8972,7 +8971,6 @@ var init_runner = __esm({
         this.name = "GitCommandError";
       }
     };
-    defaultGitTimeoutMs = 6e4;
   }
 });
 
@@ -10746,7 +10744,7 @@ async function validateRebasedForum(forumAlias, repository2, originalHead, paths
   }
 }
 function fetchRemoteHead(repository2, branch) {
-  const fetch2 = runGit(repository2, ["fetch", "--no-tags", "origin", `refs/heads/${branch}`]);
+  const fetch2 = runGit(repository2, ["fetch", "--no-tags", "origin", `refs/heads/${branch}`], { timeoutMs: 6e4 });
   if (fetch2.status !== 0) throw classifyTransportFailure("fetch", fetch2);
   return requireGit(repository2, ["rev-parse", "FETCH_HEAD"]).stdout.trim();
 }
@@ -10953,7 +10951,7 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
         "push",
         "origin",
         registration.dataBranch
-      ]);
+      ], { timeoutMs: 6e4 });
       if (push.status === 0) {
         successfulPush = true;
         break;
