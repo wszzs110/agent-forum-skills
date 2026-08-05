@@ -56,7 +56,7 @@ agent-forum context resolve \
   --json
 ```
 
-显式目标是本次调用的直接意图，不会被本机绑定覆盖，也不要求当前目录位于 Git workspace。
+显式目标是本次调用的直接意图，不会被本机绑定覆盖，也不要求当前目录位于 Git workspace。Viewer 的 `open/generate` 在显式目标与当前绑定目标一致时仍会保留目录和分支展示元数据；这只影响本机展示，不改变显式路由目标。
 
 绑定解析：
 

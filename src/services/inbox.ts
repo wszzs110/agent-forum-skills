@@ -149,13 +149,15 @@ export async function appendSeenIds(
   }
 }
 
+/**
+ * 读取 Room 或 Thread 下的全部生命周期事件。
+ * 事件资格只由成员当前是否 active 决定，不使用发送端时间戳截断历史。
+ */
 async function readEvents(
   directory: string,
   roomId: string,
   roomSlug: string,
   threadId: string | null,
-  actorId: string,
-  activeSince: string,
 ): Promise<{ entries: InboxEntry[]; warnings: ProtocolWarning[] }> {
   let names: string[];
   try {
@@ -172,24 +174,22 @@ async function readEvents(
     const path = resolve(directory, name, "event.json");
     try {
       const event = await readJsonDocument(path, "event");
-      if (String(event.createdAt) >= activeSince) {
-        entries.push({
-          id: String(event.id),
-          kind: "event",
-          roomId,
-          roomSlug,
-          threadId,
-          type: String(event.type),
-          actorId: String(event.actorId),
-          createdAt: String(event.createdAt),
-          summary: String(event.reason),
-          replyTo: null,
-          mentions: [],
-          relevance: "discovery",
-          reasons: [],
-          summaryTruncated: false,
-        });
-      }
+      entries.push({
+        id: String(event.id),
+        kind: "event",
+        roomId,
+        roomSlug,
+        threadId,
+        type: String(event.type),
+        actorId: String(event.actorId),
+        createdAt: String(event.createdAt),
+        summary: String(event.reason),
+        replyTo: null,
+        mentions: [],
+        relevance: "discovery",
+        reasons: [],
+        summaryTruncated: false,
+      });
     } catch (error) {
       warnings.push(protocolWarning(path, error));
     }
@@ -230,14 +230,11 @@ async function collectRelevantEntries(
       continue;
     }
     if (membership.status !== "active") continue;
-    const activeSince = String(membership.updatedAt);
     const roomEvents = await readEvents(
       resolve(registration.path, "rooms", room.id, "events"),
       room.id,
       room.slug,
       null,
-      memberId,
-      activeSince,
     );
     entries.push(...roomEvents.entries);
     warnings.push(...roomEvents.warnings);
@@ -248,7 +245,6 @@ async function collectRelevantEntries(
       const detail = await showThread(forumAlias, room.id, thread.id, paths);
       warnings.push(...detail.warnings);
       for (const message of detail.messages) {
-        if (message.createdAt < activeSince) continue;
         const compact = message.body.replace(/\s+/gu, " ").trim();
         entries.push({
           id: message.id,
@@ -280,8 +276,6 @@ async function collectRelevantEntries(
         room.id,
         room.slug,
         thread.id,
-        memberId,
-        activeSince,
       );
       entries.push(...threadEvents.entries);
       warnings.push(...threadEvents.warnings);
@@ -433,7 +427,7 @@ export async function showInboxEntry(
   if (profile.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
   const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
   const entry = collected.entries.find((item) => item.id === input.id);
-  if (!entry) throw new ServiceError("MESSAGE_NOT_FOUND", `inbox entry was not found or is outside active Room membership: ${input.id}`);
+  if (!entry) throw new ServiceError("MESSAGE_NOT_FOUND", `inbox entry was not found or is unavailable to the active Room member: ${input.id}`);
   try {
     const cached = await getForumSnapshot(input.forumAlias, paths);
     const item = cached.snapshot.rooms.flatMap((room) => [...room.events, ...room.threads.flatMap((thread) => thread.timeline)]).find((candidate) => candidate.id === entry.id);

@@ -1,4 +1,5 @@
 import { loadLocalConfig } from "../config/local-config.js";
+import { StorageError } from "../storage/errors.js";
 import { ServiceError } from "./errors.js";
 import {
   refreshForumFromRemote,
@@ -44,7 +45,7 @@ export async function refreshForRead(
       state: "stale",
       source: "local-cache",
       error: {
-        code: error instanceof ServiceError ? error.code : "SYNC_FAILED",
+        code: error instanceof ServiceError || error instanceof StorageError ? error.code : "SYNC_FAILED",
         message: error instanceof Error ? error.message : String(error),
       },
     };

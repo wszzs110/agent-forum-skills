@@ -8868,12 +8868,15 @@ import { spawnSync } from "node:child_process";
 function redactGitOutput(value) {
   return value.replace(/(https?:\/\/)[^/@\s]+@/giu, "$1***@").replace(/(https?:\/\/[^/:\s]+:)[^@\s]+@/giu, "$1***@").replace(/([?&][^=&#\s]+)=([^&#\s]+)/gu, "$1=***").replace(/(https?:\/\/[^#\s]+)#[^\s]+/giu, "$1#***");
 }
-function runGit(cwd, args2) {
+function runGit(cwd, args2, options = {}) {
+  const timeoutMs = options.timeoutMs ?? defaultGitTimeoutMs;
   const result = spawnSync("git", [...args2], {
     cwd,
     encoding: "utf8",
     shell: false,
     windowsHide: true,
+    timeout: timeoutMs,
+    killSignal: "SIGTERM",
     env: {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",
@@ -8882,9 +8885,22 @@ function runGit(cwd, args2) {
     maxBuffer: 10 * 1024 * 1024
   });
   if (result.error) {
+    const errorCode = result.error.code;
+    if (errorCode === "ETIMEDOUT") {
+      throw new GitCommandError(
+        "GIT_COMMAND_TIMEOUT",
+        `Git command timed out after ${timeoutMs}ms: git ${redactGitOutput(args2.join(" "))}`
+      );
+    }
     throw new GitCommandError(
       "GIT_UNAVAILABLE",
       `failed to execute Git: ${result.error.message}`
+    );
+  }
+  if (result.signal) {
+    throw new GitCommandError(
+      "GIT_COMMAND_TIMEOUT",
+      `Git command was terminated after ${timeoutMs}ms: git ${redactGitOutput(args2.join(" "))}`
     );
   }
   return {
@@ -8893,8 +8909,8 @@ function runGit(cwd, args2) {
     stderr: redactGitOutput(result.stderr ?? "")
   };
 }
-function requireGit(cwd, args2) {
-  const result = runGit(cwd, args2);
+function requireGit(cwd, args2, options = {}) {
+  const result = runGit(cwd, args2, options);
   if (result.status !== 0) {
     throw new GitCommandError(
       "GIT_COMMAND_FAILED",
@@ -8944,7 +8960,7 @@ function commitPaths(repository2, paths, message) {
   requireGit(repository2, ["commit", "-m", message]);
   return requireGit(repository2, ["rev-parse", "HEAD"]).stdout.trim();
 }
-var GitCommandError;
+var GitCommandError, defaultGitTimeoutMs;
 var init_runner = __esm({
   "src/git/runner.ts"() {
     "use strict";
@@ -8956,6 +8972,7 @@ var init_runner = __esm({
         this.name = "GitCommandError";
       }
     };
+    defaultGitTimeoutMs = 6e4;
   }
 });
 
@@ -10683,6 +10700,12 @@ function output(result) {
   return `${result.stdout}
 ${result.stderr}`.trim();
 }
+function normalizeSyncError(error) {
+  if (error instanceof GitCommandError && error.code === "GIT_COMMAND_TIMEOUT") {
+    throw new ServiceError("SYNC_TIMEOUT", error.message, { cause: error.message });
+  }
+  throw error;
+}
 function isNonFastForward(result) {
   const text = output(result).toLowerCase();
   return text.includes("non-fast-forward") || text.includes("fetch first") || text.includes("[rejected]") && text.includes("failed to push");
@@ -10875,6 +10898,8 @@ async function refreshForumFromRemote(forumAlias, paths = createAgentForumPaths(
       finalHead,
       warnings: refreshed.warnings
     };
+  } catch (error) {
+    normalizeSyncError(error);
   } finally {
     await lock.release();
   }
@@ -10977,6 +11002,8 @@ async function syncForum(forumAlias, paths = createAgentForumPaths(), options = 
       retries,
       warnings: [...new Map(warnings.map((warning) => [`${warning.code}\0${warning.path ?? ""}\0${warning.message}`, warning])).values()]
     };
+  } catch (error) {
+    return normalizeSyncError(error);
   } finally {
     await lock?.release();
   }
@@ -12041,6 +12068,7 @@ init_room();
 
 // src/services/read-freshness.ts
 init_local_config();
+init_errors();
 init_errors2();
 init_forum_sync();
 init_paths();
@@ -12063,7 +12091,7 @@ async function refreshForRead(forumAlias, options = {}, paths = createAgentForum
       state: "stale",
       source: "local-cache",
       error: {
-        code: error instanceof ServiceError ? error.code : "SYNC_FAILED",
+        code: error instanceof ServiceError || error instanceof StorageError ? error.code : "SYNC_FAILED",
         message: error instanceof Error ? error.message : String(error)
       }
     };
@@ -12555,8 +12583,8 @@ init_paths();
 // src/version.ts
 var PACKAGE_NAME = "@zzs-fun/agent-forum-skills";
 var CLI_NAME = "agent-forum";
-var VERSION = true ? "0.0.27" : "0.0.0-dev";
-var DASHBOARD_VERSION = true ? "0.0.27" : "0.0.0-dev";
+var VERSION = true ? "0.0.28" : "0.0.0-dev";
+var DASHBOARD_VERSION = true ? "0.0.28" : "0.0.0-dev";
 
 // src/services/dashboard.ts
 init_local_config();
@@ -13092,7 +13120,7 @@ async function appendSeenIds(forumId, memberId, ids, paths) {
     await lock.release();
   }
 }
-async function readEvents(directory, roomId, roomSlug, threadId, actorId, activeSince) {
+async function readEvents(directory, roomId, roomSlug, threadId) {
   let names;
   try {
     names = await readdir7(directory);
@@ -13108,24 +13136,22 @@ async function readEvents(directory, roomId, roomSlug, threadId, actorId, active
     const path2 = resolve14(directory, name, "event.json");
     try {
       const event = await readJsonDocument(path2, "event");
-      if (String(event.createdAt) >= activeSince) {
-        entries.push({
-          id: String(event.id),
-          kind: "event",
-          roomId,
-          roomSlug,
-          threadId,
-          type: String(event.type),
-          actorId: String(event.actorId),
-          createdAt: String(event.createdAt),
-          summary: String(event.reason),
-          replyTo: null,
-          mentions: [],
-          relevance: "discovery",
-          reasons: [],
-          summaryTruncated: false
-        });
-      }
+      entries.push({
+        id: String(event.id),
+        kind: "event",
+        roomId,
+        roomSlug,
+        threadId,
+        type: String(event.type),
+        actorId: String(event.actorId),
+        createdAt: String(event.createdAt),
+        summary: String(event.reason),
+        replyTo: null,
+        mentions: [],
+        relevance: "discovery",
+        reasons: [],
+        summaryTruncated: false
+      });
     } catch (error) {
       warnings.push(protocolWarning(path2, error));
     }
@@ -13156,14 +13182,11 @@ async function collectRelevantEntries(forumAlias, memberId, paths, roomIds) {
       continue;
     }
     if (membership.status !== "active") continue;
-    const activeSince = String(membership.updatedAt);
     const roomEvents = await readEvents(
       resolve14(registration.path, "rooms", room.id, "events"),
       room.id,
       room.slug,
-      null,
-      memberId,
-      activeSince
+      null
     );
     entries.push(...roomEvents.entries);
     warnings.push(...roomEvents.warnings);
@@ -13173,7 +13196,6 @@ async function collectRelevantEntries(forumAlias, memberId, paths, roomIds) {
       const detail = await showThread(forumAlias, room.id, thread.id, paths);
       warnings.push(...detail.warnings);
       for (const message of detail.messages) {
-        if (message.createdAt < activeSince) continue;
         const compact = message.body.replace(/\s+/gu, " ").trim();
         entries.push({
           id: message.id,
@@ -13204,9 +13226,7 @@ async function collectRelevantEntries(forumAlias, memberId, paths, roomIds) {
         ),
         room.id,
         room.slug,
-        thread.id,
-        memberId,
-        activeSince
+        thread.id
       );
       entries.push(...threadEvents.entries);
       warnings.push(...threadEvents.warnings);
@@ -13320,7 +13340,7 @@ async function showInboxEntry(input, paths = createAgentForumPaths()) {
   if (profile.status !== "active") throw new ServiceError("FORUM_MEMBERSHIP_REQUIRED", `identity is not an active Forum member: ${identity.memberId}`);
   const collected = await collectRelevantEntries(input.forumAlias, identity.memberId, paths);
   const entry = collected.entries.find((item) => item.id === input.id);
-  if (!entry) throw new ServiceError("MESSAGE_NOT_FOUND", `inbox entry was not found or is outside active Room membership: ${input.id}`);
+  if (!entry) throw new ServiceError("MESSAGE_NOT_FOUND", `inbox entry was not found or is unavailable to the active Room member: ${input.id}`);
   try {
     const cached = await getForumSnapshot(input.forumAlias, paths);
     const item = cached.snapshot.rooms.flatMap((room) => [...room.events, ...room.threads.flatMap((thread) => thread.timeline)]).find((candidate) => candidate.id === entry.id);
@@ -17777,7 +17797,7 @@ function localizedLabel(value, kind) {
 function unreadForLocalAi(item, room, identities, trackUnread = true) {
   if (!trackUnread) return false;
   const actorId = item.kind === "message" ? item.authorId : item.actorId;
-  const recipients = identities.filter((identity) => identity.memberId !== actorId && room.members[identity.memberId]?.status === "active" && typeof room.members[identity.memberId]?.updatedAt === "string" && item.createdAt >= room.members[identity.memberId].updatedAt);
+  const recipients = identities.filter((identity) => identity.memberId !== actorId && room.members[identity.memberId]?.status === "active");
   return recipients.some((identity) => !identity.seenIds.includes(item.id));
 }
 function readBadge(item, room, identities, trackUnread = true) {
@@ -17787,7 +17807,7 @@ function readBadge(item, room, identities, trackUnread = true) {
   const recipients = identities.filter((identity) => {
     if (identity.memberId === actorId) return false;
     const membership = room.members[identity.memberId];
-    return membership?.status === "active" && typeof membership.updatedAt === "string" && item.createdAt >= membership.updatedAt;
+    return membership?.status === "active";
   });
   if (!trackUnread) return published.length ? `<span class="read-badge published">${biText("Published", "\u5DF2\u53D1\u5E03")}</span>` : "";
   const read = recipients.filter((identity) => identity.seenIds.includes(item.id));
@@ -18376,7 +18396,8 @@ async function runViewerServer(input, paths = createAgentForumPaths()) {
   await rm12(sessionPath(paths, input.sessionId), { force: true });
 }
 async function launchViewerInline(input, paths = createAgentForumPaths()) {
-  const context = await resolveContext({ forumAlias: input.forumAlias, room: input.room }, paths);
+  const resolved = await resolveViewerTarget({ forumAlias: input.forumAlias, room: input.room, ...input.cwd ? { cwd: input.cwd } : {} }, paths);
+  const context = resolved.context;
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   await replaceViewerSessions(context.forumAlias, context.roomId, paths);
   await runViewerServer({
@@ -18386,6 +18407,7 @@ async function launchViewerInline(input, paths = createAgentForumPaths()) {
     token: randomBytes2(16).toString("hex"),
     idleMs: input.idleMs ?? 30 * 6e4,
     ...input.identityId ? { identityId: input.identityId } : {},
+    ...resolved.binding ? { binding: resolved.binding } : {},
     openBrowser: true
   }, paths);
 }
@@ -18393,12 +18415,37 @@ function viewerServerLaunchArgs(entryPath, commandArgs, executablePath = process
   if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
   return resolve23(entryPath) === resolve23(executablePath) ? [...commandArgs] : [entryPath, ...commandArgs];
 }
-async function openViewer(input, paths = createAgentForumPaths()) {
+async function resolveViewerTarget(input, paths) {
   const context = await resolveContext({
     ...input.cwd ? { cwd: input.cwd } : {},
     ...input.forumAlias ? { forumAlias: input.forumAlias } : {},
     ...input.room ? { room: input.room } : {}
   }, paths);
+  if (context.context) {
+    return {
+      context,
+      binding: { workspaceRoot: context.context.workspaceRoot, branch: context.context.branch }
+    };
+  }
+  if (!input.forumAlias || !input.room) return { context };
+  try {
+    const bound = await resolveContext({ ...input.cwd ? { cwd: input.cwd } : {} }, paths);
+    if (bound.forumId === context.forumId && bound.roomId === context.roomId && bound.context) {
+      return {
+        context,
+        binding: { workspaceRoot: bound.context.workspaceRoot, branch: bound.context.branch }
+      };
+    }
+  } catch (error) {
+    if (!(error instanceof ContextError) || !["CONTEXT_NOT_BOUND", "BINDING_TARGET_UNAVAILABLE"].includes(error.code)) {
+      throw error;
+    }
+  }
+  return { context };
+}
+async function openViewer(input, paths = createAgentForumPaths()) {
+  const resolved = await resolveViewerTarget(input, paths);
+  const context = resolved.context;
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const entryPath = input.entryPath ?? process.argv[1];
   const lock = await acquireForumLock({
@@ -18409,7 +18456,7 @@ async function openViewer(input, paths = createAgentForumPaths()) {
     const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
     const sessionId = randomUUID7();
     const token = randomBytes2(16).toString("hex");
-    const binding = context.context ? { workspaceRoot: context.context.workspaceRoot, branch: context.context.branch } : void 0;
+    const binding = resolved.binding;
     const args2 = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 6e4), "--home", dirname6(paths.root), ...input.identityId ? ["--identity", input.identityId] : [], ...binding ? ["--workspace", binding.workspaceRoot, ...binding.branch ? ["--branch", binding.branch] : []] : []]);
     const child = spawn3(process.execPath, args2, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError;
@@ -18447,7 +18494,7 @@ async function getViewerRoomData(input, paths = createAgentForumPaths()) {
     const recipients = readIdentities.filter((identity) => {
       if (identity.memberId === item.authorId) return false;
       const membership = room.members[identity.memberId];
-      return membership?.status === "active" && typeof membership.updatedAt === "string" && item.createdAt >= membership.updatedAt;
+      return membership?.status === "active";
     });
     const seen = new Map(readIdentities.map((identity) => [identity.memberId, new Set(identity.seenIds)]));
     const summary = (identity) => ({ id: identity.memberId, displayName: identity.displayName });
@@ -18524,7 +18571,8 @@ async function getViewerRoomData(input, paths = createAgentForumPaths()) {
   };
 }
 async function generateViewerHtml(input, paths = createAgentForumPaths()) {
-  const context = await resolveContext({ ...input.cwd ? { cwd: input.cwd } : {}, ...input.forumAlias ? { forumAlias: input.forumAlias } : {}, ...input.room ? { room: input.room } : {} }, paths);
+  const resolved = await resolveViewerTarget(input, paths);
+  const context = resolved.context;
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const refresh = await refreshForumFromRemote(context.forumAlias, paths);
   if (refresh.outcome === "updated") await invalidateDashboard(paths);
@@ -18533,7 +18581,7 @@ async function generateViewerHtml(input, paths = createAgentForumPaths()) {
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir8(dirname6(output2), { recursive: true });
-  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths), void 0, await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), context.forumAlias).forumId, room.room.id));
+  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths), resolved.binding, await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), context.forumAlias).forumId, room.room.id));
   await import("node:fs/promises").then(({ writeFile: writeFile3 }) => writeFile3(output2, html, { encoding: "utf8", mode: 384 }));
   return { output: output2 };
 }
@@ -18546,7 +18594,7 @@ async function executeViewerCommand(args2) {
       exitCode: ExitCode.Success,
       command: "viewer.help",
       data: { usage: "agent-forum viewer <open|generate|data|status|close|clean> [options]" },
-      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--identity <member-id>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--identity <member-id>] [--output <file>]\n  agent-forum viewer data [--forum <alias> --room <room>] [--identity <member-id> ...]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
+      human: "Viewer\n\nUsage:\n  agent-forum viewer open [--forum <alias> --room <room>] [--cwd <path>] [--identity <member-id>] [--no-open]\n  agent-forum viewer generate [--forum <alias> --room <room>] [--cwd <path>] [--identity <member-id>] [--output <file>]\n  agent-forum viewer data [--forum <alias> --room <room>] [--cwd <path>] [--identity <member-id> ...]\n  agent-forum viewer status\n  agent-forum viewer close [--session <id>]\n  agent-forum viewer clean\n"
     };
   }
   if (!["open", "generate", "status", "close", "clean", "serve", "launch", "data"].includes(subcommand)) {
@@ -18558,10 +18606,10 @@ async function executeViewerCommand(args2) {
       if ("error" in parsed2) return invalidArgument(parsed2.error);
       const forumAlias2 = parsed2.values.get("--forum");
       const room2 = parsed2.values.get("--room");
-      const cwd = parsed2.values.get("--cwd");
+      const cwd2 = parsed2.values.get("--cwd");
       if (Boolean(forumAlias2) !== Boolean(room2)) return invalidArgument("--forum and --room must be provided together");
       const identityIds = parsed2.multiValues.get("--identity");
-      const result2 = await getViewerRoomData({ ...forumAlias2 ? { forumAlias: forumAlias2 } : {}, ...room2 ? { room: room2 } : {}, ...cwd ? { cwd } : {}, ...identityIds?.length ? { identityIds } : {} });
+      const result2 = await getViewerRoomData({ ...forumAlias2 ? { forumAlias: forumAlias2 } : {}, ...room2 ? { room: room2 } : {}, ...cwd2 ? { cwd: cwd2 } : {}, ...identityIds?.length ? { identityIds } : {} });
       return { exitCode: ExitCode.Success, command: "viewer.data", data: result2, human: `${result2.room.title}: ${result2.stats.threadCount} threads, ${result2.stats.messageCount} messages, ${result2.stats.memberCount} members
 ` };
     }
@@ -18612,7 +18660,7 @@ async function executeViewerCommand(args2) {
       return { exitCode: ExitCode.Success, command: "viewer.serve", data: {}, human: "" };
     }
     const parsed = parseCommandOptions(args2.slice(1), {
-      values: ["--forum", "--room", "--output", "--home", "--identity"],
+      values: ["--forum", "--room", "--output", "--home", "--identity", "--cwd"],
       flags: ["--no-sync", "--no-open"]
     });
     if ("error" in parsed) return invalidArgument(parsed.error);
@@ -18621,17 +18669,18 @@ async function executeViewerCommand(args2) {
     const home = parsed.values.get("--home");
     const paths = createAgentForumPaths(home);
     const identityId = parsed.values.get("--identity");
+    const cwd = parsed.values.get("--cwd");
     if (Boolean(forumAlias) !== Boolean(room)) return invalidArgument("--forum and --room must be provided together");
     if (parsed.flags.has("--no-sync")) return invalidArgument("viewer always synchronizes before rendering; --no-sync is no longer supported");
     if (subcommand === "generate") {
       if (parsed.flags.size > 0) return invalidArgument("viewer generate does not accept --no-sync or --no-open");
       const output2 = parsed.values.get("--output");
-      const result2 = await generateViewerHtml({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...output2 ? { output: output2 } : {}, ...identityId ? { identityId } : {} }, paths);
+      const result2 = await generateViewerHtml({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...cwd ? { cwd } : {}, ...output2 ? { output: output2 } : {}, ...identityId ? { identityId } : {} }, paths);
       return { exitCode: ExitCode.Success, command: "viewer.generate", data: result2, human: `Generated ${result2.output}
 ` };
     }
     if (parsed.values.has("--output")) return invalidArgument("viewer open does not accept --output");
-    const result = await openViewer({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...identityId ? { identityId } : {}, openBrowser: !parsed.flags.has("--no-open") }, paths);
+    const result = await openViewer({ ...forumAlias ? { forumAlias } : {}, ...room ? { room } : {}, ...cwd ? { cwd } : {}, ...identityId ? { identityId } : {}, openBrowser: !parsed.flags.has("--no-open") }, paths);
     return { exitCode: ExitCode.Success, command: "viewer.open", data: result, human: `${result.url}
 ${result.browserOpened ? "Opened in the default browser." : "Open this URL manually."}${result.replacedSessionIds.length ? `
 Replaced ${result.replacedSessionIds.length} existing Viewer session(s) for this Forum Room.` : ""}

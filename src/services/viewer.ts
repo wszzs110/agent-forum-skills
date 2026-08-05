@@ -5,7 +5,8 @@ import { dirname, resolve } from "node:path";
 import { writeJsonAtomic } from "../storage/atomic.js";
 import { acquireForumLock } from "../storage/lock.js";
 import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js";
-import { resolveContext } from "./context.js";
+import { resolveContext, type ResolvedContextView } from "./context.js";
+import { ContextError } from "../context/bindings.js";
 import { findForum, loadLocalConfig } from "../config/local-config.js";
 import { refreshForumFromRemote } from "./forum-sync.js";
 import { refreshForRead, type ReadFreshness } from "./read-freshness.js";
@@ -265,8 +266,9 @@ export async function runViewerServer(input: {
   await rm(sessionPath(paths, input.sessionId), { force: true });
 }
 
-export async function launchViewerInline(input: { forumAlias: string; room: string; identityId?: string; idleMs?: number }, paths = createAgentForumPaths()): Promise<void> {
-  const context = await resolveContext({ forumAlias: input.forumAlias, room: input.room }, paths);
+export async function launchViewerInline(input: { forumAlias: string; room: string; identityId?: string; idleMs?: number; cwd?: string }, paths = createAgentForumPaths()): Promise<void> {
+  const resolved = await resolveViewerTarget({ forumAlias: input.forumAlias, room: input.room, ...(input.cwd ? { cwd: input.cwd } : {}) }, paths);
+  const context = resolved.context;
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   await replaceViewerSessions(context.forumAlias, context.roomId, paths);
   await runViewerServer({
@@ -276,6 +278,7 @@ export async function launchViewerInline(input: { forumAlias: string; room: stri
     token: randomBytes(16).toString("hex"),
     idleMs: input.idleMs ?? 30 * 60_000,
     ...(input.identityId ? { identityId: input.identityId } : {}),
+    ...(resolved.binding ? { binding: resolved.binding } : {}),
     openBrowser: true,
   }, paths);
 }
@@ -284,6 +287,42 @@ export function viewerServerLaunchArgs(entryPath: string | undefined, commandArg
   if (!entryPath) throw new ServiceError("VIEWER_START_FAILED", "CLI entry path is unavailable");
   // Deno compile 产物的 argv[1] 就是自身可执行文件；再次传入会被 CLI 当作未知子命令。
   return resolve(entryPath) === resolve(executablePath) ? [...commandArgs] : [entryPath, ...commandArgs];
+}
+
+/**
+ * 解析 Viewer 目标并尽量保留与当前目标一致的本机绑定信息。
+ * 显式 Forum/Room 只决定展示目标，不应在目标与当前绑定一致时丢弃目录和分支。
+ */
+async function resolveViewerTarget(
+  input: { forumAlias?: string; room?: string; cwd?: string },
+  paths: AgentForumPaths,
+): Promise<{ context: ResolvedContextView; binding?: ViewerBindingContext }> {
+  const context = await resolveContext({
+    ...(input.cwd ? { cwd: input.cwd } : {}),
+    ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}),
+    ...(input.room ? { room: input.room } : {}),
+  }, paths);
+  if (context.context) {
+    return {
+      context,
+      binding: { workspaceRoot: context.context.workspaceRoot, branch: context.context.branch },
+    };
+  }
+  if (!input.forumAlias || !input.room) return { context };
+  try {
+    const bound = await resolveContext({ ...(input.cwd ? { cwd: input.cwd } : {}) }, paths);
+    if (bound.forumId === context.forumId && bound.roomId === context.roomId && bound.context) {
+      return {
+        context,
+        binding: { workspaceRoot: bound.context.workspaceRoot, branch: bound.context.branch },
+      };
+    }
+  } catch (error) {
+    if (!(error instanceof ContextError) || !["CONTEXT_NOT_BOUND", "BINDING_TARGET_UNAVAILABLE"].includes(error.code)) {
+      throw error;
+    }
+  }
+  return { context };
 }
 
 export async function openViewer(input: {
@@ -295,11 +334,8 @@ export async function openViewer(input: {
   identityId?: string;
   entryPath?: string;
 }, paths = createAgentForumPaths()): Promise<ViewerSession & { browserOpened: boolean; replacedSessionIds: string[] }> {
-  const context = await resolveContext({
-    ...(input.cwd ? { cwd: input.cwd } : {}),
-    ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}),
-    ...(input.room ? { room: input.room } : {}),
-  }, paths);
+  const resolved = await resolveViewerTarget(input, paths);
+  const context = resolved.context;
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const entryPath = input.entryPath ?? process.argv[1];
   const lock = await acquireForumLock({
@@ -310,7 +346,7 @@ export async function openViewer(input: {
     const replacedSessionIds = await replaceViewerSessions(context.forumAlias, context.roomId, paths);
     const sessionId = randomUUID();
     const token = randomBytes(16).toString("hex");
-    const binding: ViewerBindingContext | undefined = context.context ? { workspaceRoot: context.context.workspaceRoot, branch: context.context.branch } : undefined;
+    const binding = resolved.binding;
     const args = viewerServerLaunchArgs(entryPath, ["viewer", "serve", "--forum", context.forumAlias, "--room", context.roomId, "--session", sessionId, "--token", token, "--idle-ms", String(input.idleMs ?? 30 * 60_000), "--home", dirname(paths.root), ...(input.identityId ? ["--identity", input.identityId] : []), ...(binding ? ["--workspace", binding.workspaceRoot, ...(binding.branch ? ["--branch", binding.branch] : [])] : [])]);
     const child = spawn(process.execPath, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
     let startError: Error | undefined;
@@ -369,7 +405,7 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
     const recipients = readIdentities.filter((identity) => {
       if (identity.memberId === item.authorId) return false;
       const membership = room.members[identity.memberId];
-      return membership?.status === "active" && typeof membership.updatedAt === "string" && item.createdAt >= membership.updatedAt;
+      return membership?.status === "active";
     });
     const seen = new Map(readIdentities.map((identity) => [identity.memberId, new Set(identity.seenIds)]));
     const summary = (identity: ViewerReadIdentity) => ({ id: identity.memberId, displayName: identity.displayName });
@@ -437,7 +473,8 @@ export async function getViewerRoomData(input: { forumAlias?: string; room?: str
 }
 
 export async function generateViewerHtml(input: { forumAlias?: string; room?: string; cwd?: string; output?: string; identityId?: string }, paths = createAgentForumPaths()): Promise<{ output: string }> {
-  const context = await resolveContext({ ...(input.cwd ? { cwd: input.cwd } : {}), ...(input.forumAlias ? { forumAlias: input.forumAlias } : {}), ...(input.room ? { room: input.room } : {}) }, paths);
+  const resolved = await resolveViewerTarget(input, paths);
+  const context = resolved.context;
   if (!context.forumAlias) throw new ServiceError("VIEWER_START_FAILED", "resolved forum is unavailable");
   const refresh = await refreshForumFromRemote(context.forumAlias, paths);
   if (refresh.outcome === "updated") await invalidateDashboard(paths);
@@ -446,7 +483,7 @@ export async function generateViewerHtml(input: { forumAlias?: string; room?: st
   const room = cached.snapshot.rooms.find((item) => item.room.id === context.roomId);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${context.roomId}`);
   await mkdir(dirname(output), { recursive: true });
-  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths), undefined, await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), context.forumAlias).forumId, room.room.id));
+  const html = renderViewerHtml(cached.snapshot, room, { state: "fresh" }, await getViewerReadIdentities(context.forumAlias, [input.identityId], paths), await getUiLanguage(paths), resolved.binding, await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), context.forumAlias).forumId, room.room.id));
   await import("node:fs/promises").then(({ writeFile }) => writeFile(output, html, { encoding: "utf8", mode: 0o600 }));
   return { output };
 }

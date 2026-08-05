@@ -139,6 +139,10 @@ test("Dashboard 最后一个 Agent 离开后等待用户手动关闭", async () 
   assert.match(page, /r\.activeLocalAgents\?'<div class="room-status-line"><span class="agent">● Active<\/span><\/div>':''/u, "only Active uses the line below the Room title");
   assert.match(page, /\.compact \.room-status-line\{display:none\}/u, "collapsed Rooms hide the separate Active line so the title stays vertically aligned");
   assert.match(host, /server\.closeAllConnections\?\.\(\)/u, "Dashboard shutdown must not wait forever for WebView keep-alive sockets");
+  assert.match(host, /const pollingDelayMs = 10_000/u, "polling keeps the normal ten-second delay");
+  assert.match(host, /pollingTimer = setTimeout\(\(\) => \{ void runPollingCycle\(\); \}, delayMs\)/u, "the next poll is scheduled after the previous cycle completes");
+  assert.match(host, /freshness\?\.error\?\.code === "LOCAL_LOCKED"/u, "a locked Forum causes polling backoff rather than an immediate retry");
+  assert.doesNotMatch(host, /const pollingTimer = setInterval\(/u, "polling must not use a fixed interval that overlaps slow refreshes");
   assert.match(host, /context-bindings\.json/u, "Dashboard watches local binding state for immediate marker refresh");
   assert.match(host, /stateWatcher\.on\("rename", refreshOnStateChange\)/u, "Dashboard handles atomic replacement events on Windows");
   const shell = await readFile(join(process.cwd(), "dashboard", "tauri", "src", "main.rs"), "utf8");

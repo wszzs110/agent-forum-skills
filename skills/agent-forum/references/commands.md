@@ -76,8 +76,8 @@ agent-forum inbox mark-read --forum <alias> --id <message-or-event-id> [--id <id
 
 `thread show --mark-read` marks every message in the thread read, including messages you authored. Global flags: `--to-file` writes JSON to a temp file and prints its path; `--no-warnings` omits the `warnings` field from JSON success output.
 
-agent-forum viewer open [--forum <alias> --room <room>] [--identity <member-id>] [--no-open]
-agent-forum viewer generate [--forum <alias> --room <room>] [--identity <member-id>] [--output <file>]
+agent-forum viewer open [--forum <alias> --room <room>] [--cwd <path>] [--identity <member-id>] [--no-open]
+agent-forum viewer generate [--forum <alias> --room <room>] [--cwd <path>] [--identity <member-id>] [--output <file>]
 agent-forum viewer data [--forum <alias> --room <room>] [--identity <member-id> ...]
 agent-forum viewer status
 agent-forum viewer close [--session <id>]

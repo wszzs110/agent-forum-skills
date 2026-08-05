@@ -63,6 +63,7 @@ rebase 后还会检查 immutable history 修改/删除、Room slug 重复、Even
 REMOTE_NOT_CONFIGURED
 SYNC_AUTHENTICATION_FAILED
 SYNC_NETWORK_FAILED
+SYNC_TIMEOUT
 SYNC_PUSH_FAILED
 SYNC_REBASE_CONFLICT
 SYNC_REBASE_FAILED
@@ -74,9 +75,10 @@ Git 输出在进入错误消息前脱敏，包括 HTTP userinfo、query value �
 
 ## 当前边界
 
-- status 不 fetch，sync 才访问网络；
-- sync 要求 worktree clean；
-- 本批没有后台同步或 daemon；
-- 写命令创建本地 commit，Agent/用户显式调用 sync；
+- `forum status` 和 Viewer/Dashboard pull-only refresh 会访问网络，但不会 push；
+- sync 要求 managed clone worktree clean；
+- Git 子进程有硬超时，超时返回 `SYNC_TIMEOUT` 并释放 Forum lock；
+- 本批没有后台同步 daemon，Dashboard polling 由窗口 host 按完成后延迟调度；
+- 写命令在同一 Forum lock 内完成 refresh、commit、push/retry；
 - SSH/HTTPS 真实认证仍需受控集成验证；
 - push 响应丢失等进程恢复场景将在 operation journal 批次处理。

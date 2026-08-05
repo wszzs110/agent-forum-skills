@@ -15,6 +15,7 @@ const stateDirectory = join(home, ".AgentForum", "state", "dashboard");
 const desktopFile = join(stateDirectory, "desktop.json");
 const lockFile = join(stateDirectory, "desktop.lock");
 const token = randomUUID();
+const cliTimeoutMs = 90_000;
 
 if (!desktopExecutable) throw new Error("缺少 AGENT_FORUM_DASHBOARD_EXECUTABLE");
 
@@ -51,6 +52,7 @@ let pollingPreferenceGeneration = 0;
 let pollingSequence = 0;
 let lastPollingForumId;
 let lastPollingStartedAt;
+let pollingTimer;
 let uiLanguage = "en";
 const demoExtremeCounts = process.env.AGENT_FORUM_DASHBOARD_EXTREME_COUNTS === "1";
 // 标准 Wayland 不提供普通应用可稳定请求的全局置顶层，页面必须明确禁用而不是伪装成功。
@@ -89,6 +91,8 @@ function runCli(args) {
     const output = [];
     const errors = [];
     let outputLength = 0;
+    let settled = false;
+    let timeoutId;
     child.stdout.on("data", (chunk) => {
       outputLength += chunk.length;
       if (outputLength <= 2 * 1024 * 1024) output.push(chunk);
@@ -97,8 +101,16 @@ function runCli(args) {
     child.stderr.on("data", (chunk) => {
       if (Buffer.concat(errors).length < 128 * 1024) errors.push(chunk);
     });
-    child.on("error", (error) => rejectCli(new Error(`无法启动 agent-forum：${error.message}`)));
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      rejectCli(new Error(`无法启动 agent-forum：${error.message}`));
+    });
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
       const stdout = Buffer.concat(output).toString("utf8").trim();
       const stderr = Buffer.concat(errors).toString("utf8").trim();
       if (code !== 0 || !stdout) {
@@ -113,6 +125,12 @@ function runCli(args) {
         rejectCli(error instanceof Error ? error : new Error(String(error)));
       }
     });
+    timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      rejectCli(new Error(`agent-forum 命令超过 ${cliTimeoutMs}ms 未完成`));
+    }, cliTimeoutMs);
   });
 }
 
@@ -261,7 +279,7 @@ function sendError(response, status, message) {
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
-  clearInterval(pollingTimer);
+  clearTimeout(pollingTimer);
   clearInterval(leaseTimer);
   stateWatcher?.close();
   if (desktopProcess && !desktopProcess.killed) desktopProcess.kill();
@@ -430,19 +448,50 @@ function refreshOnStateChange(_event, fileName) {
 stateWatcher = watch(stateDirectory, { persistent: false });
 stateWatcher.on("change", refreshOnStateChange);
 stateWatcher.on("rename", refreshOnStateChange);
-const pollingTimer = setInterval(async () => {
-  if (shuttingDown || pollingActiveForumIds.size > 0) return;
-  const snapshot = cachedSnapshot;
-  for (const team of snapshot?.teams ?? []) if (team.polling) {
-    pollingActiveForumIds.add(team.forumId);
-    pollingSequence += 1;
-    lastPollingForumId = team.forumId;
-    lastPollingStartedAt = new Date().toISOString();
-    try { await runCli(["forum", "status", "--forum", team.forumAlias]).catch(() => undefined); }
-    finally { pollingActiveForumIds.delete(team.forumId); }
+const pollingDelayMs = 10_000;
+const pollingLockBackoffMs = 10_000;
+
+/** 在上一轮所有远端刷新结束后再安排下一轮，避免固定间隔制造锁竞争。 */
+function schedulePolling(delayMs = pollingDelayMs) {
+  if (shuttingDown) return;
+  pollingTimer = setTimeout(() => { void runPollingCycle(); }, delayMs);
+}
+
+/** 执行一轮 Dashboard pull-only 刷新；遇到任意 Forum 锁时本轮结束后统一退避。 */
+async function runPollingCycle() {
+  if (shuttingDown) return;
+  if (pollingActiveForumIds.size > 0) {
+    schedulePolling();
+    return;
   }
-  await refreshSnapshot().catch(() => undefined);
-}, 10_000);
+  const snapshot = cachedSnapshot;
+  let nextDelayMs = pollingDelayMs;
+  try {
+    for (const team of snapshot?.teams ?? []) if (team.polling) {
+      pollingActiveForumIds.add(team.forumId);
+      pollingSequence += 1;
+      lastPollingForumId = team.forumId;
+      lastPollingStartedAt = new Date().toISOString();
+      try {
+        const result = await runCli(["forum", "status", "--forum", team.forumAlias]);
+        // forum status 将 LOCAL_LOCKED 作为 stale freshness 返回；不立即重试，
+        // 给正在进行的读/写事务完整的释放窗口。
+        if (result?.freshness?.error?.code === "LOCAL_LOCKED") {
+          nextDelayMs = pollingLockBackoffMs;
+        }
+      } catch {
+        // 单个 Forum 的刷新失败不得阻断其他 Forum 或下一轮轮询。
+      } finally {
+        pollingActiveForumIds.delete(team.forumId);
+      }
+    }
+    await refreshSnapshot().catch(() => undefined);
+  } finally {
+    schedulePolling(nextDelayMs);
+  }
+}
+
+schedulePolling();
 const leaseTimer = setInterval(async () => {
   if (shuttingDown) return;
   try {

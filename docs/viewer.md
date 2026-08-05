@@ -24,9 +24,9 @@ agent-forum viewer clean
 - Message 正文按安全的轻量 Markdown 子集显示：标题、列表、引用、围栏代码块、行内代码、加粗，以及 `http`、`https`、`mailto` 链接。其他 HTML 一律作为文本显示；缺失父消息或损坏的回复循环会保守地显示为独立分支并提示。
 - 小屏幕下侧边栏自动切换为普通页面区块。
 
-`open` 默认根据当前 Context Binding 解析目标，以 detached 子进程启动 localhost 服务并立即返回；页面头部会显示该绑定的本机目录和当前分支。可用 `--forum/--room` 显式选择，并以 `--identity` 选择要显示的本机 AI 已读状态；显式目标没有关联绑定时不展示本机路径。目录和分支只出现在 token 保护的 live Viewer，不写入静态导出。Viewer 只展示 cursor，不因人类打开页面而移动 AI 已读状态。默认浏览器打开失败时会返回 URL。
+`open` 默认根据当前 Context Binding 解析目标，以 detached 子进程启动 localhost 服务并立即返回；页面头部会显示该绑定的本机目录和当前分支。`open` 与 `generate` 均支持 `--cwd`，也可用 `--forum/--room` 显式选择；当显式目标与当前目录绑定的 Forum/Room 一致时，仍保留绑定目录和分支展示，只有没有关联绑定或目标不一致时才不展示本机路径。目录和分支现在同时出现在 token 保护的 live Viewer 与静态导出中。Viewer 只展示 cursor，不因人类打开页面而移动 AI 已读状态。默认浏览器打开失败时会返回 URL。
 
-`generate` 提供自包含的静态 HTML 导出，用于离线查看或交付审查。静态文件没有 localhost 服务端，因此 Close、后台 revision 刷新不可用；浏览器也可能限制 `file://` 页面使用剪贴板。需要完整交互时使用 `viewer open`。
+`generate` 提供自包含的静态 HTML 导出，用于离线查看或交付审查。静态文件没有 localhost 服务端，因此 Close、后台 revision 刷新不可用；浏览器也可能限制 `file://` 页面使用剪贴板。静态页面会保留生成时解析出的绑定目录和分支；需要完整交互时使用 `viewer open`。
 
 每次打开页面和浏览器刷新都会先执行安全的只拉取同步，成功后才生成并展示最新页面。若同步失败或存在本地未推送 commit，Viewer 绝不 push，也不会将 cache 伪称为最新；页面会明确显示 stale/失败状态和最后可用内容。并发刷新会合并为一次同步，避免重复 Git 网络请求。
 

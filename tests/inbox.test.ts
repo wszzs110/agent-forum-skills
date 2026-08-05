@@ -13,6 +13,7 @@ import { createAgentForumPaths, forumLockPath } from "../src/storage/paths.js";
 import { setThreadWatch } from "../src/services/thread-watch.js";
 import { acquireForumLock } from "../src/storage/lock.js";
 import { ServiceError } from "../src/services/errors.js";
+import { refreshForRead } from "../src/services/read-freshness.js";
 
 const memberA = "member_0194f6d2-8c10-7a31-9e42-123456789ac1";
 const memberB = "member_0194f6d2-8c10-7a31-9e42-123456789ac2";
@@ -206,6 +207,8 @@ test("Inbox mark-read degrades when the Forum lock is held by a reader refresh",
     // 模拟 dashboard/viewer 的读刷新持有 forum 锁
     const heldLock = await acquireForumLock({ lockPath: forumLockPath(paths, forumId), command: "test reader refresh" });
     try {
+      const freshness = await refreshForRead("team", {}, paths);
+      assert.equal(freshness.error?.code, "LOCAL_LOCKED");
       const degraded = await markInboxEntriesRead({ forumAlias: "team", ids: [id], sync: true }, paths);
       assert.equal(degraded.markedRead, 1);
       assert.equal(degraded.sync, null);
@@ -249,6 +252,27 @@ test("Inbox scopes by bound Room, explicit --room, or --all", async () => {
     const allInbox = await getInbox({ forumAlias: "team", all: true }, paths);
     assert.equal(allInbox.scope, "all");
     assert.equal(allInbox.entries.length, 2);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Inbox includes historical messages despite an incorrect sender clock", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-forum-inbox-clock-skew-"));
+  try {
+    const paths = await setup(home);
+    await createThread({
+      forumAlias: "team",
+      room: "checkout",
+      identityId: memberB,
+      title: "Clock skew",
+      kind: "discussion",
+      body: "Sent after the Room existed, but the sender clock is four days behind.",
+      threadId: discoveryThreadId,
+      now: new Date("2026-07-08T10:21:00.000Z"),
+    }, paths);
+    const inbox = await getInbox({ forumAlias: "team", all: true }, paths);
+    assert.equal(inbox.entries.some((entry) => entry.summary.includes("sender clock is four days behind")), true);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -332,7 +356,7 @@ test("Inbox includes Room/Thread events, excludes own activity, and stops while 
       paths,
     );
     const returned = await getInbox({ forumAlias: "team", all: true }, paths);
-    assert.deepEqual(returned.entries.map((entry) => entry.summary), ["Update after A returned."]);
+    assert.deepEqual(returned.entries.map((entry) => entry.summary), ["Update after A returned.", "Update while A is away."]);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

@@ -92,17 +92,24 @@ test("Viewer data derives AI unread and read receipts from the private cursor", 
   const readerId = "member_0194f6d2-8c10-7a31-9e42-123456789ac2";
   try {
     const paths = await setup(home);
+    const skewed = await createPost({ forumAlias: "team", room: "review", thread: "thread_0194f6d2-8c10-7a31-9e42-123456789abe", identityId: readerId, type: "status", body: "Sender clock is behind.", now: new Date("2026-07-08T12:02:00.000Z") }, paths);
     const before = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
-    assert.equal(before.threads[0]?.messages[0]?.localReceipt.unreadBy[0]?.displayName, "Reader Agent");
-    assert.equal(before.threads[0]?.messages[0]?.localReceipt.readBy.length, 0);
+    const openingBefore = before.threads[0]?.messages.find((message) => message.authorId !== readerId);
+    assert.equal(openingBefore?.localReceipt.unreadBy[0]?.displayName, "Reader Agent");
+    const skewedView = await getViewerRoomData({ forumAlias: "team", room: "review" }, paths);
+    const skewedMessage = skewedView.threads[0]?.messages.find((message) => message.id === skewed.message.id);
+    assert.equal(skewedMessage?.localReceipt.unreadBy[0]?.displayName, "Viewer Agent", "old sender timestamps must not suppress Viewer unread state");
+    assert.equal(openingBefore?.localReceipt.readBy.length, 0);
     await createThreadEvent({ forumAlias: "team", room: "review", thread: "thread_0194f6d2-8c10-7a31-9e42-123456789abe", type: "thread-closed", reason: "Done", data: {}, now: new Date("2026-07-12T12:02:00.000Z") }, paths);
     const closed = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
     assert.equal(closed.threads[0]?.status, "closed");
-    assert.equal(closed.threads[0]?.messages[0]?.localReceipt.unreadBy.length, 0, "closed Thread messages are not Dashboard navigation targets");
+    const openingClosed = closed.threads[0]?.messages.find((message) => message.authorId !== readerId);
+    assert.equal(openingClosed?.localReceipt.unreadBy.length, 0, "closed Thread messages are not Dashboard navigation targets");
     await getInbox({ forumAlias: "team", all: true, identityId: readerId, sync: false, markAllRead: true }, paths);
     const after = await getViewerRoomData({ forumAlias: "team", room: "review", identityIds: [readerId] }, paths);
-    assert.equal(after.threads[0]?.messages[0]?.localReceipt.readBy[0]?.displayName, "Reader Agent");
-    assert.equal(after.threads[0]?.messages[0]?.localReceipt.unreadBy.length, 0);
+    const openingAfter = after.threads[0]?.messages.find((message) => message.authorId !== readerId);
+    assert.equal(openingAfter?.localReceipt.readBy[0]?.displayName, "Reader Agent");
+    assert.equal(openingAfter?.localReceipt.unreadBy.length, 0);
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
@@ -159,6 +166,22 @@ test("Viewer opened from a binding displays its workspace and branch", async () 
     } finally {
       await closeViewerSession(opened.sessionId, paths);
     }
+
+    const explicit = await openViewer({ forumAlias: "team", room: "review", cwd: workspace, openBrowser: false, idleMs: 30_000, entryPath: resolve("skills", "agent-forum", "scripts", "agent-forum.mjs") }, paths);
+    try {
+      const html = await (await fetch(explicit.url)).text();
+      assert.match(html, /class="binding-context"/u, "an explicit target matching the current binding keeps its context");
+      assert.match(html, />main<\/code>/u);
+    } finally {
+      await closeViewerSession(explicit.sessionId, paths);
+    }
+
+    const output = resolve(home, "review-bound.html");
+    const exported = await generateViewerHtml({ forumAlias: "team", room: "review", cwd: workspace, output }, paths);
+    const staticHtml = await readFile(exported.output, "utf8");
+    assert.match(staticHtml, /class="binding-context"/u, "static Viewer exports keep the binding context");
+    assert.equal(staticHtml.includes(await realpath(workspace)), true);
+    assert.match(staticHtml, />main<\/code>/u);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

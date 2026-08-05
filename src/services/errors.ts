@@ -25,6 +25,7 @@ export class ServiceError extends Error {
       | "LOCAL_CLONE_CLEANUP_FAILED"
       | "SYNC_AUTHENTICATION_FAILED"
       | "SYNC_NETWORK_FAILED"
+      | "SYNC_TIMEOUT"
       | "SYNC_REBASE_CONFLICT"
       | "SYNC_REBASE_FAILED"
       | "SYNC_RETRY_EXHAUSTED"

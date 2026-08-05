@@ -2,6 +2,20 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.28 - 2026-08-05
+
+### Fixed
+
+- Inbox 现在对 active Room member 展示该 Room 的全部历史 Message/Event，不再使用 `membership.updatedAt` 或发送者 `createdAt` 截断历史；保留 `seenIds` 已读游标，并覆盖发送端时钟错误场景。
+- Viewer 与 Dashboard 的本机未读回执采用同一套全历史资格；角色、职责变更和错误消息时间不会再吞掉历史未读。
+- Viewer `open` 与 `generate` 在目标与当前绑定一致时保留目录和分支信息；静态导出也展示绑定上下文，并新增 `--cwd` 入口。
+- Dashboard polling 改为上一轮刷新完成后再等待 10 秒；遇到 Forum 锁不立即重试，Git/CLI 刷新增加超时保护，保留 `LOCAL_LOCKED` 根因。
+
+### Compatibility
+
+- 保留 Forum v1 数据、`room-member` v1、`inbox-cursor` v1 和 `seenIds` 格式，不改写历史消息或本机旧游标。
+- 旧版本客户端仍可读取远端数据；混用期间旧客户端可能继续按旧时间边界过滤历史消息。
+
 ## 0.0.27 - 2026-08-04
 
 ### Fixed

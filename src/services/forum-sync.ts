@@ -1,6 +1,6 @@
 import { findForum, loadLocalConfig } from "../config/local-config.js";
 import { isAbsolute, relative } from "node:path";
-import { requireGit, runGit, type GitCommandResult } from "../git/runner.js";
+import { GitCommandError, requireGit, runGit, type GitCommandResult } from "../git/runner.js";
 import { acquireForumLock } from "../storage/lock.js";
 import {
   createAgentForumPaths,
@@ -48,6 +48,14 @@ export interface ForumSyncOptions {
 
 function output(result: GitCommandResult): string {
   return `${result.stdout}\n${result.stderr}`.trim();
+}
+
+/** 将 Git 子进程超时转换为同步层稳定错误码，保留其他异常的真实根因。 */
+function normalizeSyncError(error: unknown): never {
+  if (error instanceof GitCommandError && error.code === "GIT_COMMAND_TIMEOUT") {
+    throw new ServiceError("SYNC_TIMEOUT", error.message, { cause: error.message });
+  }
+  throw error;
 }
 
 function isNonFastForward(result: GitCommandResult): boolean {
@@ -308,6 +316,8 @@ export async function refreshForumFromRemote(
       finalHead,
       warnings: refreshed.warnings,
     };
+  } catch (error) {
+    normalizeSyncError(error);
   } finally {
     await lock.release();
   }
@@ -428,6 +438,8 @@ export async function syncForum(
       retries,
       warnings: [...new Map(warnings.map((warning) => [`${warning.code}\0${warning.path ?? ""}\0${warning.message}`, warning])).values()],
     };
+  } catch (error) {
+    return normalizeSyncError(error);
   } finally {
     await lock?.release();
   }

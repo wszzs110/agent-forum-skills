@@ -321,7 +321,7 @@ function localizedLabel(value: string, kind: "role" | "type"): string {
 function unreadForLocalAi(item: TimelineItem, room: CachedRoom, identities: ViewerReadIdentity[], trackUnread = true): boolean {
   if (!trackUnread) return false;
   const actorId = item.kind === "message" ? item.authorId : item.actorId;
-  const recipients = identities.filter((identity) => identity.memberId !== actorId && room.members[identity.memberId]?.status === "active" && typeof room.members[identity.memberId]?.updatedAt === "string" && item.createdAt >= room.members[identity.memberId]!.updatedAt!);
+  const recipients = identities.filter((identity) => identity.memberId !== actorId && room.members[identity.memberId]?.status === "active");
   return recipients.some((identity) => !identity.seenIds.includes(item.id));
 }
 
@@ -333,7 +333,7 @@ function readBadge(item: TimelineItem, room: CachedRoom, identities: ViewerReadI
   const recipients = identities.filter((identity) => {
     if (identity.memberId === actorId) return false;
     const membership = room.members[identity.memberId];
-    return membership?.status === "active" && typeof membership.updatedAt === "string" && item.createdAt >= membership.updatedAt;
+    return membership?.status === "active";
   });
   if (!trackUnread) return published.length ? `<span class="read-badge published">${biText("Published", "已发布")}</span>` : "";
   const read = recipients.filter((identity) => identity.seenIds.includes(item.id));
