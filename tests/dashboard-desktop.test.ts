@@ -248,7 +248,7 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
 test("Dashboard Room 页面收到新快照时不重建 DOM", async () => {
   const source = await readFile(join(process.cwd(), "dashboard", "page.mjs"), "utf8");
   const refreshStart = source.indexOf("async function refresh(");
-  const refreshEnd = source.indexOf("\nsetInterval(refresh", refreshStart);
+  const refreshEnd = source.indexOf("\nasync function runRefreshLoop", refreshStart);
   assert.ok(refreshStart >= 0 && refreshEnd > refreshStart);
   const createRefreshController = new Function(
     "api",
@@ -283,6 +283,14 @@ test("Dashboard Room 页面收到新快照时不重建 DOM", async () => {
   assert.equal(renders.length, 0, "an open Room page must keep its existing DOM and scroll position");
   assert.deepEqual(controller.state(), { revision: 41, lastData: snapshot });
   assert.deepEqual(notices, []);
+  assert.match(source, /async function runRefreshLoop\(force=false\)/u, "Dashboard refreshes only after the previous refresh completes");
+  assert.match(source, /refreshTimer=setTimeout\(\(\)=>\{void runRefreshLoop\(\)\},1000\)/u, "Dashboard schedules the next refresh after completion");
+  assert.doesNotMatch(source, /setInterval\(refresh,1000\)/u, "Dashboard must not overlap refresh requests with a fixed interval");
+  assert.match(source, /new AbortController\(\)/u, "Dashboard API requests have an abort controller");
+  assert.match(source, /function updateRenderedBar\(team,displayedRooms\)/u, "Dashboard patches stable Bar DOM instead of rebuilding it");
+  assert.match(source, /setAttribute\('aria-label',/u, "Dashboard patches accessibility labels with live counts");
+  assert.match(source, /function destroyRenderedBar\(\)/u, "Dashboard cancels animations before replacing a view");
+  assert.match(source, /const maxRememberedTeams=32/u, "Dashboard bounds remembered Team state");
 
   controller.setRoomPanelOpen(false);
   snapshot = { revision: 42 };

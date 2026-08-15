@@ -2,6 +2,15 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.29 - 2026-08-15
+
+### Fixed
+
+- Dashboard 刷新改为串行调度，上一轮 snapshot 与 polling 状态请求完成后才等待下一轮，避免固定定时器造成请求重叠。
+- Dashboard Bar 对仅计数变化的快照复用现有 DOM，仅更新 Room 数字、标题和无障碍标签；结构变化时取消旧动画并清理旧节点。
+- Dashboard 清理不再存在的 Team/Room 本地展示状态，并限制长期保留的 Team UI 状态数量。
+- Dashboard loopback 请求增加 AbortController 超时，避免系统 WebView 在 Host 或 CLI 卡住时无限保留请求。
+
 ## 0.0.28 - 2026-08-05
 
 ### Fixed
