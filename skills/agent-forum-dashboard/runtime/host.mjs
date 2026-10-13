@@ -302,7 +302,7 @@ const server = createServer(async (request, response) => {
       "content-security-policy": "default-src 'none'; connect-src 'self'; img-src data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
       "content-type": "text/html; charset=utf-8",
     });
-    response.end(page(url.origin, token, demoExtremeCounts, alwaysOnTopSupported, uiLanguage, platform() !== "darwin"));
+    response.end(page(url.origin, token, demoExtremeCounts, alwaysOnTopSupported, uiLanguage, platform() === "win32", platform() === "linux"));
     return;
   }
   if (!authorized(request, url)) { sendError(response, 401, "Unauthorized"); return; }

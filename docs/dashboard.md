@@ -99,10 +99,18 @@ Agent lease 只表达活跃度：最后一个 lease 失效后，`Active` 会清�
 
 页面刷新只读取 host 内存中的 snapshot，不会每秒启动 CLI。小眼睛的 Room 页面通过 `viewer data --json` 在**点开时**读取最新结构化数据，不启动 Viewer server、浏览器或额外端口；打开期间的后台 snapshot 变化只写入内存，绝不重建 Room DOM，因此不会丢失滚动位置。关闭后再次点开会取得新的 Room 快照；加载失败时 Dashboard 会显示稳定错误码和说明。
 
-Dashboard 会尽力禁止原生缩放。若窗口管理器仍允许硬拉边框，程序保留用户拉开的尺寸，不在拖动时强制恢复，以避免频闪；切换显示模式时仍会恢复对应标准高度。
+Dashboard 会尽力禁止原生缩放。Windows/macOS 若窗口管理器仍允许硬拉边框，程序保留用户拉开的尺寸，不在拖动时强制恢复，以避免频闪；切换显示模式时仍会恢复对应标准高度。Linux 受 WebKitGTK 最小高度限制，固定使用 670×200 外框，切换模式只改变窗口内部布局。
+
+Linux 页面表面使用视口高度而非固定像素高度，因此普通系统窗口扩大后，Room 内容会在可用区域内适配和滚动；Windows/macOS 继续使用原有固定高度布局。
+
+## Linux 原生窗口约束
+
+Linux 上的 WebKitGTK `WebView` 自带 200 逻辑像素的最小高度，因此 Dashboard 的 Linux 普通窗口最小客户区设为 620×200；窗口可从 800×600 初始客户区自由调整到该下限以上。此前固定无边框窗口请求 124 或 150 时会被抬到 200，高于 200 的请求（如 344）则正常生效。该下限来自 WebKitGTK 而不是合成器：同样尺寸、同样尺寸约束的纯 GTK 窗口可以稳定停在 124。现在 Linux 使用可调整大小的普通窗口，不再依赖运行期强制 resize；模式切换只调整页面内部布局。
+
+结论：Linux 改用有系统装饰、可调整大小的普通窗口，初始客户区为 800×600，最小客户区为 620×200。页面使用顶部工具栏和响应式 Room 网格，系统标题栏负责关闭与调整大小，Linux 页面仅保留查看和轮询等业务操作，隐藏重复的置顶与收起按钮。Room 列表扩展和页面内容均在窗口内部适配和滚动；在 Niri 中这类窗口可能按普通窗口规则平铺，这是选择原生窗口体验后的预期行为。Windows/macOS 的无边框固定尺寸行为不变。
 
 ## 平台状态
 
 Release workflow 构建 Windows x64、Linux x64/arm64、macOS x64/arm64 archive，并验证安装、SHA-256、Windows GUI subsystem 与 30 MiB 体积预算；CI 同时拒绝任何 CEF、Deno 或内置 CLI helper 文件回归。
 
-Windows 已完成真实 GUI 验证（无边框、置顶、三档折叠、Room 页面、单实例 attach、关闭清理）。Tauri 窗口 API 使用逻辑像素，因此 Dashboard 不会额外按系统 DPI 二次换算尺寸；这避免了 125%/150% 等缩放下展开 Room 列表时出现空白窗口区域。Linux/macOS 目前仅完成构建与 archive 自动验证，仍需实机确认无边框、关闭行为和系统 WebView GUI。Ubuntu 的标准 GNOME Wayland 不允许普通应用取得全局置顶层，Dashboard 会禁用该按钮并明确提示当前版本不可用，不会错误显示为已置顶；需要置顶时将来必须显式安装 GNOME Shell 集成。macOS 广泛分发前仍建议补充 Developer ID 签名与 notarization。CI 构建成功不等于 GUI 兼容性已经完成。
+Windows 已完成真实 GUI 验证（无边框、置顶、三档折叠、Room 页面、单实例 attach、关闭清理）。Tauri 窗口 API 使用逻辑像素，因此 Dashboard 不会额外按系统 DPI 二次换算尺寸；这避免了 125%/150% 等缩放下展开 Room 列表时出现空白窗口区域。Ubuntu 26 实机已确认单实例 attach、关闭清理、页面视口填充以及原生尺寸下限行为（见「Linux 原生窗口约束」）；Linux 普通系统窗口的最终视觉仍需实机确认。Linux 现在使用 800×600 初始客户区、有系统装饰且可调整大小的窗口，模式切换由页面内部处理，不再依赖运行期强制 resize。macOS 目前仅完成构建与 archive 自动验证，仍需实机确认边框、关闭行为和系统 WebView GUI。Ubuntu 的标准 GNOME Wayland 不允许普通应用取得全局置顶层，Dashboard 会禁用该按钮并明确提示当前版本不可用，不会错误显示为已置顶；需要置顶时将来必须显式安装 GNOME Shell 集成。macOS 广泛分发前仍建议补充 Developer ID 签名与 notarization。CI 构建成功不等于 GUI 兼容性已经完成。

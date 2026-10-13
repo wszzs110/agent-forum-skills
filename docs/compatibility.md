@@ -38,6 +38,6 @@ Release workflow 会构建并验证 Windows x64、Linux x64/arm64、macOS x64/ar
 - 安装后的重新加载行为；
 - pi 原生斜杠命令的发布包发现；
 - OpenCode/Codex/Claude Code 的无 hook lease 降级体验；
-- Linux/macOS Dashboard 置顶、无边框、关闭退出及系统 WebView GUI 执行（CI archive 验证不等于 GUI 实机验证）；
-- Ubuntu 26.x 的 WebKitGTK Wayland/X11、缩放、多显示器、置顶和窗口管理器行为；在 Ubuntu 26 runner 或实机可用前只能标为待验，不能预先承诺完整兼容；
+- Linux/macOS Dashboard 置顶、无边框、关闭退出及系统 WebView GUI 执行（CI archive 验证不等于 GUI 实机验证；Ubuntu 26 已确认单实例 attach、关闭清理、页面填满视口高度与原生尺寸下限，剩余项仍未验证）；
+- Ubuntu 26.x 的 WebKitGTK Wayland/X11、缩放、多显示器、置顶和窗口管理器行为（已确认 WebKitGTK WebView 强制 200 逻辑像素最小高度、不可调整大小窗口在运行期不接受 resize，详见 docs/dashboard.md）；在 Ubuntu 26 runner 或更多实机可用前只能标为待验，不能预先承诺完整兼容；
 - macOS 下载产物在不同 Gatekeeper 策略下的启动行为；当前 workflow 使用 ad-hoc bundle 签名，正式面向广泛用户分发前仍建议 Developer ID 签名与 notarization。

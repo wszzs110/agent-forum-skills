@@ -105,15 +105,24 @@ test("Dashboard 最后一个 Agent 离开后等待用户手动关闭", async () 
   assert.match(lease, /runCli\(\["dashboard", "lease-status"\]\)/u, "lease checks must not run the expensive installation status command");
   assert.match(host, /await attachLease\(initialClient, true\)/u);
   assert.match(page, /native\.setSize\(new LogicalSize\(670,barHeight\+panel\)\)/u, "Tauri sizing uses CSS logical pixels and must not apply DPI twice");
+  assert.match(page, /linuxLayout = false/u, "Dashboard layout receives an explicit Linux platform flag");
+  assert.match(host, /page\(url\.origin, token, demoExtremeCounts, alwaysOnTopSupported, uiLanguage, platform\(\) === "win32", platform\(\) === "linux"\)/u, "the host enables Windows transparency and Linux layout only on their platforms");
   assert.match(page, /window\.__TAURI__\?\.dpi\?\.LogicalSize/u, "remote Tauri window calls must serialize an explicit logical size");
   assert.match(page, /const outerBackground = transparentWindow \? "transparent" : "linear-gradient/u, "transparent native windows need transparent document corners");
   assert.match(page, /html,body\{[^}]*background:\$\{outerBackground\}/u, "document corners must follow the native transparency mode");
-  assert.match(host, /platform\(\) !== "darwin"/u, "macOS must retain an opaque document fallback because Tauri transparency uses a private API there");
+  assert.match(host, /platform\(\) === "win32"/u, "only Windows enables the transparent document fallback");
   assert.doesNotMatch(page, /desktopScale|devicePixelRatio:window\.devicePixelRatio/u, "DPI multiplication would create blank native window space");
   assert.match(page, /\.team-tabs\{[^}]*padding-right:185px/u, "dense Team tabs reserve space for window controls");
-  assert.match(page, /\.right\{position:absolute;right:10px;top:9px/u, "window controls stay visible independently of Team tab width");
+  assert.match(page, /\.right\{position:absolute;right:10px;top:9px/u, "Windows and macOS keep the original window-control position");
+  assert.match(page, /\.bar\{position:relative;height:124px;padding:8px 10px/u, "Windows and macOS keep the original Dashboard surface height");
+  assert.match(page, /\.linux\.bar\{height:100vh;display:flex;flex-direction:column;justify-content:flex-start;padding:18px 22px/u, "Linux uses a normal full-window application layout");
+  assert.match(page, /\.linux\.bar \.teams\{position:relative;flex:0 0 50px;height:50px/u, "Linux provides a distinct application toolbar");
+  assert.match(page, /\.linux\.bar \.team-tabs\{padding-right:75px;gap:6px\}/u, "Linux toolbar reserves room for the remaining application actions");
+  assert.match(page, /\.linux\.bar #top,\.linux\.bar #collapse,\.linux\.bar #close\{display:none\}/u, "Linux delegates pinning, collapsing, and closing to the normal window experience");
+  assert.match(page, /\.linux\.bar \.rooms\{flex:1;min-height:0;height:auto;grid-template-columns:repeat\(auto-fill,minmax\(260px,1fr\)\)/u, "Linux Rooms use a responsive scrollable grid");
+  assert.match(page, /const displayedRooms=mode===1\?\(focusRoom\?\[focusRoom\]:\[\]\):mode===3\?orderedRooms/u, "Linux layout keeps the existing Room display modes");
+  assert.match(page, /if\(linuxLayout\)return\{mode:nextMode,panelHeight:panel\}/u, "Linux mode changes do not force native resize");
   assert.match(page, /\.bar\{[^}]*border-radius:10px/u, "Dashboard outer surface keeps a compact radius");
-  assert.match(page, /\.teams\{height:34px/u, "Dashboard header leaves balanced vertical space");
   assert.match(page, /\.rooms\{height:72px[^}]*padding:6px 2px 2px/u, "Dashboard Room row balances the header and bottom inset");
   assert.match(page, /\.expanded \.rooms\{height:292px/u, "expanded Dashboard fills its resized native window without an oversized bottom gap");
   assert.match(page, /\.room-name\{position:relative;[^}]*overflow:visible/u, "Room title keeps the same vertical anchor when Active is present");
@@ -146,7 +155,9 @@ test("Dashboard 最后一个 Agent 离开后等待用户手动关闭", async () 
   assert.match(host, /context-bindings\.json/u, "Dashboard watches local binding state for immediate marker refresh");
   assert.match(host, /stateWatcher\.on\("rename", refreshOnStateChange\)/u, "Dashboard handles atomic replacement events on Windows");
   const shell = await readFile(join(process.cwd(), "dashboard", "tauri", "src", "main.rs"), "utf8");
-  assert.match(shell, /window\.transparent\(true\)\.shadow\(false\)/u, "Windows and Linux must not reserve a black native shadow around the rounded Dashboard surface");
+  assert.match(shell, /#\[cfg\(target_os = "windows"\)\][\s\S]*?window\.transparent\(true\)\.shadow\(false\)/u, "Windows keeps its borderless transparent window path");
+  assert.match(shell, /#\[cfg\(target_os = "linux"\)\][\s\S]*?\.decorations\(true\)[\s\S]*?\.resizable\(true\)[\s\S]*?\.inner_size\(800\.0, 600\.0\)/u, "Linux uses a normal decorated resizable window");
+  assert.match(shell, /#\[cfg\(target_os = "linux"\)\][\s\S]*?let window = window;/u, "Linux keeps the native window opaque");
   assert.match(shell, /#\[cfg\(target_os = "macos"\)\][\s\S]*?window\.shadow\(true\)/u, "macOS keeps its supported native rounded shadow path");
 });
 

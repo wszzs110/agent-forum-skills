@@ -58,19 +58,29 @@ fn main() {
         .setup(move |app| {
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("Agent Forum Dashboard")
-                .decorations(false)
-                .resizable(false)
-                .inner_size(670.0, 124.0)
-                .min_inner_size(620.0, 62.0)
                 .always_on_top(top_supported)
                 .visible(false)
                 .on_navigation(move |candidate| allowed_navigation(navigation_url.clone(), candidate));
+            #[cfg(target_os = "linux")]
+            let window = window
+                .decorations(true)
+                .resizable(true)
+                .inner_size(800.0, 600.0)
+                .min_inner_size(620.0, 200.0);
+            #[cfg(not(target_os = "linux"))]
+            let window = window
+                .decorations(false)
+                .resizable(false)
+                .inner_size(670.0, 124.0)
+                .min_inner_size(620.0, 62.0);
             // Windows 的默认无边框阴影会额外占用一圈黑色非客户区，遮住页面圆角。
-            // Linux 也使用透明外层；macOS 保留系统阴影与圆角，避免依赖私有透明 API。
+            // Linux 使用系统装饰与不透明客户区；macOS 保留系统阴影与圆角。
             #[cfg(target_os = "macos")]
             let window = window.shadow(true);
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "windows")]
             let window = window.transparent(true).shadow(false);
+            #[cfg(target_os = "linux")]
+            let window = window;
             let window = window.build()?;
             window.show()?;
             window.set_focus()?;
