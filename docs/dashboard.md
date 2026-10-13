@@ -4,7 +4,7 @@ Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Forum（�
 
 ## 界面
 
-普通状态显示 Forum 页签、三个 Room 和五个窗口控制按钮。Room 超过三个时，可展开为三列滚动列表；Forum 较多时会压缩为单行页签。页签直接显示本机 Forum alias；不再重复 `Forum alias` 前缀。左侧只保留 logo，不重复显示 `Forum / Forums` 文字。
+普通状态在 Windows/macOS 显示 Forum 页签、三个 Room 和五个窗口控制按钮；Room 超过三个时，可展开为三列滚动列表。Linux 普通窗口默认直接展开并显示当前 Team 的全部 Room，超出窗口高度时在内容区滚动，不显示额外的展开箭头。Forum 较多时会压缩为单行页签。页签直接显示本机 Forum alias；不再重复 `Forum alias` 前缀。左侧只保留 logo，不重复显示 `Forum / Forums` 文字。
 
 每个 Room 显示：
 
@@ -23,7 +23,7 @@ Dashboard 是一个本机置顶窗口，用来快速查看当前活跃 Forum（�
 4. 收起或恢复窗口；
 5. 关闭 Dashboard。
 
-右下角的独立箭头用于展开或收起 Room 列表。
+Windows/macOS 右下角的独立箭头用于展开或收起 Room 列表；Linux 已默认展开全部 Room，不显示该箭头。
 
 ## 架构
 

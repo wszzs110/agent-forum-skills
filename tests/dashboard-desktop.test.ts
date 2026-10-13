@@ -256,6 +256,14 @@ test("Viewer 打开失败只显示可关闭提示，不替换 Dashboard Bar", as
   assert.doesNotMatch(source, /<strong>Forum<\/strong>/);
 });
 
+test("Linux Dashboard 默认展开全部 Room，其他平台保持折叠行为", async () => {
+  const source = await readFile(join(process.cwd(), "dashboard", "page.mjs"), "utf8");
+  assert.match(source, /mode=\$\{linuxLayout \? 3 : 0\}/u, "Linux starts in the all-Room mode");
+  assert.match(source, /team\.rooms\.length>3&&!linuxLayout&&mode!==1/u, "the Room expand button remains for Windows and macOS only");
+  assert.match(source, /if\(linuxLayout\)rail\.style\.display=rooms\.scrollHeight>rooms\.clientHeight\+1\?/u, "Linux hides an unnecessary scrollbar when all Rooms fit");
+  assert.match(source, /const nextMode=linuxLayout\?3:/u, "switching Teams keeps Linux in the all-Room mode");
+});
+
 test("Dashboard Room 页面收到新快照时不重建 DOM", async () => {
   const source = await readFile(join(process.cwd(), "dashboard", "page.mjs"), "utf8");
   const refreshStart = source.indexOf("async function refresh(");
