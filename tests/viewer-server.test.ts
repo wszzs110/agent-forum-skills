@@ -205,11 +205,16 @@ test("Viewer renders safe Markdown and exposes functional client-side controls",
   assert.equal(html.includes(".lang-zh{display:none}"), false, "language switching must not leave Chinese content hidden by CSS");
   assert.match(html, /id="previous-unread"/u);
   assert.match(html, /id="next-unread"/u);
+  assert.doesNotMatch(html, /id="close"/u, "the live page no longer exposes a page-level close button");
+  assert.doesNotMatch(html, /getElementById\('close'\)/u, "the page no longer binds a close button handler");
   assert.match(html, /const searchState=\{text:''[^;]*tags:/u, "search state drives the result-set navigation");
   assert.match(html, /function moveResult\(direction\)/u, "previous/next navigate the current result set");
   assert.match(html, /function applyQuery\(\)/u, "unified query locates messages without filtering the list");
   assert.match(html, /function buildTagChips\(\)/u, "search tags are rendered from injected tag data");
   assert.match(html, /const searchTagData=/u, "the page embeds searchable tag data");
+  assert.match(html, /New data available/u, "revision changes expose a manual refresh notice");
+  assert.match(html, /有新数据可用/u, "revision changes expose the Chinese notice");
+  assert.doesNotMatch(html, /next\.revision!==revision\)location\.reload\(\)/u, "revision polling does not reload automatically");
   assert.match(html, /query-hit/u, "matched messages are highlighted");
   assert.match(html, /outline-unread/u);
   assert.match(html, /outline-unread[^}]*background:#eff6ff/u, "unread badge should share the Viewer blue palette");
@@ -390,6 +395,8 @@ test("Viewer preserves dense multi-member reply networks in the outline and time
 test("Viewer navigation opens a fresh Room route and only syncs the selected Team on demand", async () => {
   const input = snapshot();
   const room = input.rooms[0]!;
+  const otherRoom = { ...room, room: { ...room.room, id: "room_other", slug: "other", title: "Other Room" } };
+  const otherSnapshot = { ...input, forumAlias: "other-team", forum: { ...input.forum, name: "Other Team" }, rooms: [otherRoom] };
   const navigation: ViewerNavigationCatalog = {
     generatedAt: "2026-07-12T10:00:00.000Z",
     teams: [
@@ -407,7 +414,7 @@ test("Viewer navigation opens a fresh Room route and only syncs the selected Tea
         name: "Other Team",
         activeLocalAgents: 0,
         counts: { related: 0, broadcast: 0, other: 0 },
-        rooms: [{ roomId: room.room.id, slug: room.room.slug, title: "Review", status: "active", deprecated: false, activeLocalAgents: 0, counts: { related: 0, broadcast: 0, other: 0 } }],
+        rooms: [{ roomId: otherRoom.room.id, slug: otherRoom.room.slug, title: otherRoom.room.title, status: "active", deprecated: false, activeLocalAgents: 0, counts: { related: 0, broadcast: 0, other: 0 } }],
       },
     ],
   };
@@ -424,12 +431,14 @@ test("Viewer navigation opens a fresh Room route and only syncs the selected Tea
     },
     loadRoom: async (forumAlias, roomId): Promise<ViewerRoomPage> => {
       loadCount += 1;
-      return { forumAlias, roomId, snapshot: input, room, freshness: { state: "fresh" }, readIdentities: [], sendMode: "auto" };
+      return { forumAlias, roomId, snapshot: forumAlias === "other-team" ? otherSnapshot : input, room: forumAlias === "other-team" ? otherRoom : room, freshness: { state: "fresh" }, readIdentities: [], sendMode: "auto" };
     },
   });
   try {
     const html = await (await fetch(viewer.url)).text();
     assert.match(html, /id="viewer-nav-toggle"/u);
+    assert.match(html, /class="viewer-nav-fab-icon"/u);
+    assert.match(html, /viewBox="0 0 24 24"/u);
     assert.match(html, /data-en="Sync"/u);
     assert.match(html, /"forumAlias":"other-team"/u);
     const scripts = [...html.matchAll(/<script nonce="agent-forum">([\s\S]*?)<\/script>/gu)].map((match) => match[1]!);
@@ -441,11 +450,15 @@ test("Viewer navigation opens a fresh Room route and only syncs the selected Tea
     assert.equal(syncResponse.status, 200);
     assert.equal(syncCount, 1);
 
-    const target = await fetch(`${viewer.url}room/other-team/${room.room.id}/`);
+    const target = await fetch(`${viewer.url}room/other-team/${otherRoom.room.id}/`);
     assert.equal(target.status, 200);
     assert.equal(loadCount, 1);
-    assert.match(await target.text(), /id="viewer-nav-toggle"/u);
-    const revision = await fetch(`${viewer.url}room/other-team/${room.room.id}/revision`);
+    const targetHtml = await target.text();
+    assert.match(targetHtml, /<title>Other Room — Agent Forum<\/title>/u);
+    assert.match(targetHtml, /id="viewer-nav-toggle"/u);
+    const initialAgain = await (await fetch(viewer.url)).text();
+    assert.match(initialAgain, /<title>Checkout — Agent Forum<\/title>/u, "the original tab route remains bound to its original Room");
+    const revision = await fetch(`${viewer.url}room/other-team/${otherRoom.room.id}/revision`);
     assert.equal(revision.status, 200);
   } finally {
     await viewer.close();
