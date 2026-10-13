@@ -23,6 +23,8 @@
     "skills/agent-forum-dashboard",
     "adapters",
     "dashboard",
+    "!dashboard/tauri/target",
+    "!dashboard/tauri/gen",
     "docs",
     "schemas",
     "README.md",

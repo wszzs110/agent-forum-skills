@@ -48,7 +48,7 @@ if (result.status !== 0) {
     "dashboard/release-manifest.schema.json",
     "docs/dashboard.md",
   ];
-  const forbiddenPrefixes = ["src/", "tests/", ".planning/", "AGENTS.md"];
+  const forbiddenPrefixes = ["src/", "tests/", "scripts/", "dashboard/tauri/target/", "dashboard/tauri/gen/", ".planning/", "AGENTS.md"];
   const missing = required.filter((path) => !files.has(path));
   const forbidden = [...files].filter((path) =>
     forbiddenPrefixes.some((prefix) => path === prefix || path.startsWith(prefix)),
