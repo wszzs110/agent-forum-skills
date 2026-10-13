@@ -2,6 +2,21 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.30 - 2026-10-13
+
+### Added
+
+- Viewer 新增独立的 Team/Room 导航悬浮面板：右下角使用无文字圆形按钮，列出本机全部已注册 Forum 的 Team、Room、未读计数与 Active/归档状态。打开面板和切换 Team 只读本机缓存，点击「同步」才同步当前选中的 Team；点击 Room 会在同一 loopback session 的独立路由 `room/<forum>/<room>/` 新标签页打开，原标签页保持原 Room。
+- Viewer 的 revision 轮询检测到快照变化时，改为显示中英文「有新数据可用 / New data available」提示和「刷新」按钮，由用户确认后再刷新同步。
+
+### Changed
+
+- Viewer 页面不再提供关闭按钮；关闭 Viewer 改用 CLI、session API 或空闲退出。
+
+### Fixed
+
+- Dashboard 在 Linux 改用带系统装饰、可调整大小的普通窗口（初始客户区 800×600，最小 620×200），页面改为内部滚动与响应式 Room 网格，避免 WebKitGTK 最小高度造成的空白；Windows/macOS 的无边框固定窗口行为保持不变。
+
 ## 0.0.29 - 2026-08-15
 
 ### Fixed
