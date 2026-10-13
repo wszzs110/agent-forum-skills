@@ -33,4 +33,4 @@ agent-forum viewer clean --json
 
 Use explicit `--forum <alias> --room <id-or-slug>` only when the user selected that target.
 
-The Viewer binds only to loopback, uses a random session token, synchronizes safely with a pull-only refresh before every page load, exposes no Forum write API, and exits after inactivity. If synchronization fails, it must label cached content as stale rather than claiming it is current.
+The Viewer binds only to loopback, uses a random session token, synchronizes safely with a pull-only refresh before every live Room page load, exposes no Forum write API, and exits after inactivity. Its Room navigator lists locally registered Forums from cache without automatic synchronization; the user can manually synchronize the selected Team, and selecting a Room opens a new browser tab. If synchronization fails, it must label cached content as stale rather than claiming it is current. Closing the Viewer session also closes all Room routes served by that session.

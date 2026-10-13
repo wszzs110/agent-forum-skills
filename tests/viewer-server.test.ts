@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildReplyGraph, buildReplyTree, renderViewerHtml, startViewerServer } from "../src/viewer/server.js";
+import { buildReplyGraph, buildReplyTree, renderViewerHtml, startViewerServer, type ViewerNavigationCatalog, type ViewerRoomPage } from "../src/viewer/server.js";
 import type { ForumSnapshot } from "../src/services/timeline-cache.js";
 
 function snapshot(): ForumSnapshot {
@@ -385,4 +385,69 @@ test("Viewer preserves dense multi-member reply networks in the outline and time
   assert.equal((html.match(/class="reply"/g) ?? []).length, 24 * 8);
   assert.match(html, /Dense Agent 4/);
   assert.match(html, /AF-23-6/);
+});
+
+test("Viewer navigation opens a fresh Room route and only syncs the selected Team on demand", async () => {
+  const input = snapshot();
+  const room = input.rooms[0]!;
+  const navigation: ViewerNavigationCatalog = {
+    generatedAt: "2026-07-12T10:00:00.000Z",
+    teams: [
+      {
+        forumId: input.forumId,
+        forumAlias: "team",
+        name: "Team",
+        activeLocalAgents: 1,
+        counts: { related: 0, broadcast: 0, other: 0 },
+        rooms: [{ roomId: room.room.id, slug: room.room.slug, title: room.room.title, status: room.room.status, deprecated: false, activeLocalAgents: 1, counts: { related: 1, broadcast: 0, other: 0 } }],
+      },
+      {
+        forumId: "forum_other",
+        forumAlias: "other-team",
+        name: "Other Team",
+        activeLocalAgents: 0,
+        counts: { related: 0, broadcast: 0, other: 0 },
+        rooms: [{ roomId: room.room.id, slug: room.room.slug, title: "Review", status: "active", deprecated: false, activeLocalAgents: 0, counts: { related: 0, broadcast: 0, other: 0 } }],
+      },
+    ],
+  };
+  let syncCount = 0;
+  let loadCount = 0;
+  const viewer = await startViewerServer({
+    snapshot: input,
+    roomIdOrSlug: room.room.id,
+    token: "fedcfedcfedcfedcfedcfedcfedcfedc",
+    navigation,
+    syncNavigation: async () => {
+      syncCount += 1;
+      return { catalog: navigation, freshness: { state: "fresh" as const } };
+    },
+    loadRoom: async (forumAlias, roomId): Promise<ViewerRoomPage> => {
+      loadCount += 1;
+      return { forumAlias, roomId, snapshot: input, room, freshness: { state: "fresh" }, readIdentities: [], sendMode: "auto" };
+    },
+  });
+  try {
+    const html = await (await fetch(viewer.url)).text();
+    assert.match(html, /id="viewer-nav-toggle"/u);
+    assert.match(html, /data-en="Sync"/u);
+    assert.match(html, /"forumAlias":"other-team"/u);
+    const scripts = [...html.matchAll(/<script nonce="agent-forum">([\s\S]*?)<\/script>/gu)].map((match) => match[1]!);
+    assert.equal(scripts.length >= 2, true);
+    scripts.forEach((script) => assert.doesNotThrow(() => new Function(script)));
+    assert.equal(syncCount, 0, "opening the page does not sync the navigation catalog");
+
+    const syncResponse = await fetch(`${viewer.url}navigation/sync`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ forumAlias: "other-team" }) });
+    assert.equal(syncResponse.status, 200);
+    assert.equal(syncCount, 1);
+
+    const target = await fetch(`${viewer.url}room/other-team/${room.room.id}/`);
+    assert.equal(target.status, 200);
+    assert.equal(loadCount, 1);
+    assert.match(await target.text(), /id="viewer-nav-toggle"/u);
+    const revision = await fetch(`${viewer.url}room/other-team/${room.room.id}/revision`);
+    assert.equal(revision.status, 200);
+  } finally {
+    await viewer.close();
+  }
 });

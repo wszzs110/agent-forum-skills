@@ -424,7 +424,64 @@ export interface ViewerRefreshResult {
   readIdentities?: ViewerReadIdentity[];
 }
 
-export function renderViewerHtml(snapshot: ForumSnapshot, room: CachedRoom, freshness: ViewerFreshness = { state: "fresh" }, readIdentities: ViewerReadIdentity[] = [], language: "en" | "zh" = "en", binding?: ViewerBindingContext, sendMode: "auto" | "ask" = "auto"): string {
+export interface ViewerNavigationRoom {
+  roomId: string;
+  slug: string;
+  title: string;
+  status: string;
+  deprecated: boolean;
+  activeLocalAgents: number;
+  counts: { related: number; broadcast: number; other: number };
+}
+
+export interface ViewerNavigationTeam {
+  forumId: string;
+  forumAlias: string;
+  name: string;
+  activeLocalAgents: number;
+  counts: { related: number; broadcast: number; other: number };
+  rooms: ViewerNavigationRoom[];
+  error?: string;
+}
+
+export interface ViewerNavigationCatalog {
+  teams: ViewerNavigationTeam[];
+  generatedAt: string;
+}
+
+export interface ViewerNavigationView {
+  catalog: ViewerNavigationCatalog;
+  basePath: string;
+  currentForumAlias: string;
+}
+
+export interface ViewerNavigationSyncResult {
+  catalog: ViewerNavigationCatalog;
+  freshness: ViewerFreshness;
+}
+
+export interface ViewerRoomPage {
+  forumAlias: string;
+  roomId: string;
+  snapshot: ForumSnapshot;
+  room: CachedRoom;
+  freshness: ViewerFreshness;
+  readIdentities: ViewerReadIdentity[];
+  binding?: ViewerBindingContext;
+  sendMode: "auto" | "ask";
+}
+
+const viewerNavigationStyles = `.viewer-nav-root{position:fixed;right:24px;bottom:24px;z-index:40;font-family:var(--font)}.viewer-nav-fab{display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text-2);box-shadow:0 8px 24px rgba(31,35,40,.16);font-weight:650}.viewer-nav-fab:hover{border-color:var(--accent);color:var(--accent);background:var(--surface)}.viewer-nav-fab-icon{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:var(--accent);color:#fff;font-size:13px}.viewer-nav-panel{position:absolute;right:0;bottom:52px;width:min(560px,calc(100vw - 32px));max-height:min(620px,calc(100vh - 48px));overflow:hidden;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.97);box-shadow:0 16px 48px rgba(31,35,40,.2);backdrop-filter:blur(12px)}.viewer-nav-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border-soft)}.viewer-nav-head strong{flex:1;font-size:13px}.viewer-nav-sync,.viewer-nav-close{padding:4px 9px;font-size:12px}.viewer-nav-close{padding:2px 8px;font-size:18px;line-height:1}.viewer-nav-sync[aria-busy="true"]{opacity:.6;cursor:wait}.viewer-nav-sync-state{min-height:0;padding:0 14px;color:var(--text-3);font-size:11px}.viewer-nav-sync-state:not(:empty){padding-top:7px}.viewer-nav-teams{display:flex;gap:6px;overflow-x:auto;padding:10px 14px 8px;border-bottom:1px solid var(--border-soft)}.viewer-nav-team{flex:0 0 auto;max-width:180px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text-2);cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.viewer-nav-team:hover{border-color:var(--accent);color:var(--accent)}.viewer-nav-team.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-2);font-weight:700}.viewer-nav-team-dot{display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:50%;background:var(--text-3)}.viewer-nav-team.active-local .viewer-nav-team-dot{background:var(--success)}.viewer-nav-rooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;max-height:440px;overflow:auto;padding:12px 14px 14px}.viewer-nav-room{position:relative;display:flex;flex-direction:column;min-width:0;min-height:82px;padding:10px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);text-decoration:none;box-shadow:var(--shadow);transition:border-color .12s,box-shadow .12s,transform .12s}.viewer-nav-room:hover{border-color:var(--accent);box-shadow:0 4px 12px rgba(37,99,235,.14);text-decoration:none;transform:translateY(-1px)}.viewer-nav-room.current{border:2px solid var(--accent);padding:9px 10px}.viewer-nav-room-title{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650}.viewer-nav-room-meta{display:flex;align-items:center;gap:5px;margin-top:auto;padding-top:8px;color:var(--text-3);font-size:10px}.viewer-nav-room-active{width:7px;height:7px;border-radius:50%;background:var(--text-3)}.viewer-nav-room-active.on{background:var(--success)}.viewer-nav-room-status{margin-left:auto}.viewer-nav-room-counts{display:flex;gap:6px;margin-top:6px;color:var(--text-3);font-size:10px;font-variant-numeric:tabular-nums}.viewer-nav-room-counts span{white-space:nowrap}.viewer-nav-room-counts .related{color:var(--danger)}.viewer-nav-room-counts .broadcast{color:var(--warning)}.viewer-nav-room-counts .other{color:var(--text-3)}.viewer-nav-room.deprecated{opacity:.68}.viewer-nav-empty,.viewer-nav-error{grid-column:1/-1;padding:24px 12px;text-align:center;color:var(--text-3);font-size:12px}.viewer-nav-error{color:var(--danger)}@media(max-width:600px){.viewer-nav-root{right:12px;bottom:12px}.viewer-nav-panel{bottom:50px;width:calc(100vw - 24px)}.viewer-nav-rooms{grid-template-columns:repeat(2,minmax(0,1fr));max-height:calc(100vh - 180px)}}`;
+
+/**
+ * 生成 Viewer 房间导航器的容器和初始目录数据。
+ */
+function renderViewerNavigation(catalog: ViewerNavigationCatalog, basePath: string, currentForumAlias: string): string {
+  const json = JSON.stringify(catalog).replaceAll("<", "\\u003c");
+  return `<div class="viewer-nav-root" id="viewer-nav-root"><button class="viewer-nav-fab" id="viewer-nav-toggle" type="button" aria-expanded="false" aria-controls="viewer-nav-panel"><span class="viewer-nav-fab-icon" aria-hidden="true">⌘</span><span class="viewer-nav-fab-label" data-en="Rooms" data-zh="房间">Rooms</span></button><section class="viewer-nav-panel" id="viewer-nav-panel" hidden aria-label="Room navigation"><div class="viewer-nav-head"><strong data-en="Teams" data-zh="团队">Teams</strong><button class="viewer-nav-sync" id="viewer-nav-sync" type="button" data-en="Sync" data-zh="同步">Sync</button><button class="viewer-nav-close" id="viewer-nav-close" type="button" aria-label="Close">×</button></div><div class="viewer-nav-sync-state" id="viewer-nav-sync-state" role="status"></div><div class="viewer-nav-teams" id="viewer-nav-teams"></div><div class="viewer-nav-rooms" id="viewer-nav-rooms"></div></section></div><script nonce="agent-forum">window.__viewerNavigation=${json};window.__viewerNavigationBase=${JSON.stringify(basePath)};window.__viewerNavigationCurrent=${JSON.stringify(currentForumAlias)};</script>`;
+}
+
+export function renderViewerHtml(snapshot: ForumSnapshot, room: CachedRoom, freshness: ViewerFreshness = { state: "fresh" }, readIdentities: ViewerReadIdentity[] = [], language: "en" | "zh" = "en", binding?: ViewerBindingContext, sendMode: "auto" | "ask" = "auto", navigation?: ViewerNavigationView): string {
   const activeMembers = Object.entries(room.members ?? {})
     .filter(([, membership]) => membership.status === "active")
     .map(([id, membership]) => {
@@ -496,7 +553,10 @@ export function renderViewerHtml(snapshot: ForumSnapshot, room: CachedRoom, fres
   const sendModeInfo = sendMode === "ask"
     ? `<span class="send-mode ask" title="${escapeHtml(biText("Ask before sending", "先问再发"))}">${sendPlaneSvg} ${biText("Ask before sending", "先问再发")}</span>`
     : `<span class="send-mode auto" title="${escapeHtml(biText("Auto-send", "自动发送"))}">${sendPlaneSvg} ${biText("Auto-send", "自动发送")}</span>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} — Agent Forum</title><link rel="icon" type="image/svg+xml" href="${viewerFavicon}"><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px}.appbar-top{display:flex;align-items:center;gap:16px}.appbar-top h1{flex:1;min-width:0;margin:0;font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.appbar-controls{display:flex;align-items:center;gap:16px;flex-shrink:0}.appbar-bottom{display:flex;align-items:flex-start;gap:16px;margin-top:12px}.appbar-meta{flex:1;min-width:0}.appbar-meta .meta{margin-top:0}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.binding-context{display:flex;align-items:center;gap:5px;max-width:100%;margin-top:4px;color:var(--text-3);font-size:11px}.binding-context code{background:var(--surface-2);padding:1px 5px;border-radius:4px;color:var(--text-2);font-size:11px}.binding-path{max-width:min(58vw,680px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.send-mode{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:650;line-height:1.5}.send-mode .send-plane{width:12px;height:12px;flex-shrink:0}.send-mode.auto{background:var(--success-bg);color:var(--success)}.send-mode.ask{background:var(--warning-bg);color:var(--warning)}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 30px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.search-clear{position:absolute;right:9px;top:50%;transform:translateY(-50%);display:none;width:15px;height:15px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--text-3);font-size:13px;line-height:1;cursor:pointer;align-items:center;justify-content:center}.search-clear:hover{color:var(--text);background:var(--surface-2)}.search-clear.visible{display:inline-flex}mark.match-highlight{background:#fbbf24;color:#1f2328;border-radius:2px;padding:0 1px;animation:match-flash 1.5s ease-out forwards}@keyframes match-flash{0%{background:#f59e0b;color:#1f2328}60%{background:#fbbf24}100%{background:transparent;color:inherit}}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.markdown .md-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-sm)}.markdown .md-table{width:100%;border-collapse:collapse;font-size:13px}.markdown .md-table th,.markdown .md-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;white-space:nowrap}.markdown .md-table th{background:var(--surface-2);font-weight:600;text-align:left}.markdown .md-table tbody tr:last-child td{border-bottom:0}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);margin:0 0 20px}.warnings summary{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:pointer;list-style:none;color:var(--warning);font-size:13px;font-weight:700}.warnings summary::-webkit-details-marker{display:none}.warnings summary::before{content:"▸";font-size:11px;transition:transform .12s}.warnings[open] summary::before{transform:rotate(90deg)}.warnings-title{display:inline-flex}.warnings-count{display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:1px;border-radius:999px;background:#fef3c7;color:#a16207;font-size:10px;font-variant-numeric:tabular-nums}.warning-list{max-height:min(32vh,360px);overflow:auto;padding:0 12px 10px;border-top:1px solid #fde68a}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:5px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0 14px 7px;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.read-badge{display:inline-flex;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700}.read-badge.read{background:var(--success-bg);color:var(--success)}.read-badge.unread{background:var(--warning-bg);color:var(--warning)}.read-badge.published{background:var(--accent-soft);color:var(--accent-2)}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}.view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}.view-toggle button{border:0;border-radius:0;padding:6px 10px}.view-toggle button+button{border-left:1px solid var(--border)}.view-toggle button.active{background:var(--accent);color:#fff}.status-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}.room-status{margin-left:0}.status-open,.status-active{background:var(--accent-soft);color:var(--accent-2)}.status-closed,.status-archived{background:var(--neutral-bg);color:var(--neutral)}.status-unknown{background:var(--warning-bg);color:var(--warning)}.thread-icon.status-open,.thread-icon.status-active{background:var(--accent)}.thread-icon.status-closed{background:var(--neutral)}.thread-icon.status-archived{background:var(--neutral)}.outline-item{display:flex;align-items:center;gap:8px}.outline-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}.outline-status.status-open,.outline-status.status-active{background:var(--accent)}.outline-status.status-closed,.outline-status.status-archived{background:var(--neutral)}.outline-status.status-unknown{background:var(--warning)}.outline-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.outline-unread{display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:var(--accent-2);font-size:10px;font-weight:750;font-variant-numeric:tabular-nums;box-shadow:none}.unread-nav{display:flex;gap:4px}.unread-nav button{padding:6px 9px;font-size:12px}.unread-nav button:disabled{opacity:.4;cursor:not-allowed}.unread-nav button.on{background:var(--accent);color:#fff;border-color:var(--accent)}.search-tags{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}.tag-group{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.tag-chip{padding:2px 10px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text-2);font-size:11px;cursor:pointer;transition:all .12s}.tag-chip:hover{filter:brightness(.96)}.tag-chip[data-group="type"]{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}.tag-chip[data-group="member"]{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}.tag-chip[data-group="status"]{background:#f5f3ff;border-color:#ddd6fe;color:#6d28d9}.tag-chip[data-group="unread"]{background:#fffbeb;border-color:#fde68a;color:#b45309}.tag-chip[data-group="repliesToMe"]{background:#f0fdfa;border-color:#99f6e4;color:#0f766e}.tag-chip[data-group="mentionsMe"]{background:#f0fdfa;border-color:#99f6e4;color:#0f766e}.tag-chip[data-group="type"].on{background:#bfdbfe;border-color:#3b82f6;color:#1e3a8a;font-weight:700}.tag-chip[data-group="member"].on{background:#bbf7d0;border-color:#22c55e;color:#14532d;font-weight:700}.tag-chip[data-group="status"].on{background:#ddd6fe;border-color:#8b5cf6;color:#4c1d95;font-weight:700}.tag-chip[data-group="unread"].on{background:#fde68a;border-color:#f59e0b;color:#78350f;font-weight:700}.tag-chip[data-group="repliesToMe"].on{background:#99f6e4;border-color:#14b8a6;color:#134e4a;font-weight:700}.tag-chip[data-group="mentionsMe"].on{background:#99f6e4;border-color:#14b8a6;color:#134e4a;font-weight:700}.tag-count{color:var(--text-3);font-size:11px;margin-left:4px}.filter-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}.filter-chip:hover{background:var(--surface-2);color:var(--text)}.filter-chip.on{background:var(--warning-bg);border-color:var(--warning);color:var(--warning);font-weight:700}.query-hit{box-shadow:inset 3px 0 var(--accent)}.item.unread-selected{background:#fffbeb;box-shadow:inset 3px 0 #f59e0b;border-radius:var(--radius-sm)}.item.query-selected{background:#fffbeb;box-shadow:inset 3px 0 #f59e0b;border-radius:var(--radius-sm)}.query-focus{animation:unread-focus .9s ease-out}@keyframes unread-focus{0%,100%{box-shadow:none}35%{box-shadow:0 0 0 4px #fde68a;border-radius:var(--radius-sm)}}.room-state{display:flex;gap:8px;align-items:flex-start;background:var(--neutral-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--text-2)}.room-state strong{color:var(--neutral);white-space:nowrap}.tree-issue{display:none;margin:8px 0;padding:6px 9px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--warning);font-size:12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}body[data-view="tree"] .tree-issue{display:block}body[data-view="tree"] .thread-body{padding:14px 18px 18px;background:linear-gradient(180deg,#fbfcfe,#f5f8fc)}body[data-view="tree"] .graph-view{--graph-width:72px;position:relative;min-width:0}body[data-view="tree"] .graph-stage{position:relative;min-width:0}body[data-view="tree"] .graph-canvas{position:absolute;left:0;top:0;width:var(--graph-width);height:100%;overflow:visible;pointer-events:none;z-index:0}body[data-view="tree"] .graph-rows{position:relative;z-index:1}body[data-view="tree"] .graph-row{display:grid;grid-template-columns:var(--graph-width) minmax(0,1fr);align-items:stretch}body[data-view="tree"] .graph-row>.item{grid-column:2;margin:0;padding:14px 14px 14px 7px;background:transparent;border-top:none;border-left:none;border-right:none;border-radius:0;box-shadow:none}body[data-view="tree"] .graph-row>.item .item-line{display:none}body[data-view="tree"] .graph-row:hover>.item{background:rgba(219,234,254,.4)}.graph-track{stroke:#e6ebf4}.graph-edge{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.85}.graph-edge-lit{stroke-width:3;opacity:1}.graph-node{stroke:#fff;stroke-width:2}.tree-activity{margin:16px 0 2px;padding:12px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}.tree-activity h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.tree-activity-note{margin:0 0 8px;font-size:12px;color:var(--text-3)}.tree-activity .item{padding:10px 0 10px 7px}.tree-activity .item:last-child{border-bottom:0}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}body[data-view="tree"] .thread-body{padding-left:10px;padding-right:10px}}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-top"><h1>${escapeHtml(room.room.title)}</h1><div class="appbar-controls"><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search" data-placeholder-zh="搜索" placeholder="Search" autocomplete="off"><button id="search-clear" class="search-clear" type="button" aria-label="Clear search">×</button></div><div class="unread-nav" role="group" aria-label="Unread navigation"><button id="previous-unread" aria-label="Previous unread" data-en="Prev" data-zh="上一条">Prev</button><button id="next-unread" aria-label="Next unread" data-en="Next" data-zh="下一条">Next</button></div><div class="toolbar"><div class="view-toggle" role="group" aria-label="Viewer mode"><button id="view-timeline" class="active" aria-pressed="true" data-en="Timeline" data-zh="时间线">Timeline</button><button id="view-tree" aria-pressed="false" data-en="Tree" data-zh="树状">Tree</button><button id="lang-toggle" data-en="中文" data-zh="EN">中文</button><button id="close" data-en="Close" data-zh="关闭">Close</button></div></div></div></div><div class="appbar-bottom"><div class="appbar-meta"><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} · ${statusBadge(room.room.status, "room")} · ${biHtml("snapshot", "快照")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code>${sendModeInfo}</div>${bindingInfo}</div><div class="search-tags" id="search-tags" aria-label="Search tags"></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="主题">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Events", "事件")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="成员">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "只读视图。如需纠正，请回到 Agent 会话提出；此处不会修改历史。")}</p>${roomArchived}${freshnessNotice}${warnings}${roomEvents}${threads || noThreads}</main></div><script nonce="agent-forum">const searchTagData=${searchTagDataJson};const revision="${escapeHtml(revision)}";let lang=${JSON.stringify(language)};function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();document.getElementById('lang-toggle').addEventListener('click',async()=>{lang=lang==='en'?'zh':'en';applyLang();redrawReplyGraphs();try{await fetch(location.pathname+'preferences',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({language:lang})})}catch{}});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));
+  const navigationHtml = navigation ? renderViewerNavigation(navigation.catalog, navigation.basePath, navigation.currentForumAlias) : "";
+  const navigationStyle = navigation ? viewerNavigationStyles : "";
+  const navigationScript = navigation ? `const navigationBase=window.__viewerNavigationBase;let navigationState=window.__viewerNavigation;let selectedForum=window.__viewerNavigationCurrent;const navTeamsEl=document.getElementById('viewer-nav-teams');const navRoomsEl=document.getElementById('viewer-nav-rooms');const navSync=document.getElementById('viewer-nav-sync');const navSyncState=document.getElementById('viewer-nav-sync-state');function navEscape(value){return String(value).replace(/[&<>\"']/g,function(ch){return({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'})[ch]||ch})}function navStatus(team){return team.activeLocalAgents>0?'Active': 'Idle'}function navFindTeam(){return navigationState.teams.find(function(team){return team.forumAlias===selectedForum})||navigationState.teams[0]}function renderNavigation(){if(!navTeamsEl||!navRoomsEl)return;const team=navFindTeam();if(team)selectedForum=team.forumAlias;navTeamsEl.innerHTML=navigationState.teams.length?navigationState.teams.map(function(item){const active=item.forumAlias===selectedForum;return '<button type=\"button\" class=\"viewer-nav-team'+(active?' active':'')+(item.activeLocalAgents?' active-local':'')+'\" data-forum=\"'+navEscape(item.forumAlias)+'\" title=\"'+navEscape(item.name||item.forumAlias)+'\"><span class=\"viewer-nav-team-dot\"></span>'+navEscape(item.name||item.forumAlias)+'</button>'}).join(''):'<div class=\"viewer-nav-empty\">'+(lang==='zh'?'没有已注册的 Forum。':'No registered Teams.')+'</div>';if(!team){navRoomsEl.innerHTML='';if(navSync)navSync.disabled=true;return}if(navSync)navSync.disabled=false;if(team.error){navRoomsEl.innerHTML='<div class=\"viewer-nav-error\">'+navEscape(team.error)+'</div>';return}navRoomsEl.innerHTML=team.rooms.length?team.rooms.map(function(room){const href=navigationBase+'room/'+encodeURIComponent(team.forumAlias)+'/'+encodeURIComponent(room.roomId)+'/';const current=team.forumAlias===window.__viewerNavigationCurrent&&room.roomId===${JSON.stringify(room.room.id)};const status=room.status==='archived'?(lang==='zh'?'已归档':'Archived'):(room.deprecated?(lang==='zh'?'已弃用':'Deprecated'):'');return '<a class=\"viewer-nav-room'+(current?' current':'')+(room.deprecated?' deprecated':'')+'\" href=\"'+navEscape(href)+'\" target=\"_blank\" rel=\"noopener noreferrer\" title=\"'+navEscape(room.title)+'\"><span class=\"viewer-nav-room-title\">'+navEscape(room.title)+'</span><span class=\"viewer-nav-room-counts\"><span class=\"related\">● '+room.counts.related+'</span><span class=\"broadcast\">◆ '+room.counts.broadcast+'</span><span class=\"other\">○ '+room.counts.other+'</span></span><span class=\"viewer-nav-room-meta\"><span class=\"viewer-nav-room-active'+(room.activeLocalAgents?' on':'')+'\"></span><span>'+navEscape(navStatus({activeLocalAgents:room.activeLocalAgents}))+'</span><span class=\"viewer-nav-room-status\">'+status+'</span></span></a>'}).join(''):'<div class=\"viewer-nav-empty\">'+(lang==='zh'?'这个 Team 还没有 Room。':'This Team has no Rooms.')+'</div>';navTeamsEl.querySelectorAll('[data-forum]').forEach(function(button){button.addEventListener('click',function(){selectedForum=button.dataset.forum||selectedForum;renderNavigation()})})}function setNavigationStatus(en,zh){if(navSyncState){navSyncState.dataset.en=en;navSyncState.dataset.zh=zh;navSyncState.textContent=lang==='zh'?zh:en}}async function syncNavigation(){const team=navFindTeam();if(!team||!navSync||navSync.disabled)return;navSync.disabled=true;navSync.setAttribute('aria-busy','true');setNavigationStatus('Syncing '+(team.name||team.forumAlias)+'…','正在同步 '+(team.name||team.forumAlias)+'…');try{const response=await fetch(navigationBase+'navigation/sync',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({forumAlias:team.forumAlias})});if(!response.ok)throw new Error('HTTP '+response.status);const result=await response.json();navigationState=result.catalog;renderNavigation();setNavigationStatus(result.freshness.state==='fresh'?'Sync completed.':'Sync did not complete.',result.freshness.state==='fresh'?'同步完成。':'同步未完成。')}catch(error){setNavigationStatus('Sync failed. Try again.','同步失败，请重试。')}finally{navSync.removeAttribute('aria-busy');const current=navFindTeam();navSync.disabled=!current}}document.getElementById('viewer-nav-toggle').addEventListener('click',function(){const panel=document.getElementById('viewer-nav-panel');const open=panel.hidden;panel.hidden=!open;this.setAttribute('aria-expanded',String(open));if(open)renderNavigation()});document.getElementById('viewer-nav-close').addEventListener('click',function(){document.getElementById('viewer-nav-panel').hidden=true;document.getElementById('viewer-nav-toggle').setAttribute('aria-expanded','false')});navSync.addEventListener('click',syncNavigation);document.addEventListener('keydown',function(event){if(event.key==='Escape'){document.getElementById('viewer-nav-panel').hidden=true;document.getElementById('viewer-nav-toggle').setAttribute('aria-expanded','false')}});renderNavigation();` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(room.room.title)} — Agent Forum</title><link rel="icon" type="image/svg+xml" href="${viewerFavicon}"><style>:root{--bg:#f6f8fa;--surface:#ffffff;--surface-2:#f0f3f6;--border:#d6dbe0;--border-soft:#e8ebef;--text:#1f2328;--text-2:#59636e;--text-3:#818b96;--accent:#2563eb;--accent-2:#1d4ed8;--accent-soft:#dbeafe;--danger:#dc2626;--danger-bg:#fef2f2;--success:#16a34a;--success-bg:#dcfce7;--violet:#7c3aed;--violet-bg:#ede9fe;--neutral:#475569;--neutral-bg:#f1f5f9;--warning:#d97706;--warning-bg:#fffbeb;--radius:10px;--radius-sm:6px;--shadow:0 1px 2px rgba(31,35,40,.06),0 1px 3px rgba(31,35,40,.04);--font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--font-mono:ui-monospace,'SF Mono',Consolas,monospace}*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:var(--font-mono)}header.appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}.appbar-inner{max-width:none;margin:0 auto;padding:12px 48px}.appbar-top{display:flex;align-items:center;gap:16px}.appbar-top h1{flex:1;min-width:0;margin:0;font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.appbar-controls{display:flex;align-items:center;gap:16px;flex-shrink:0}.appbar-bottom{display:flex;align-items:flex-start;gap:16px;margin-top:12px}.appbar-meta{flex:1;min-width:0}.appbar-meta .meta{margin-top:0}.appbar h1{margin:0;font-size:18px;font-weight:700}.meta{color:var(--text-3);font-size:12px;margin-top:2px}.meta code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}.binding-context{display:flex;align-items:center;gap:5px;max-width:100%;margin-top:4px;color:var(--text-3);font-size:11px}.binding-context code{background:var(--surface-2);padding:1px 5px;border-radius:4px;color:var(--text-2);font-size:11px}.binding-path{max-width:min(58vw,680px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.send-mode{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:650;line-height:1.5}.send-mode .send-plane{width:12px;height:12px;flex-shrink:0}.send-mode.auto{background:var(--success-bg);color:var(--success)}.send-mode.ask{background:var(--warning-bg);color:var(--warning)}.search{position:relative;flex-shrink:0}.search input{width:280px;max-width:40vw;padding:7px 30px 7px 30px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font)}.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3)}.search-clear{position:absolute;right:9px;top:50%;transform:translateY(-50%);display:none;width:15px;height:15px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--text-3);font-size:13px;line-height:1;cursor:pointer;align-items:center;justify-content:center}.search-clear:hover{color:var(--text);background:var(--surface-2)}.search-clear.visible{display:inline-flex}mark.match-highlight{background:#fbbf24;color:#1f2328;border-radius:2px;padding:0 1px;animation:match-flash 1.5s ease-out forwards}@keyframes match-flash{0%{background:#f59e0b;color:#1f2328}60%{background:#fbbf24}100%{background:transparent;color:inherit}}.toolbar{display:flex;gap:8px;align-items:center}button,.btn-sm{padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}button:hover{background:var(--surface-2);color:var(--text);border-color:var(--text-3)}#close:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-bg)}.btn-sm{padding:4px 10px;font-size:12px}.layout{max-width:none;margin:0 auto;padding:20px 48px 80px;display:flex;gap:40px;align-items:flex-start}.sidebar{width:280px;flex-shrink:0;position:sticky;top:64px;max-height:calc(100vh - 84px);overflow-y:auto}.sidebar h3{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3)}.outline{display:flex;flex-direction:column;gap:2px;margin-bottom:24px}.outline-item{display:block;padding:6px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-2);border-left:2px solid transparent;transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.outline-item:hover{background:var(--surface-2);color:var(--text);text-decoration:none;border-left-color:var(--accent)}.outline-item.active{background:var(--accent-soft);color:var(--accent-2);font-weight:600;border-left-color:var(--accent)}.outline-item.hidden{display:none}.members-list{list-style:none;margin:0 0 24px;padding:0}.members-list li{padding:5px 0;border-bottom:1px solid var(--border-soft)}.members-list li:last-child{border-bottom:none}.member-name{font-weight:500;font-size:13px}.role{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--text-3);border:1px solid var(--border-soft)}.responsibility{display:block;font-size:12px;color:var(--text-3)}.content{flex:1;min-width:0;max-width:none}.markdown p{max-width:85ch}.markdown li{max-width:85ch}.markdown .code-block{max-width:none}.markdown .md-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-sm)}.markdown .md-table{width:100%;border-collapse:collapse;font-size:13px}.markdown .md-table th,.markdown .md-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;white-space:nowrap}.markdown .md-table th{background:var(--surface-2);font-weight:600;text-align:left}.markdown .md-table tbody tr:last-child td{border-bottom:0}.notice{background:var(--accent-soft);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:#1e40af}.warnings{background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-sm);margin:0 0 20px}.warnings summary{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:pointer;list-style:none;color:var(--warning);font-size:13px;font-weight:700}.warnings summary::-webkit-details-marker{display:none}.warnings summary::before{content:"▸";font-size:11px;transition:transform .12s}.warnings[open] summary::before{transform:rotate(90deg)}.warnings-title{display:inline-flex}.warnings-count{display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:1px;border-radius:999px;background:#fef3c7;color:#a16207;font-size:10px;font-variant-numeric:tabular-nums}.warning-list{max-height:min(32vh,360px);overflow:auto;padding:0 12px 10px;border-top:1px solid #fde68a}.warnings-icon{font-size:14px}.warning{font-size:12px;color:var(--text-2);margin:5px 0}.warning strong{font-family:var(--font-mono);color:var(--warning);margin-right:4px}.thread{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:0 0 16px;box-shadow:var(--shadow);overflow:hidden}.thread.hidden{display:none}.thread-head{padding:14px 18px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-soft)}.thread-icon{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;flex-shrink:0}.thread-icon.event{background:var(--warning)}.thread-meta{min-width:0;flex:1}.thread-head h2{margin:0 0 3px;font-size:16px;font-weight:600;line-height:1.35}.thread-actions{flex-shrink:0}.thread-body{padding:8px 18px 14px}.thread.events .thread-body{padding-top:6px}.item{display:flex;gap:12px;padding:14px 0 14px 7px;border-bottom:1px solid var(--border-soft)}.item:last-child{border-bottom:none}.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}.item-main{flex:1;min-width:0;display:flex;gap:12px}.item-line{width:2px;flex-shrink:0;background:var(--border-soft);border-radius:2px}.item:hover .item-line{background:var(--accent)}.item-content{flex:1;min-width:0}.item-content>header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.actor{font-weight:600;font-size:14px}.role{color:var(--text-3);font-size:12px}.item-content>header time{color:var(--text-3);font-size:12px;margin-left:auto}.type{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;border-radius:999px;display:inline-flex}.read-badge{display:inline-flex;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700}.read-badge.read{background:var(--success-bg);color:var(--success)}.read-badge.unread{background:var(--warning-bg);color:var(--warning)}.read-badge.published{background:var(--accent-soft);color:var(--accent-2)}.t-default{background:var(--surface-2);color:var(--text-2)}.t-event{background:var(--warning-bg);color:var(--warning)}.t-danger{background:var(--danger-bg);color:var(--danger)}.t-success{background:var(--success-bg);color:var(--success)}.t-violet{background:var(--violet-bg);color:var(--violet)}.t-neutral{background:var(--neutral-bg);color:var(--neutral)}.body{font-size:14px;line-height:1.7;margin:8px 0;color:var(--text)}.markdown p{margin:8px 0}.markdown h3{font-size:15px;margin:14px 0 6px}.markdown h4{font-size:14px;margin:12px 0 6px}.markdown ul,.markdown ol{margin:8px 0;padding-left:22px}.markdown li{margin:3px 0}.markdown blockquote.md-quote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--border);color:var(--text-2);background:var(--surface-2);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.markdown .code-block{margin:10px 0;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);overflow-x:auto}.markdown .code-block code{font-size:13px;line-height:1.5}.markdown .inline-code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:12px}.reply{margin:0 0 12px;padding:8px 12px;background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}.reply.missing{border-left-color:var(--danger);background:var(--danger-bg)}.reply-meta{font-size:12px;font-weight:600;color:var(--text-3);margin-bottom:3px}.reply-body{font-size:13px;color:var(--text-2);white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}.chips-label{font-size:11px;color:var(--text-3);margin-right:2px}.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-soft)}.chip.mention{background:var(--violet-bg);color:var(--violet);border-color:var(--violet)}.chip.ref{font-family:var(--font-mono);font-size:11px}.chip.raw{font-family:var(--font-mono);font-size:11px}.item-content>footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.empty{text-align:center;padding:60px 20px;color:var(--text-3);font-size:14px}.search-empty{display:none;padding:40px 20px;text-align:center;color:var(--text-3)}.view-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}.view-toggle button{border:0;border-radius:0;padding:6px 10px}.view-toggle button+button{border-left:1px solid var(--border)}.view-toggle button.active{background:var(--accent);color:#fff}.status-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;line-height:1.35;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}.room-status{margin-left:0}.status-open,.status-active{background:var(--accent-soft);color:var(--accent-2)}.status-closed,.status-archived{background:var(--neutral-bg);color:var(--neutral)}.status-unknown{background:var(--warning-bg);color:var(--warning)}.thread-icon.status-open,.thread-icon.status-active{background:var(--accent)}.thread-icon.status-closed{background:var(--neutral)}.thread-icon.status-archived{background:var(--neutral)}.outline-item{display:flex;align-items:center;gap:8px}.outline-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}.outline-status.status-open,.outline-status.status-active{background:var(--accent)}.outline-status.status-closed,.outline-status.status-archived{background:var(--neutral)}.outline-status.status-unknown{background:var(--warning)}.outline-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.outline-unread{display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:var(--accent-2);font-size:10px;font-weight:750;font-variant-numeric:tabular-nums;box-shadow:none}.unread-nav{display:flex;gap:4px}.unread-nav button{padding:6px 9px;font-size:12px}.unread-nav button:disabled{opacity:.4;cursor:not-allowed}.unread-nav button.on{background:var(--accent);color:#fff;border-color:var(--accent)}.search-tags{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}.tag-group{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.tag-chip{padding:2px 10px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text-2);font-size:11px;cursor:pointer;transition:all .12s}.tag-chip:hover{filter:brightness(.96)}.tag-chip[data-group="type"]{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}.tag-chip[data-group="member"]{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}.tag-chip[data-group="status"]{background:#f5f3ff;border-color:#ddd6fe;color:#6d28d9}.tag-chip[data-group="unread"]{background:#fffbeb;border-color:#fde68a;color:#b45309}.tag-chip[data-group="repliesToMe"]{background:#f0fdfa;border-color:#99f6e4;color:#0f766e}.tag-chip[data-group="mentionsMe"]{background:#f0fdfa;border-color:#99f6e4;color:#0f766e}.tag-chip[data-group="type"].on{background:#bfdbfe;border-color:#3b82f6;color:#1e3a8a;font-weight:700}.tag-chip[data-group="member"].on{background:#bbf7d0;border-color:#22c55e;color:#14532d;font-weight:700}.tag-chip[data-group="status"].on{background:#ddd6fe;border-color:#8b5cf6;color:#4c1d95;font-weight:700}.tag-chip[data-group="unread"].on{background:#fde68a;border-color:#f59e0b;color:#78350f;font-weight:700}.tag-chip[data-group="repliesToMe"].on{background:#99f6e4;border-color:#14b8a6;color:#134e4a;font-weight:700}.tag-chip[data-group="mentionsMe"].on{background:#99f6e4;border-color:#14b8a6;color:#134e4a;font-weight:700}.tag-count{color:var(--text-3);font-size:11px;margin-left:4px}.filter-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text-2);font-size:13px;cursor:pointer;transition:all .12s}.filter-chip:hover{background:var(--surface-2);color:var(--text)}.filter-chip.on{background:var(--warning-bg);border-color:var(--warning);color:var(--warning);font-weight:700}.query-hit{box-shadow:inset 3px 0 var(--accent)}.item.unread-selected{background:#fffbeb;box-shadow:inset 3px 0 #f59e0b;border-radius:var(--radius-sm)}.item.query-selected{background:#fffbeb;box-shadow:inset 3px 0 #f59e0b;border-radius:var(--radius-sm)}.query-focus{animation:unread-focus .9s ease-out}@keyframes unread-focus{0%,100%{box-shadow:none}35%{box-shadow:0 0 0 4px #fde68a;border-radius:var(--radius-sm)}}.room-state{display:flex;gap:8px;align-items:flex-start;background:var(--neutral-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--text-2)}.room-state strong{color:var(--neutral);white-space:nowrap}.tree-issue{display:none;margin:8px 0;padding:6px 9px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--warning);font-size:12px;border-radius:0 var(--radius-sm) var(--radius-sm) 0}body[data-view="tree"] .tree-issue{display:block}body[data-view="tree"] .thread-body{padding:14px 18px 18px;background:linear-gradient(180deg,#fbfcfe,#f5f8fc)}body[data-view="tree"] .graph-view{--graph-width:72px;position:relative;min-width:0}body[data-view="tree"] .graph-stage{position:relative;min-width:0}body[data-view="tree"] .graph-canvas{position:absolute;left:0;top:0;width:var(--graph-width);height:100%;overflow:visible;pointer-events:none;z-index:0}body[data-view="tree"] .graph-rows{position:relative;z-index:1}body[data-view="tree"] .graph-row{display:grid;grid-template-columns:var(--graph-width) minmax(0,1fr);align-items:stretch}body[data-view="tree"] .graph-row>.item{grid-column:2;margin:0;padding:14px 14px 14px 7px;background:transparent;border-top:none;border-left:none;border-right:none;border-radius:0;box-shadow:none}body[data-view="tree"] .graph-row>.item .item-line{display:none}body[data-view="tree"] .graph-row:hover>.item{background:rgba(219,234,254,.4)}.graph-track{stroke:#e6ebf4}.graph-edge{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.85}.graph-edge-lit{stroke-width:3;opacity:1}.graph-node{stroke:#fff;stroke-width:2}.tree-activity{margin:16px 0 2px;padding:12px 14px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}.tree-activity h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3)}.tree-activity-note{margin:0 0 8px;font-size:12px;color:var(--text-3)}.tree-activity .item{padding:10px 0 10px 7px}.tree-activity .item:last-child{border-bottom:0}@media(max-width:880px){.layout{flex-direction:column;padding:16px}.sidebar{position:static;width:auto;max-height:none}.search input{width:100%}.appbar-inner{padding:12px 16px}.content{max-width:none}body[data-view="tree"] .thread-body{padding-left:10px;padding-right:10px}}${navigationStyle}</style></head><body><header class="appbar"><div class="appbar-inner"><div class="appbar-top"><h1>${escapeHtml(room.room.title)}</h1><div class="appbar-controls"><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="search" type="text" data-placeholder-en="Search" data-placeholder-zh="搜索" placeholder="Search" autocomplete="off"><button id="search-clear" class="search-clear" type="button" aria-label="Clear search">×</button></div><div class="unread-nav" role="group" aria-label="Unread navigation"><button id="previous-unread" aria-label="Previous unread" data-en="Prev" data-zh="上一条">Prev</button><button id="next-unread" aria-label="Next unread" data-en="Next" data-zh="下一条">Next</button></div><div class="toolbar"><div class="view-toggle" role="group" aria-label="Viewer mode"><button id="view-timeline" class="active" aria-pressed="true" data-en="Timeline" data-zh="时间线">Timeline</button><button id="view-tree" aria-pressed="false" data-en="Tree" data-zh="树状">Tree</button><button id="lang-toggle" data-en="中文" data-zh="EN">中文</button><button id="close" data-en="Close" data-zh="关闭">Close</button></div></div></div></div><div class="appbar-bottom"><div class="appbar-meta"><div class="meta">${escapeHtml(snapshot.forum.name)} / ${escapeHtml(room.room.slug)} · ${statusBadge(room.room.status, "room")} · ${biHtml("snapshot", "快照")} <code>${escapeHtml(snapshot.sourceHead.slice(0, 12))}</code>${sendModeInfo}</div>${bindingInfo}</div><div class="search-tags" id="search-tags" aria-label="Search tags"></div></div></header><div class="layout"><aside class="sidebar"><h3 data-en="Threads" data-zh="主题">Threads</h3><div class="outline" id="outline">${threadOutlines}${roomEvents ? `<a class="outline-item" href="#thread-events" data-title="events">${biText("Events", "事件")}</a>` : ""}</div>${activeMembers ? `<h3 data-en="Members" data-zh="成员">Members</h3><ul class="members-list">${activeMembers}</ul>` : ""}</aside><main class="content"><p class="notice">${biText("Read-only view. Return to your Agent conversation to request corrections; history is never edited here.", "只读视图。如需纠正，请回到 Agent 会话提出；此处不会修改历史。")}</p>${roomArchived}${freshnessNotice}${warnings}${roomEvents}${threads || noThreads}</main></div>${navigationHtml}<script nonce="agent-forum">const searchTagData=${searchTagDataJson};const revision="${escapeHtml(revision)}";let lang=${JSON.stringify(language)};function applyLang(){document.querySelectorAll('.lang-en').forEach(e=>e.style.display=lang==='en'?'':'none');document.querySelectorAll('.lang-zh').forEach(e=>e.style.display=lang==='zh'?'':'none');document.querySelectorAll('[data-en][data-zh]').forEach(e=>e.textContent=lang==='en'?e.dataset.en:e.dataset.zh);document.querySelectorAll('[data-placeholder-en]').forEach(e=>{if(e instanceof HTMLInputElement)e.placeholder=lang==='en'?e.dataset.placeholderEn:e.dataset.placeholderZh;});document.querySelectorAll('[data-copy-en]').forEach(e=>e.dataset.copy=lang==='en'?e.dataset.copyEn:e.dataset.copyZh);}applyLang();${navigationScript}document.getElementById('lang-toggle').addEventListener('click',async()=>{lang=lang==='en'?'zh':'en';applyLang();if(typeof renderNavigation==='function')renderNavigation();redrawReplyGraphs();try{await fetch(location.pathname+'preferences',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({language:lang})})}catch{}});document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));
 document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>navigator.clipboard.writeText(b.dataset.copy||'')));
 const search=document.getElementById('search');
 const outlineItems=Array.from(document.querySelectorAll('.outline-item'));
@@ -630,12 +690,22 @@ export interface ViewerHandle {
   close: () => Promise<void>;
 }
 
+/**
+ * 生成跨 Team Room 路由的内存页面键。
+ */
+function viewerPageKey(forumAlias: string, roomId: string): string {
+  return `${forumAlias}\u0000${roomId}`;
+}
+
 export async function startViewerServer(input: {
   snapshot: ForumSnapshot;
   roomIdOrSlug: string;
   idleMs?: number;
   token?: string;
   refresh?: () => Promise<ViewerRefreshResult>;
+  loadRoom?: (forumAlias: string, roomId: string) => Promise<ViewerRoomPage>;
+  navigation?: ViewerNavigationCatalog;
+  syncNavigation?: (forumAlias: string) => Promise<ViewerNavigationSyncResult>;
   readIdentities?: ViewerReadIdentity[];
   language?: "en" | "zh";
   binding?: ViewerBindingContext;
@@ -643,45 +713,79 @@ export async function startViewerServer(input: {
   setLanguage?: (language: "en" | "zh") => Promise<void>;
 }): Promise<ViewerHandle> {
   const room = input.snapshot.rooms.find(
-    (candidate) =>
-      candidate.room.id === input.roomIdOrSlug ||
-      candidate.room.slug === input.roomIdOrSlug,
+    (candidate) => candidate.room.id === input.roomIdOrSlug || candidate.room.slug === input.roomIdOrSlug,
   );
   if (!room) throw new Error(`room was not found in snapshot: ${input.roomIdOrSlug}`);
   const token = input.token ?? randomBytes(16).toString("hex");
   const basePath = `/session/${token}/`;
-  let currentSnapshot = input.snapshot;
-  let currentRoom = room;
-  let freshness: ViewerFreshness = input.refresh ? { state: "stale", message: "Waiting for remote sync." } : { state: "fresh" };
-  let readIdentities = input.readIdentities ?? [];
   let language = input.language ?? "en";
-  let html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding, input.sendMode ?? "auto");
-  let revision = currentSnapshot.sourceHead;
+  let navigationCatalog = input.navigation;
+  let initialPage: ViewerRoomPage = {
+    forumAlias: input.snapshot.forumAlias,
+    roomId: room.room.id,
+    snapshot: input.snapshot,
+    room,
+    freshness: input.refresh ? { state: "stale", message: "Waiting for remote sync." } : { state: "fresh" },
+    readIdentities: input.readIdentities ?? [],
+    ...(input.binding ? { binding: input.binding } : {}),
+    sendMode: input.sendMode ?? "auto",
+  };
+  const pages = new Map<string, ViewerRoomPage>([[viewerPageKey(initialPage.forumAlias, initialPage.roomId), initialPage]]);
+  const renderPage = (page: ViewerRoomPage): string => renderViewerHtml(
+    page.snapshot,
+    page.room,
+    page.freshness,
+    page.readIdentities,
+    language,
+    page.binding,
+    page.sendMode,
+    navigationCatalog ? { catalog: navigationCatalog, basePath, currentForumAlias: page.forumAlias } : undefined,
+  );
+  let initialHtml = renderPage(initialPage);
   let refreshInFlight: Promise<void> | undefined;
-  const refresh = async (): Promise<void> => {
+  const refreshInitial = async (): Promise<void> => {
     if (!input.refresh) return;
     if (!refreshInFlight) {
       refreshInFlight = input.refresh()
         .then((result) => {
-          freshness = result.freshness;
-          if (result.readIdentities) readIdentities = result.readIdentities;
-          if (result.snapshot) {
-            const nextRoom = result.snapshot.rooms.find((candidate) => candidate.room.id === room.room.id);
-            if (nextRoom) {
-              currentSnapshot = result.snapshot;
-              currentRoom = nextRoom;
-              revision = result.snapshot.sourceHead;
-            }
-          }
-          html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding, input.sendMode ?? "auto");
+          const nextRoom = result.snapshot?.rooms.find((candidate) => candidate.room.id === initialPage.roomId);
+          initialPage = {
+            ...initialPage,
+            freshness: result.freshness,
+            ...(result.readIdentities ? { readIdentities: result.readIdentities } : {}),
+            ...(result.snapshot && nextRoom ? { snapshot: result.snapshot, room: nextRoom } : {}),
+          };
+          pages.set(viewerPageKey(initialPage.forumAlias, initialPage.roomId), initialPage);
+          initialHtml = renderPage(initialPage);
         })
         .catch(() => {
-          freshness = { state: "stale", message: "Remote sync failed unexpectedly." };
-          html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding, input.sendMode ?? "auto");
+          initialPage = { ...initialPage, freshness: { state: "stale", message: "Remote sync failed unexpectedly." } };
+          pages.set(viewerPageKey(initialPage.forumAlias, initialPage.roomId), initialPage);
+          initialHtml = renderPage(initialPage);
         })
         .finally(() => { refreshInFlight = undefined; });
     }
     await refreshInFlight;
+  };
+  // 将已加载的 Room 路由解析为独立页面状态，避免多个标签页共享快照对象。
+  const routePagePath = (pathname: string): { page: ViewerRoomPage; pagePath: string } | undefined => {
+    if (pathname === basePath) return { page: initialPage, pagePath: basePath };
+    const prefix = `${basePath}room/`;
+    if (!pathname.startsWith(prefix) || !pathname.endsWith("/")) return undefined;
+    const parts = pathname.slice(prefix.length, -1).split("/");
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return undefined;
+    try {
+      const key = viewerPageKey(decodeURIComponent(parts[0]), decodeURIComponent(parts[1]));
+      const page = pages.get(key);
+      return page ? { page, pagePath: pathname } : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  // 将 revision、preferences、close 请求绑定到对应 Room 路由。
+  const routeSuffix = (pathname: string, suffix: "revision" | "preferences" | "close"): { page: ViewerRoomPage; pagePath: string } | undefined => {
+    if (!pathname.endsWith(`/${suffix}`)) return undefined;
+    return routePagePath(pathname.slice(0, -suffix.length - 1) + "/");
   };
   const idleMs = input.idleMs ?? 5 * 60_000;
   let timer: NodeJS.Timeout;
@@ -693,10 +797,7 @@ export async function startViewerServer(input: {
     if (closing) return closing;
     closing = new Promise<void>((resolveClose) => {
       clearTimeout(timer);
-      server.close(() => {
-        resolveClosed();
-        resolveClose();
-      });
+      server.close(() => { resolveClosed(); resolveClose(); });
     });
     return closing;
   };
@@ -707,39 +808,75 @@ export async function startViewerServer(input: {
   };
   server = createServer((request, response) => {
     void (async () => {
-    touch();
-    response.setHeader("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-agent-forum'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("Referrer-Policy", "no-referrer");
-    response.setHeader("Cache-Control", "no-store");
-    if (request.method === "GET" && request.url === basePath) {
-      await refresh();
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(html);
-      return;
-    }
-    if (request.method === "GET" && request.url === `${basePath}revision`) {
-      response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify({ revision }));
-      return;
-    }
-    if (request.method === "POST" && request.url === `${basePath}preferences`) {
-      let body = "";
-      for await (const chunk of request) body += String(chunk);
-      const value = JSON.parse(body) as { language?: unknown };
-      if ((value.language !== "en" && value.language !== "zh") || !input.setLanguage) { response.writeHead(400); response.end("invalid language preference"); return; }
-      await input.setLanguage(value.language);
-      language = value.language;
-      response.writeHead(204); response.end(); return;
-    }
-    if (request.method === "POST" && request.url === `${basePath}close`) {
-      response.writeHead(204);
-      response.end();
-      setImmediate(() => void close());
-      return;
-    }
-    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-    response.end("Not found");
+      touch();
+      response.setHeader("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-agent-forum'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'");
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.setHeader("Referrer-Policy", "no-referrer");
+      response.setHeader("Cache-Control", "no-store");
+      const url = new URL(request.url ?? "/", "http://127.0.0.1");
+      const pathname = url.pathname;
+      if (request.method === "GET" && pathname === basePath) {
+        await refreshInitial();
+        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        response.end(initialHtml);
+        return;
+      }
+      if (request.method === "GET" && pathname.startsWith(`${basePath}room/`) && pathname.endsWith("/")) {
+        if (!input.loadRoom) { response.writeHead(404); response.end("Room navigation is unavailable"); return; }
+        const prefix = `${basePath}room/`;
+        const parts = pathname.slice(prefix.length, -1).split("/");
+        if (parts.length !== 2 || !parts[0] || !parts[1]) { response.writeHead(404); response.end("Not found"); return; }
+        let forumAlias: string;
+        let roomId: string;
+        try { forumAlias = decodeURIComponent(parts[0]); roomId = decodeURIComponent(parts[1]); } catch { response.writeHead(404); response.end("Not found"); return; }
+        const page = await input.loadRoom(forumAlias, roomId);
+        pages.set(viewerPageKey(page.forumAlias, page.roomId), page);
+        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        response.end(renderPage(page));
+        return;
+      }
+      if (request.method === "GET") {
+        const route = routeSuffix(pathname, "revision");
+        if (route) {
+          response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          response.end(JSON.stringify({ revision: route.page.snapshot.sourceHead }));
+          return;
+        }
+      }
+      if (request.method === "POST" && pathname === `${basePath}navigation/sync`) {
+        if (!input.syncNavigation) { response.writeHead(404); response.end("Navigation sync is unavailable"); return; }
+        let body = "";
+        for await (const chunk of request) body += String(chunk);
+        const value = JSON.parse(body) as { forumAlias?: unknown };
+        if (typeof value.forumAlias !== "string" || value.forumAlias.length === 0) { response.writeHead(400); response.end("invalid forum alias"); return; }
+        const result = await input.syncNavigation(value.forumAlias);
+        navigationCatalog = result.catalog;
+        response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(result));
+        return;
+      }
+      if (request.method === "POST") {
+        const route = routeSuffix(pathname, "preferences");
+        if (route) {
+          let body = "";
+          for await (const chunk of request) body += String(chunk);
+          const value = JSON.parse(body) as { language?: unknown };
+          if ((value.language !== "en" && value.language !== "zh") || !input.setLanguage) { response.writeHead(400); response.end("invalid language preference"); return; }
+          await input.setLanguage(value.language);
+          language = value.language;
+          response.writeHead(204); response.end();
+          return;
+        }
+        const routeToClose = routeSuffix(pathname, "close");
+        if (routeToClose) {
+          response.writeHead(204);
+          response.end();
+          setImmediate(() => void close());
+          return;
+        }
+      }
+      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("Not found");
     })().catch(() => {
       if (!response.headersSent) response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
       response.end("Viewer request failed");
@@ -750,30 +887,22 @@ export async function startViewerServer(input: {
     function onListening() { server.off("error", onError); resolveListen(); }
     server.once("error", onError);
     server.once("listening", onListening);
-    // 由操作系统选择可用端口，避免 Windows 动态端口区中的保留范围随机返回 EACCES。
     server.listen(0, "127.0.0.1");
   });
   touch();
   const address = server.address();
-  if (!address || typeof address === "string") {
-    await close();
-    throw new Error("viewer did not receive a TCP port");
-  }
+  if (!address || typeof address === "string") { await close(); throw new Error("viewer did not receive a TCP port"); }
   return {
     url: `http://127.0.0.1:${address.port}${basePath}`,
     token,
     port: address.port,
     closed,
     updateSnapshot: (snapshot, nextFreshness = { state: "fresh" }) => {
-      const nextRoom = snapshot.rooms.find(
-        (candidate) => candidate.room.id === room.room.id,
-      );
+      const nextRoom = snapshot.rooms.find((candidate) => candidate.room.id === initialPage.roomId);
       if (!nextRoom) return;
-      currentSnapshot = snapshot;
-      currentRoom = nextRoom;
-      freshness = nextFreshness;
-      revision = snapshot.sourceHead;
-      html = renderViewerHtml(currentSnapshot, currentRoom, freshness, readIdentities, language, input.binding, input.sendMode ?? "auto");
+      initialPage = { ...initialPage, snapshot, room: nextRoom, freshness: nextFreshness };
+      pages.set(viewerPageKey(initialPage.forumAlias, initialPage.roomId), initialPage);
+      initialHtml = renderPage(initialPage);
     },
     close,
   };

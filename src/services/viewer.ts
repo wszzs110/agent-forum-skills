@@ -12,10 +12,10 @@ import { refreshForumFromRemote } from "./forum-sync.js";
 import { refreshForRead, type ReadFreshness } from "./read-freshness.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
-import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerBindingContext, type ViewerReadIdentity } from "../viewer/server.js";
-import { getInboxReadCursor } from "./inbox.js";
+import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerBindingContext, type ViewerNavigationCatalog, type ViewerNavigationRoom, type ViewerNavigationSyncResult, type ViewerNavigationTeam, type ViewerReadIdentity, type ViewerRefreshResult, type ViewerRoomPage } from "../viewer/server.js";
+import { getAllUnreadInboxEntries, getInboxReadCursor } from "./inbox.js";
 import { getRoomPublishMode } from "./publish-policy.js";
-import { invalidateDashboard } from "./dashboard.js";
+import { dashboardStatus, invalidateDashboard } from "./dashboard.js";
 import { getUiLanguage, setUiLanguage } from "./ui-preferences.js";
 
 export interface ViewerSession {
@@ -194,6 +194,104 @@ async function getViewerReadIdentities(forumAlias: string, identityIds: Array<st
   }));
 }
 
+/**
+ * 构建 Viewer 房间导航目录，只读取本机缓存，不触发远端同步。
+ * Team 来源是本机已注册 Forum，Active 来源是仍有效的 Dashboard 客户端租约。
+ */
+export async function getViewerNavigationCatalog(
+  identityId: string | undefined,
+  paths = createAgentForumPaths(),
+): Promise<ViewerNavigationCatalog> {
+  const config = await loadLocalConfig(paths);
+  let activeClients: Array<{ forumId: string; roomId: string }> = [];
+  try {
+    activeClients = (await dashboardStatus(paths)).clients;
+  } catch {
+    // Dashboard 本地运行状态损坏时，Viewer 仍应保留只读导航能力，只隐藏 Active 标记。
+  }
+  const teams = await Promise.all(config.forums.map(async (registration): Promise<ViewerNavigationTeam> => {
+    const clients = activeClients.filter((client) => client.forumId === registration.forumId);
+    try {
+      const cached = await getForumSnapshot(registration.alias, paths);
+      const snapshot = cached.snapshot;
+      const rooms = new Map<string, ViewerNavigationRoom>(snapshot.rooms.map((cachedRoom) => [cachedRoom.room.id, {
+        roomId: cachedRoom.room.id,
+        slug: cachedRoom.room.slug,
+        title: cachedRoom.room.title,
+        status: cachedRoom.room.status,
+        deprecated: Boolean(cachedRoom.room.deprecation),
+        activeLocalAgents: clients.filter((client) => client.roomId === cachedRoom.room.id).length,
+        counts: { related: 0, broadcast: 0, other: 0 },
+      }]));
+      const closedThreadIds = new Set(snapshot.rooms.flatMap((cachedRoom) => cachedRoom.threads.filter((thread) => thread.thread.status === "closed").map((thread) => thread.thread.id)));
+      const identities = await getViewerReadIdentities(registration.alias, [identityId], paths);
+      const identity = identities[0];
+      if (identity) {
+        const inbox = await getAllUnreadInboxEntries({ forumAlias: registration.alias, identityId: identity.memberId }, paths);
+        const seen = new Set<string>();
+        for (const entry of inbox.entries) {
+          if (entry.threadId && closedThreadIds.has(entry.threadId)) continue;
+          if (seen.has(entry.id)) continue;
+          seen.add(entry.id);
+          const room = rooms.get(entry.roomId);
+          if (!room) continue;
+          if (entry.relevance === "direct" || entry.relevance === "watched") room.counts.related += 1;
+          else if (entry.audience === "broadcast") room.counts.broadcast += 1;
+          else room.counts.other += 1;
+        }
+      }
+      const orderedRooms = [...rooms.values()].sort((left, right) => Number(left.deprecated) - Number(right.deprecated) || right.activeLocalAgents - left.activeLocalAgents || (right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other) - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
+      const counts = orderedRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other }), { related: 0, broadcast: 0, other: 0 });
+      return { forumId: registration.forumId, forumAlias: registration.alias, name: snapshot.forum.name || registration.alias, activeLocalAgents: clients.length, counts, rooms: orderedRooms };
+    } catch (error) {
+      const code = error instanceof ServiceError ? error.code : "CACHE_UNAVAILABLE";
+      return { forumId: registration.forumId, forumAlias: registration.alias, name: registration.alias, activeLocalAgents: clients.length, counts: { related: 0, broadcast: 0, other: 0 }, rooms: [], error: `Unable to read Team data (${code}).` };
+    }
+  }));
+  return { teams: teams.sort((left, right) => left.name.localeCompare(right.name)), generatedAt: new Date().toISOString() };
+}
+
+/**
+ * 主动同步一个 Team 后重新读取整个导航目录；其他 Team 只读取缓存，不同步。
+ */
+export async function syncViewerNavigationTeam(
+  forumAlias: string,
+  identityId: string | undefined,
+  paths = createAgentForumPaths(),
+): Promise<ViewerNavigationSyncResult> {
+  let freshness: { state: "fresh" | "stale"; message?: string } = { state: "fresh" };
+  try {
+    const result = await refreshForumFromRemote(forumAlias, paths);
+    if (result.outcome === "remote-not-configured") freshness = { state: "stale", message: "No remote is configured for this Team; latest remote content cannot be verified." };
+    else if (result.outcome === "skipped-local-commits") freshness = { state: "stale", message: "Local commits are not pushed; remote refresh was safely skipped." };
+    else if (result.outcome === "updated") await invalidateDashboard(paths);
+  } catch (error) {
+    const code = error instanceof ServiceError ? error.code : "SYNC_FAILED";
+    freshness = { state: "stale", message: `Remote sync failed (${code}).` };
+  }
+  return { catalog: await getViewerNavigationCatalog(identityId, paths), freshness };
+}
+
+/**
+ * 对指定 Forum 执行一次只拉取同步，并将失败保留为 stale 结果。
+ */
+async function refreshViewerForum(
+  forumAlias: string,
+  identityId: string | undefined,
+  paths: AgentForumPaths,
+): Promise<ViewerRefreshResult> {
+  try {
+    const result = await refreshForumFromRemote(forumAlias, paths);
+    if (result.outcome === "remote-not-configured") return { freshness: { state: "stale", message: "No remote is configured for this Team; latest remote content cannot be verified." } };
+    if (result.outcome === "skipped-local-commits") return { freshness: { state: "stale", message: "Local commits are not pushed; remote refresh was safely skipped." } };
+    if (result.outcome === "updated") await invalidateDashboard(paths);
+    return { snapshot: (await getForumSnapshot(forumAlias, paths)).snapshot, freshness: { state: "fresh" }, readIdentities: await getViewerReadIdentities(forumAlias, [identityId], paths) };
+  } catch (error) {
+    const code = error instanceof ServiceError ? error.code : "SYNC_FAILED";
+    return { freshness: { state: "stale", message: `Remote sync failed (${code}).` } };
+  }
+}
+
 export async function runViewerServer(input: {
   forumAlias: string;
   room: string;
@@ -204,50 +302,49 @@ export async function runViewerServer(input: {
   openBrowser?: boolean;
   binding?: ViewerBindingContext;
 }, paths = createAgentForumPaths()): Promise<void> {
+  const config = await loadLocalConfig(paths);
+  const forum = findForum(config, input.forumAlias);
   const cached = await getForumSnapshot(input.forumAlias, paths);
   const room = cached.snapshot.rooms.find((item) => item.room.id === input.room || item.room.slug === input.room);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${input.room}`);
+  const readIdentities = await getViewerReadIdentities(input.forumAlias, [input.identityId], paths);
+  const navigation = await getViewerNavigationCatalog(input.identityId, paths);
+  const loadRoom = async (forumAlias: string, roomId: string): Promise<ViewerRoomPage> => {
+    const initial = await getForumSnapshot(forumAlias, paths);
+    let targetSnapshot = initial.snapshot;
+    let targetFreshness: ViewerRefreshResult["freshness"] = { state: "stale", message: "Remote sync did not complete." };
+    let targetIdentities = await getViewerReadIdentities(forumAlias, [input.identityId], paths);
+    const refreshed = await refreshViewerForum(forumAlias, input.identityId, paths);
+    targetFreshness = refreshed.freshness;
+    if (refreshed.snapshot) targetSnapshot = refreshed.snapshot;
+    if (refreshed.readIdentities) targetIdentities = refreshed.readIdentities;
+    const targetRoom = targetSnapshot.rooms.find((item) => item.room.id === roomId || item.room.slug === roomId);
+    if (!targetRoom) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${roomId}`);
+    const targetForum = findForum(await loadLocalConfig(paths), forumAlias);
+    return {
+      forumAlias,
+      roomId: targetRoom.room.id,
+      snapshot: targetSnapshot,
+      room: targetRoom,
+      freshness: targetFreshness,
+      readIdentities: targetIdentities,
+      sendMode: await getRoomPublishMode(paths, targetForum.forumId, targetRoom.room.id),
+    };
+  };
   const server = await startViewerServer({
     snapshot: cached.snapshot,
     roomIdOrSlug: room.room.id,
     token: input.token,
     idleMs: input.idleMs,
-    readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths),
+    readIdentities,
     language: await getUiLanguage(paths),
-    sendMode: await getRoomPublishMode(paths, findForum(await loadLocalConfig(paths), input.forumAlias).forumId, room.room.id),
+    sendMode: await getRoomPublishMode(paths, forum.forumId, room.room.id),
+    navigation,
+    loadRoom,
+    syncNavigation: (forumAlias) => syncViewerNavigationTeam(forumAlias, input.identityId, paths),
     ...(input.binding ? { binding: input.binding } : {}),
     setLanguage: async (language) => { await setUiLanguage(language, paths); },
-    refresh: async () => {
-      try {
-        const result = await refreshForumFromRemote(input.forumAlias, paths);
-        if (result.outcome === "remote-not-configured") {
-          return {
-            freshness: {
-              state: "stale" as const,
-              message: "No remote is configured for this Team; latest remote content cannot be verified.",
-            },
-          };
-        }
-        if (result.outcome === "skipped-local-commits") {
-          return {
-            freshness: {
-              state: "stale" as const,
-              message: "Local commits are not pushed; remote refresh was safely skipped.",
-            },
-          };
-        }
-        if (result.outcome === "updated") await invalidateDashboard(paths);
-        return { snapshot: (await getForumSnapshot(input.forumAlias, paths)).snapshot, freshness: { state: "fresh" as const }, readIdentities: await getViewerReadIdentities(input.forumAlias, [input.identityId], paths) };
-      } catch (error) {
-        const code = error instanceof ServiceError ? error.code : "SYNC_FAILED";
-        return {
-          freshness: {
-            state: "stale" as const,
-            message: `Remote sync failed (${code}).`,
-          },
-        };
-      }
-    },
+    refresh: () => refreshViewerForum(input.forumAlias, input.identityId, paths),
   });
   const session: ViewerSession = {
     formatVersion: 1,
