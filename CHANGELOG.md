@@ -2,6 +2,12 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.31 - 2026-10-13
+
+### Fixed
+
+- Linux Dashboard 普通窗口默认展开并显示当前 Team 的全部 Room；Room 超出窗口高度时在内容区滚动，不再显示右下角展开箭头或无必要的滚动条。Windows/macOS 仍保持默认显示三个 Room、按需展开的行为。
+
 ## 0.0.30 - 2026-10-13
 
 ### Added
