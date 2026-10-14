@@ -392,6 +392,55 @@ test("Viewer preserves dense multi-member reply networks in the outline and time
   assert.match(html, /AF-23-6/);
 });
 
+test("Viewer 房间卡片保留发送模式图标，绑定信息合并悬停且不显示活跃状态", () => {
+  const input = snapshot();
+  const room = input.rooms[0]!;
+  const rooms: ViewerNavigationCatalog["teams"][number]["rooms"] = [
+    { roomId: room.room.id, slug: room.room.slug, title: '完整房间名 <示例> "引号"', status: "active", deprecated: false, activeLocalAgents: 0, counts: { related: 0, broadcast: 0, other: 0 }, bindings: [{ workspaceRoot: '/workspace/<项目>"', branch: "feature/ui" }, { workspaceRoot: "/workspace/default", branch: null }], sendMode: "ask" },
+    { roomId: "room_unbound", slug: "unbound", title: "未绑定房间", status: "active", deprecated: false, activeLocalAgents: 0, counts: { related: 0, broadcast: 0, other: 0 }, bindings: [], sendMode: "auto" },
+    { roomId: "room_deprecated", slug: "deprecated", title: "已弃用房间", status: "active", deprecated: true, activeLocalAgents: 1, counts: { related: 2, broadcast: 1, other: 3 }, bindings: [{ workspaceRoot: "/workspace/default", branch: null }], sendMode: "auto" },
+  ];
+  const catalog: ViewerNavigationCatalog = { generatedAt: input.generatedAt, teams: [{ forumId: input.forumId, forumAlias: input.forumAlias, name: "团队", activeLocalAgents: 1, counts: { related: 2, broadcast: 1, other: 3 }, rooms }] };
+  const html = renderViewerHtml(input, room, { state: "fresh" }, [], "en", undefined, "auto", { catalog, basePath: "/session/test/", currentForumAlias: input.forumAlias });
+  const script = [...html.matchAll(/<script nonce="agent-forum">([\s\S]*?)<\/script>/gu)].map((match) => match[1]!).find((value) => value.includes("const navigationBase="))!;
+  const navigationScript = script.slice(script.indexOf("const navigationBase="), script.indexOf("document.getElementById('lang-toggle')"));
+  for (const language of ["en", "zh"] as const) {
+    const elements = new Map<string, { innerHTML: string; addEventListener: () => void; querySelectorAll: () => never[] }>();
+    const document = {
+      getElementById(id: string) {
+        if (!elements.has(id)) elements.set(id, { innerHTML: "", addEventListener: () => {}, querySelectorAll: () => [] });
+        return elements.get(id)!;
+      },
+      addEventListener: () => {},
+    };
+    const client = new Function("window", "document", "localStorage", "lang", `${navigationScript};return { navRoomTooltip, navEscape, navSendModeMarker };`)(
+      { __viewerNavigation: structuredClone(catalog), __viewerNavigationBase: "/session/test/", __viewerNavigationCurrent: input.forumAlias },
+      document,
+      { getItem: () => null },
+      language,
+    ) as { navRoomTooltip: (value: (typeof rooms)[number]) => string; navEscape: (value: string) => string; navSendModeMarker: (value: (typeof rooms)[number]) => string };
+    const expected = language === "zh"
+      ? `${rooms[0]!.title}\n先问再发\n\n作用域：精确分支\n目录：/workspace/<项目>"\n分支：feature/ui\n\n作用域：工作区默认\n目录：/workspace/default`
+      : `${rooms[0]!.title}\nAsk before sending\n\nScope: exact branch\nPath: /workspace/<项目>"\nBranch: feature/ui\n\nScope: workspace default\nPath: /workspace/default`;
+    assert.equal(client.navRoomTooltip(rooms[0]!), expected);
+    assert.equal(client.navRoomTooltip(rooms[1]!), "未绑定房间");
+    const { bindings: _bindings, ...withoutBindings } = rooms[1]!;
+    assert.equal(client.navRoomTooltip(withoutBindings), "未绑定房间");
+    assert.equal(client.navSendModeMarker(rooms[1]!), "");
+    assert.equal(client.navSendModeMarker(withoutBindings), "");
+    const cards = elements.get("viewer-nav-rooms")!.innerHTML;
+    assert.ok(cards.includes(`title="${client.navEscape(expected)}"`));
+    assert.equal((cards.match(/class="viewer-nav-send-mode/g) ?? []).length, 2);
+    assert.match(cards, /class="viewer-nav-send-mode ask"[^>]*><svg viewBox="0 0 16 16"/u);
+    assert.match(cards, /stroke="#b3261e"/u);
+    assert.ok(cards.includes(language === "zh" ? "已弃用" : "Deprecated"));
+    assert.ok(cards.includes(language === "zh" ? "自动发送" : "Auto-send"));
+    assert.doesNotMatch(cards, /viewer-nav-flag|⌘|<项目>|viewer-nav-room-active|>Active<|>Idle</u);
+  }
+  assert.doesNotMatch(html, /viewer-nav-room-flags|viewer-nav-flag|navFlags|agent-activity|viewer-nav-room-active/u);
+  assert.match(html, /viewer-nav-room-meta\{[^}]*white-space:nowrap/u);
+});
+
 test("Viewer navigation opens a fresh Room route and only syncs the selected Team on demand", async () => {
   const input = snapshot();
   const room = input.rooms[0]!;
@@ -441,7 +490,8 @@ test("Viewer navigation opens a fresh Room route and only syncs the selected Tea
     assert.match(html, /viewBox="0 0 24 24"/u);
     assert.match(html, /data-en="Sync"/u);
     assert.match(html, /"forumAlias":"other-team"/u);
-    assert.match(html, /agent-activity agent-active/u);
+    assert.doesNotMatch(html, /agent-activity|viewer-nav-room-active/u);
+    assert.match(html, /viewer-nav-send-mode/u);
     assert.match(html, /Scope: exact branch/u);
     assert.match(html, /Ask before sending/u);
     assert.doesNotMatch(html, /status-badge room-status status-active/u);

@@ -2,6 +2,17 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.33 - 2026-10-14
+
+### Changed
+
+- Viewer 导航卡片保留发送模式图标，并将房间名、发送模式、工作区作用域、目录和分支统一放入悬停提示。
+- Viewer Web 页面移除 Room 的 Active/Idle 文本和活跃状态点；本机 Agent 活跃数据仅继续用于排序。
+
+### Fixed
+
+- 统一导航卡片高度和状态区域排版，避免工作区图标挤压房间状态信息。
+
 ## 0.0.32 - 2026-10-14
 
 ### Changed
