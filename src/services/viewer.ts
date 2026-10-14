@@ -6,15 +6,15 @@ import { writeJsonAtomic } from "../storage/atomic.js";
 import { acquireForumLock } from "../storage/lock.js";
 import { createAgentForumPaths, type AgentForumPaths } from "../storage/paths.js";
 import { resolveContext, type ResolvedContextView } from "./context.js";
-import { ContextError } from "../context/bindings.js";
+import { ContextError, loadContextBindingState } from "../context/bindings.js";
 import { findForum, loadLocalConfig } from "../config/local-config.js";
 import { refreshForumFromRemote } from "./forum-sync.js";
 import { refreshForRead, type ReadFreshness } from "./read-freshness.js";
 import { getForumSnapshot } from "./timeline-cache.js";
 import { ServiceError } from "./errors.js";
-import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerBindingContext, type ViewerNavigationCatalog, type ViewerNavigationRoom, type ViewerNavigationSyncResult, type ViewerNavigationTeam, type ViewerReadIdentity, type ViewerRefreshResult, type ViewerRoomPage } from "../viewer/server.js";
+import { renderMarkdown, renderViewerHtml, startViewerServer, type ViewerBindingContext, type ViewerNavigationBinding, type ViewerNavigationCatalog, type ViewerNavigationRoom, type ViewerNavigationSyncResult, type ViewerNavigationTeam, type ViewerReadIdentity, type ViewerRefreshResult, type ViewerRoomPage } from "../viewer/server.js";
 import { getAllUnreadInboxEntries, getInboxReadCursor } from "./inbox.js";
-import { getRoomPublishMode } from "./publish-policy.js";
+import { getRoomPublishMode, loadPublishPolicy } from "./publish-policy.js";
 import { dashboardStatus, invalidateDashboard } from "./dashboard.js";
 import { getUiLanguage, setUiLanguage } from "./ui-preferences.js";
 
@@ -201,6 +201,7 @@ async function getViewerReadIdentities(forumAlias: string, identityIds: Array<st
 export async function getViewerNavigationCatalog(
   identityId: string | undefined,
   paths = createAgentForumPaths(),
+  current?: { forumAlias: string; roomId: string },
 ): Promise<ViewerNavigationCatalog> {
   const config = await loadLocalConfig(paths);
   let activeClients: Array<{ forumId: string; roomId: string }> = [];
@@ -209,20 +210,45 @@ export async function getViewerNavigationCatalog(
   } catch {
     // Dashboard 本地运行状态损坏时，Viewer 仍应保留只读导航能力，只隐藏 Active 标记。
   }
+  let bindingState: Awaited<ReturnType<typeof loadContextBindingState>> = { formatVersion: 1, bindings: [] };
+  try { bindingState = await loadContextBindingState(paths); } catch {
+    // 本地绑定损坏时不阻断只读导航，绑定标记降级为空。
+  }
+  let publishPolicy: Awaited<ReturnType<typeof loadPublishPolicy>> = { formatVersion: 1, entries: [] };
+  try { publishPolicy = await loadPublishPolicy(paths); } catch {
+    // 投递策略损坏时沿用默认 auto 展示，避免导航整体不可用。
+  }
+  const bindingsByRoom = new Map<string, ViewerNavigationBinding[]>();
+  for (const binding of bindingState.bindings) {
+    const key = `${binding.forumId}\0${binding.roomId}`;
+    const items = bindingsByRoom.get(key) ?? [];
+    items.push({ workspaceRoot: binding.workspaceRoot, branch: binding.scope === "branch" ? binding.branch : null });
+    bindingsByRoom.set(key, items);
+  }
+  for (const bindings of bindingsByRoom.values()) {
+    bindings.sort((left, right) => left.workspaceRoot.localeCompare(right.workspaceRoot) || (left.branch ?? "").localeCompare(right.branch ?? ""));
+  }
+  const sendModeByRoom = new Map(publishPolicy.entries.map((entry) => [`${entry.forumId}\0${entry.roomId}`, entry.mode]));
   const teams = await Promise.all(config.forums.map(async (registration): Promise<ViewerNavigationTeam> => {
     const clients = activeClients.filter((client) => client.forumId === registration.forumId);
     try {
       const cached = await getForumSnapshot(registration.alias, paths);
       const snapshot = cached.snapshot;
-      const rooms = new Map<string, ViewerNavigationRoom>(snapshot.rooms.map((cachedRoom) => [cachedRoom.room.id, {
-        roomId: cachedRoom.room.id,
-        slug: cachedRoom.room.slug,
-        title: cachedRoom.room.title,
-        status: cachedRoom.room.status,
-        deprecated: Boolean(cachedRoom.room.deprecation),
-        activeLocalAgents: clients.filter((client) => client.roomId === cachedRoom.room.id).length,
-        counts: { related: 0, broadcast: 0, other: 0 },
-      }]));
+      const rooms = new Map<string, ViewerNavigationRoom>(snapshot.rooms.map((cachedRoom) => {
+        const key = `${registration.forumId}\0${cachedRoom.room.id}`;
+        return [cachedRoom.room.id, {
+          roomId: cachedRoom.room.id,
+          slug: cachedRoom.room.slug,
+          title: cachedRoom.room.title,
+          status: cachedRoom.room.status,
+          createdAt: cachedRoom.room.createdAt,
+          deprecated: Boolean(cachedRoom.room.deprecation),
+          activeLocalAgents: clients.filter((client) => client.roomId === cachedRoom.room.id).length,
+          counts: { related: 0, broadcast: 0, other: 0 },
+          bindings: bindingsByRoom.get(key) ?? [],
+          sendMode: sendModeByRoom.get(key) ?? "auto",
+        }];
+      }));
       const closedThreadIds = new Set(snapshot.rooms.flatMap((cachedRoom) => cachedRoom.threads.filter((thread) => thread.thread.status === "closed").map((thread) => thread.thread.id)));
       const identities = await getViewerReadIdentities(registration.alias, [identityId], paths);
       const identity = identities[0];
@@ -240,7 +266,7 @@ export async function getViewerNavigationCatalog(
           else room.counts.other += 1;
         }
       }
-      const orderedRooms = [...rooms.values()].sort((left, right) => Number(left.deprecated) - Number(right.deprecated) || right.activeLocalAgents - left.activeLocalAgents || (right.counts.related * 12 + right.counts.broadcast * 3 + right.counts.other) - (left.counts.related * 12 + left.counts.broadcast * 3 + left.counts.other) || left.title.localeCompare(right.title));
+      const orderedRooms = [...rooms.values()].sort((left, right) => Number(!(registration.alias === current?.forumAlias && left.roomId === current?.roomId)) - Number(!(registration.alias === current?.forumAlias && right.roomId === current?.roomId)) || Number(left.deprecated) - Number(right.deprecated) || Number(right.activeLocalAgents > 0) - Number(left.activeLocalAgents > 0) || (right.createdAt ?? "").localeCompare(left.createdAt ?? "") || left.title.localeCompare(right.title));
       const counts = orderedRooms.reduce((total, room) => ({ related: total.related + room.counts.related, broadcast: total.broadcast + room.counts.broadcast, other: total.other + room.counts.other }), { related: 0, broadcast: 0, other: 0 });
       return { forumId: registration.forumId, forumAlias: registration.alias, name: snapshot.forum.name || registration.alias, activeLocalAgents: clients.length, counts, rooms: orderedRooms };
     } catch (error) {
@@ -258,6 +284,7 @@ export async function syncViewerNavigationTeam(
   forumAlias: string,
   identityId: string | undefined,
   paths = createAgentForumPaths(),
+  current?: { forumAlias: string; roomId: string },
 ): Promise<ViewerNavigationSyncResult> {
   let freshness: { state: "fresh" | "stale"; message?: string } = { state: "fresh" };
   try {
@@ -269,7 +296,7 @@ export async function syncViewerNavigationTeam(
     const code = error instanceof ServiceError ? error.code : "SYNC_FAILED";
     freshness = { state: "stale", message: `Remote sync failed (${code}).` };
   }
-  return { catalog: await getViewerNavigationCatalog(identityId, paths), freshness };
+  return { catalog: await getViewerNavigationCatalog(identityId, paths, current), freshness };
 }
 
 /**
@@ -308,7 +335,7 @@ export async function runViewerServer(input: {
   const room = cached.snapshot.rooms.find((item) => item.room.id === input.room || item.room.slug === input.room);
   if (!room) throw new ServiceError("ROOM_NOT_FOUND", `Room not found: ${input.room}`);
   const readIdentities = await getViewerReadIdentities(input.forumAlias, [input.identityId], paths);
-  const navigation = await getViewerNavigationCatalog(input.identityId, paths);
+  const navigation = await getViewerNavigationCatalog(input.identityId, paths, { forumAlias: input.forumAlias, roomId: room.room.id });
   const loadRoom = async (forumAlias: string, roomId: string): Promise<ViewerRoomPage> => {
     const initial = await getForumSnapshot(forumAlias, paths);
     let targetSnapshot = initial.snapshot;
@@ -341,7 +368,7 @@ export async function runViewerServer(input: {
     sendMode: await getRoomPublishMode(paths, forum.forumId, room.room.id),
     navigation,
     loadRoom,
-    syncNavigation: (forumAlias) => syncViewerNavigationTeam(forumAlias, input.identityId, paths),
+    syncNavigation: (forumAlias) => syncViewerNavigationTeam(forumAlias, input.identityId, paths, { forumAlias: input.forumAlias, roomId: room.room.id }),
     ...(input.binding ? { binding: input.binding } : {}),
     setLanguage: async (language) => { await setUiLanguage(language, paths); },
     refresh: () => refreshViewerForum(input.forumAlias, input.identityId, paths),

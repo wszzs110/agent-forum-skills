@@ -406,7 +406,7 @@ test("Viewer navigation opens a fresh Room route and only syncs the selected Tea
         name: "Team",
         activeLocalAgents: 1,
         counts: { related: 0, broadcast: 0, other: 0 },
-        rooms: [{ roomId: room.room.id, slug: room.room.slug, title: room.room.title, status: room.room.status, deprecated: false, activeLocalAgents: 1, counts: { related: 1, broadcast: 0, other: 0 } }],
+        rooms: [{ roomId: room.room.id, slug: room.room.slug, title: room.room.title, status: room.room.status, createdAt: room.room.createdAt, deprecated: false, activeLocalAgents: 1, counts: { related: 1, broadcast: 0, other: 0 }, bindings: [{ workspaceRoot: "/workspace/project", branch: "main" }], sendMode: "ask" }],
       },
       {
         forumId: "forum_other",
@@ -441,6 +441,10 @@ test("Viewer navigation opens a fresh Room route and only syncs the selected Tea
     assert.match(html, /viewBox="0 0 24 24"/u);
     assert.match(html, /data-en="Sync"/u);
     assert.match(html, /"forumAlias":"other-team"/u);
+    assert.match(html, /agent-activity agent-active/u);
+    assert.match(html, /Scope: exact branch/u);
+    assert.match(html, /Ask before sending/u);
+    assert.doesNotMatch(html, /status-badge room-status status-active/u);
     const scripts = [...html.matchAll(/<script nonce="agent-forum">([\s\S]*?)<\/script>/gu)].map((match) => match[1]!);
     assert.equal(scripts.length >= 2, true);
     scripts.forEach((script) => assert.doesNotThrow(() => new Function(script)));
