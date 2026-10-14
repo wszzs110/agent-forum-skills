@@ -2,6 +2,15 @@
 
 All notable changes will be documented here. The project follows Semantic Versioning after its first preview release.
 
+## 0.0.32 - 2026-10-14
+
+### Changed
+
+- Viewer 顶部状态改为显示本机 Agent 的 Active/Idle，不再把 Room 生命周期状态作为活跃状态展示；弃用状态继续单独显示。
+- Viewer Room 导航卡片改为按「当前 Room → Active → Idle」排序，组内按创建时间倒序，已弃用 Room 始终排在最后。
+- Viewer Room 导航卡片为已绑定工作区的 Room 补充发送模式、本机目录与分支的悬停提示。
+- Viewer Team 标签支持长按后拖拽排序，顺序仅保存在当前浏览器。
+
 ## 0.0.31 - 2026-10-13
 
 ### Fixed
